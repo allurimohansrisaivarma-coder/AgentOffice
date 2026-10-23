@@ -55,13 +55,15 @@ class ApprovalLedger:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
             return entry
 
-    def request(self, *, run_id: str, automation: str, code: str, report: dict, decision_memo: dict) -> dict:
+    def request(self, *, run_id: str, automation: str, routine: str, code: str, report: dict, decision_memo: dict,
+                sample_mode: bool = False) -> dict:
         code_hash = sha256(code)
         self.code_dir.mkdir(parents=True, exist_ok=True)
         (self.code_dir / f"{code_hash[:16]}.py").write_text(code, encoding="utf-8")
         entry = self._append({"type": "request", "approval_id": "apr_" + uuid.uuid4().hex[:12], "run_id": run_id,
-                              "automation": automation, "code_hash": code_hash,
-                              "report_hash": sha256(canonical_json(report)), "memo": decision_memo})
+                              "automation": automation, "routine": routine, "sample_mode": sample_mode,
+                              "code_hash": code_hash, "report_hash": sha256(canonical_json(report)),
+                              "memo": decision_memo})
         return self.get(entry["approval_id"])
 
     def decide(self, approval_id: str, *, decision: str, approver: str, note: str = "",
@@ -85,8 +87,8 @@ class ApprovalLedger:
             if e["approval_id"] != approval_id:
                 continue
             if e["type"] == "request":
-                state = {k: e[k] for k in ("approval_id", "run_id", "automation", "code_hash", "report_hash",
-                                           "memo")}
+                state = {k: e.get(k) for k in ("approval_id", "run_id", "automation", "routine", "sample_mode",
+                                               "code_hash", "report_hash", "memo")}
                 state.update({"status": "pending", "requested_at": e["at"]})
             elif state is not None:
                 state.update({"status": "approved" if e["decision"] == "approve" else "rejected",

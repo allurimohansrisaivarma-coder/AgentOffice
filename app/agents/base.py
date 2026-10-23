@@ -18,6 +18,7 @@ from typing import Any, Callable, Optional
 from app.adapters.http import AdapterError
 from app.config import Settings
 from app.data import DataSource
+from app.engines.hmem import MemoryRetrievalService, MemoryStoreService
 from app.engines.world_model import ContextBuilderService, IngestPipelineService, WorldStoreService, agent_source
 from app.llm import Generator
 from app.tracing import Tracer
@@ -44,6 +45,8 @@ class RunContext:
     pipeline: IngestPipelineService
     builder: ContextBuilderService
     sample_mode: bool
+    memory: Optional[MemoryStoreService] = None
+    recall: Optional[MemoryRetrievalService] = None
     max_revisions: int = 3
     max_model_calls: int = 40
     model_calls: int = 0

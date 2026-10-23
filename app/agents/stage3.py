@@ -132,7 +132,8 @@ class ProductManager(Agent):
                 item["risk"] = c["risk"]
         return proposal
 
-    def plan(self, query: str, evidence: dict, context: dict, *, max_rounds: int = 2) -> dict:
+    def plan(self, query: str, evidence: dict, context: dict, *, blocked: Optional[dict] = None,
+             max_rounds: int = 2) -> dict:
         candidates = evidence["routines"]
         if not candidates:
             raise AgentError(self.name, "no_candidates", "no repeated routines were found in the activity log")
@@ -140,6 +141,18 @@ class ProductManager(Agent):
         scoped = [c for c in candidates if c["team"] == team]
         if scoped:
             candidates = scoped
+        # H-MEM: a routine a human already approved or rejected is not re-proposed while alternatives exist.
+        blocked = blocked or {}
+        held = [c for c in candidates if c["routine"] in blocked]
+        if held and len(held) < len(candidates):
+            candidates = [c for c in candidates if c["routine"] not in blocked]
+            for c in held:
+                self.log("memory_applied", target_agent="PriorityCritic", status="applied",
+                         output_summary=f"not re-proposing {c['routine']}: H-MEM records that "
+                                        f"{blocked[c['routine']]['content']}")
+        elif held:
+            self.log("memory_applied", status="no_alternative", output_summary=
+                     "every candidate already has a human decision on record; keeping them for the Manager to weigh")
         names = {c["routine"] for c in candidates}
         self.log("intake", input_summary=query, output_summary=(f"scoped to the {team} team: " if scoped else "")
                  + f"{len(candidates)} candidate routines: "
@@ -226,14 +239,22 @@ class Engineer(Agent):
     def _draft(self, code: str, version: int, origin: str) -> dict:
         return {"version": version, "code": code, "code_hash": sha256(code), "origin": origin}
 
-    def build(self, spec: dict) -> dict:
+    @staticmethod
+    def _lessons(lessons: Optional[dict]) -> str:
+        if not lessons or not lessons.get("memories"):
+            return ""
+        return "\n\nLessons from earlier runs (H-MEM):\n" + "\n".join(f"- {m['content']}" for m in lessons["memories"])
+
+    def build(self, spec: dict, lessons: Optional[dict] = None) -> dict:
+        self._lesson_text = self._lessons(lessons)
         if self.offline:
             draft = self._draft(compile_spec(spec), 1, "compiled from the spec (offline)")
             self.log("write_code", model=OFFLINE_MODEL, target_agent="QAAgent", input_summary=spec["name"],
                      output_summary=f"v1 {draft['code_hash'][:12]}, {len(draft['code'])} chars")
             return draft
-        text = self.chat(self.SYSTEM, f"{describe(spec)}\n\nSpec JSON:\n{json.dumps(spec, indent=1)}",
-                         action="write_code", target_agent="QAAgent", temperature=0.1, max_tokens=3000)
+        text = self.chat(self.SYSTEM, f"{describe(spec)}\n\nSpec JSON:\n{json.dumps(spec, indent=1)}"
+                         + self._lesson_text, action="write_code", target_agent="QAAgent", temperature=0.1,
+                         max_tokens=3000)
         return self._draft(extract_code(text), 1, f"written by {self.ctx.model_name}")
 
     def revise(self, spec: dict, draft: dict, report: dict) -> dict:
@@ -249,7 +270,8 @@ class Engineer(Agent):
         prompt = (f"{describe(spec)}\n\nSpec JSON:\n{json.dumps(spec, indent=1)}\n\nYour code (v{draft['version']}):\n"
                   f"```python\n{draft['code']}```\n\nQA rejected it.\nFailed checks:\n{problems}\n"
                   + (f"Failing cases:\n{failures}\n" if failures else "")
-                  + "Fix the root cause (do not special-case these inputs) and reply with the full corrected module.")
+                  + "Fix the root cause (do not special-case these inputs) and reply with the full corrected module."
+                  + getattr(self, "_lesson_text", ""))
         text = self.chat(self.SYSTEM, prompt, action="revise_code", target_agent="QAAgent", temperature=0.1,
                          max_tokens=3000, retry_count=draft["version"])
         return self._draft(extract_code(text), version, f"revised by {self.ctx.model_name}")
@@ -393,8 +415,17 @@ class Manager(Agent):
         return round(0.45 * report["pass_rate"] + 0.2 * evidence + 0.15 * (1 - candidate["variant_share"])
                      + 0.2 * risk, 2)
 
-    def decide(self, query: str, plan: dict, candidate: dict, draft: dict, report: dict, history: list[dict]) -> dict:
-        allowed = "approve_for_human_review" if report["passed"] else "reject"
+    def decide(self, query: str, plan: dict, candidate: dict, draft: dict, report: dict, history: list[dict],
+               prior: Optional[dict] = None) -> dict:
+        same_code = bool(prior) and prior["facts"].get("code_hash") == draft["code_hash"]
+        if not report["passed"]:
+            allowed = "reject"
+        elif same_code and prior["facts"]["decision"] == "rejected":
+            allowed = "escalate_to_human"   # never re-ask a human to approve code they already rejected
+        elif same_code:
+            allowed = "already_approved"
+        else:
+            allowed = "approve_for_human_review"
         confidence = self.confidence(report, candidate)
         chosen = next(i for i in plan["ranking"] if i["routine"] == plan["chosen"])
         facts = {"question": query, "routine": candidate["routine"], "steps": candidate["steps"],
@@ -405,13 +436,20 @@ class Manager(Agent):
                  "qa": {"passed": report["passed"], "pass_rate": report["pass_rate"], "cases": report["cases"],
                         "rounds": len(history), "failed_checks": [c["name"] for c in report["checks"] if not c["passed"]],
                         "advisories": report["advisories"]},
-                 "allowed_decision": allowed, "confidence": confidence}
+                 "allowed_decision": allowed, "confidence": confidence,
+                 "prior_human_decision": prior["content"] if prior else None,
+                 "prior_decision_is_for_this_exact_code": same_code}
         if self.offline:
+            memory = ""
+            if prior:
+                memory = (f" H-MEM: {prior['content']}" + (" This is the same code, so it is not sent for approval "
+                                                            "again." if same_code else ""))
             memo = {"decision": allowed,
                     "rationale": (f"{candidate['routine']} runs {candidate['instances_per_week']:g} times a week "
                                   f"({candidate['active_hours_per_week']:g} h/week hands-on). The automation "
                                   + (f"passed all {report['cases']} QA cases after {len(history)} round(s)."
-                                     if report["passed"] else f"still fails QA after {len(history)} round(s).")),
+                                     if report["passed"] else f"still fails QA after {len(history)} round(s).")
+                                  + memory),
                     "risks": candidate["risk_reasons"] or ["low-risk routine"],
                     "rollout": ["dry run on one week of real records and compare with manual results",
                                 "enable for one team member, keep manual review of non-pass statuses"]}

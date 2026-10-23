@@ -1,31 +1,81 @@
-# Secrets (never commit)
+# Secrets & Credentials (never commit)
 .env
 .env.*
 !.env.example
 *.pem
 *.key
+*.pfx
+*.p12
+*.crt
+*.cert
+id_rsa*
+id_ed25519*
 secrets/
 credentials/
 zetaris-platform/
+*.token
 
-# Python
+# Python byte-code / caches / environments
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
 .venv/
 venv/
-.pytest_cache/
-
-# Node
-node_modules/
+ENV/
+env/
+build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Runtime output
+# Testing & Linting caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Web dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime output & state
 logs/*
 !logs/.gitkeep
 state/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+tmp/
+temp/
 
-# OS / editors
+# OS / Editor files
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 .vscode/
 .idea/
+*.swp
+*.swo
+*~

@@ -1,0 +1,92 @@
+"""Memory Keeper: the office's long memory (H-MEM engine).
+
+At the start of the build stage it hydrates the run with memories retrieved
+for the question and the candidate routines, and returns the human approval
+decisions on record, which the PM and Manager must respect. At the end of the
+run it mines the run's events (QA verdicts, critiques, trust decisions,
+outcome) into memory proposals; every proposal passes the store's approval
+boundary. Human approve/reject decisions are captured directly, no model.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Optional
+
+from app.agents.base import OFFLINE_MODEL, Agent, AgentError
+from app.engines.hmem import MemoryStoreService
+from app.engines.hmem.mining import approval_memory, direct_capture, to_record, validate_candidates
+
+
+def record_approval(store: MemoryStoreService, approval: dict) -> dict:
+    """Called when a human decides on an approval request (outside any run)."""
+    routine = approval.get("routine") or "unknown"
+    return store.propose(approval_memory(approval, routine), actor=f"human:{approval['approver']}")
+
+
+class MemoryKeeper(Agent):
+    name = "MemoryKeeperAgent"
+
+    SYSTEM = ("You are the Memory Keeper agent in AgentOffice. From this run's events, write at most 5 short, "
+              "durable lessons that would help the team next time (what failed and why, which source to trust, "
+              "how to size savings). No personal data. Reply with only JSON: {\"memories\": [{\"content\": "
+              "<= 300 chars, \"type\": \"factual\" | \"preference\" | \"general\", \"domain\": <one of the given "
+              "domains>, \"tags\": [...], \"confidence\": 0..1}]}.")
+
+    def decisions(self, routines: list[str]) -> dict[str, dict]:
+        """The latest active human approval decision per routine."""
+        latest = {}
+        for m in self.ctx.memory.find(fact_kind="approval_decision"):
+            if m["facts"]["routine"] in routines:
+                latest[m["facts"]["routine"]] = m
+        return latest
+
+    def hydrate(self, query: str, routines: list[str]) -> dict:
+        payload = self.ctx.recall.retrieve(query, domains=routines, entities=[f"routine:{r}" for r in routines],
+                                           actor=self.name)
+        self.log("hmem_retrieve", target_agent="PMAgent", input_summary=query, output_summary=[
+            {"id": m["id"], "score": m["score"], "layer": m["layer"], "reason": m["retrievalReason"],
+             "content": m["content"][:120]} for m in payload["memories"]] or "no memories above the threshold",
+                 considered=payload["considered"], strategy=payload["strategy"])
+        return payload
+
+    def lessons_for(self, routine: str, spec_summary: str) -> dict:
+        payload = self.ctx.recall.retrieve(spec_summary, domains=[routine], entities=[f"routine:{routine}"],
+                                           tags=["qa", "lesson"], actor=self.name, top_n=3)
+        if payload["memories"]:
+            self.log("hmem_retrieve", target_agent="EngineerAgent", input_summary=spec_summary,
+                     output_summary=[m["content"][:120] for m in payload["memories"]])
+        return payload
+
+    def mine(self, digest: dict) -> list[dict]:
+        domains = set(digest.get("routines", [])) | {"reporting", "planning"} | {
+            a["task"] for a in digest.get("conflict_assessments", [])}
+        direct = direct_capture(digest)
+        refs = sorted({r for c in direct for r in c["refs"]}) or [digest["run_id"]]
+        if self.offline or not direct:
+            candidates = direct
+            self.log("mine_memories", model=OFFLINE_MODEL, output_summary=f"{len(direct)} direct-capture proposals")
+        else:
+            try:
+                obj = self.chat_json(self.SYSTEM, json.dumps({"domains": sorted(domains), "events": direct},
+                                                             indent=1, default=str),
+                                     action="mine_memories", validate=lambda o: validate_candidates(o, domains))
+                candidates = [{**m, "refs": refs} for m in obj["memories"][:5]]
+            except AgentError as e:
+                candidates = direct
+                self.log("mine_memories", status="error", output_summary=f"model mining unusable, falling back to "
+                                                                         f"direct capture: {e.message}")
+        results = []
+        for c in candidates:
+            try:
+                record = to_record(c, agent=self.name, run_id=digest["run_id"], refs=c.get("refs") or refs,
+                                   mission_id=digest.get("request_id"))
+            except ValueError as e:
+                results.append({"status": "rejected", "reason": str(e), "content": c.get("content", "")[:120]})
+                continue
+            outcome = self.ctx.memory.propose(record, actor=self.name)
+            results.append({"status": outcome["status"], "reason": outcome["reason"], "content": record["content"],
+                            "id": record["id"], "conflicts": len(outcome["conflicts"])})
+        self.log("hmem_write", target_agent="H-MEM", output_summary=[
+            f"{r['status']}: {r['content'][:90]}" for r in results] or "nothing to remember")
+        return results
