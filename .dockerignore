@@ -1,0 +1,16 @@
+# `COPY . .` must never bake secrets or local state into the image.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials/
+zetaris-platform/
+.git/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+logs/*
