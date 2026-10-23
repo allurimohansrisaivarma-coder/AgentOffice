@@ -1,0 +1,6 @@
+{
+  "request_id": "example-002",
+  "user_query": "Our operations coordinators say they never get to scheduling. What repetitive work is eating their week, and can we safely automate part of it?",
+  "context": {"track": "reasoning_architecture"},
+  "options": {"sample_mode": false}
+}

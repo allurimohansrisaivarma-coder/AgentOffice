@@ -1,0 +1,6 @@
+{
+  "request_id": "example-001",
+  "user_query": "Where is the finance team losing time, and what should we automate first?",
+  "context": {"track": "reasoning_architecture"},
+  "options": {"sample_mode": false}
+}

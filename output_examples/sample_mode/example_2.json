@@ -1,0 +1,702 @@
+{
+  "request_id": "example-002",
+  "trace_id": "5a7ec701d40f4053",
+  "status": "success",
+  "agents_used": [
+    "SourceMapperAgent",
+    "ReconcilerAgent",
+    "ConflictCriticAgent",
+    "ResearchPlannerAgent",
+    "RetrieverAgent",
+    "ReportWriterAgent",
+    "InsightCriticAgent",
+    "PMAgent",
+    "EngineerAgent",
+    "QAAgent",
+    "ManagerAgent",
+    "PriorityCritic"
+  ],
+  "result": {
+    "summary": "order_status_updates takes the most reported time: 47.88 hours per week across 3 people. Automate order_status_updates first: about 6.2 h/week saved (medium risk). The order_status_responder automation passed all 19 spec-derived QA cases after 1 QA round(s); Manager decision: approve_for_human_review.",
+    "findings": [
+      "order_status_updates takes the most reported time: 47.88 hours per week across 3 people.",
+      "In the activity log, ERP enter_invoice alone takes 11.72 hands-on hours per week.",
+      "In the activity log, ERP lookup_purchase_order alone takes 7.4 hands-on hours per week.",
+      "The work is triggered by about 120.5 inbound invoice emails with attachments per week from external_vendor.",
+      "Data conflict: order_status_updates - Sources differ 5.43x (activity 8.82 h/week, tickets 17.87 h/week, timesheets 47.88 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively.",
+      "Data conflict: crm_data_entry - Sources differ 4.36x (activity 7.73 h/week, timesheets 33.71 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively.",
+      "Data conflict: invoice_matching - Sources differ 3.67x (activity 32.86 h/week, tickets 19.47 h/week, timesheets 71.54 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively.",
+      "invoice_matching: 120.5 runs/week by 2 people, 32.86 h/week hands-on in the activity log (timesheets report 71.54 h/week, tickets log 19.47 h/week); risk high",
+      "order_status_updates: 79.5 runs/week by 2 people, 8.82 h/week hands-on in the activity log (timesheets report 47.88 h/week, tickets log 17.87 h/week); risk medium",
+      "crm_data_entry: 56.3 runs/week by 2 people, 7.73 h/week hands-on in the activity log (timesheets report 33.71 h/week, not tracked in tickets); risk medium"
+    ],
+    "confidence": 0.93,
+    "ranking": [
+      {
+        "routine": "order_status_updates",
+        "estimated_hours_saved_per_week": 6.2,
+        "risk": "medium",
+        "reason": "79.5 runs/week x 6.7 min hands-on; assumes 70% of that can be automated"
+      }
+    ],
+    "decision": {
+      "decision": "approve_for_human_review",
+      "rationale": "order_status_updates runs 79.5 times a week (8.82 h/week hands-on). The automation passed all 19 QA cases after 1 round(s).",
+      "risks": [
+        "reply_customer_status sends email outside the team"
+      ],
+      "rollout": [
+        "dry run on one week of real records and compare with manual results",
+        "enable for one team member, keep manual review of non-pass statuses"
+      ],
+      "confidence": 0.93,
+      "confidence_formula": "0.45*QA pass rate + 0.2*evidence volume + 0.15*routine consistency + 0.2*(1 - risk)"
+    },
+    "automation": {
+      "name": "order_status_responder",
+      "routine": "order_status_updates",
+      "spec": {
+        "name": "order_status_responder",
+        "routine": "order_status_updates",
+        "summary": "Look up the order behind each customer status request and confirm it belongs to that customer.",
+        "left": {
+          "name": "status_requests",
+          "id_field": "request_id",
+          "fields": {
+            "request_id": "str",
+            "order_ref": "str",
+            "customer": "str"
+          }
+        },
+        "right": {
+          "name": "orders",
+          "id_field": "order_id",
+          "fields": {
+            "order_id": "str",
+            "customer": "str",
+            "status": "str"
+          }
+        },
+        "key": {
+          "left": "order_ref",
+          "right": "order_id",
+          "normalize": [
+            "digits_only"
+          ]
+        },
+        "checks": [
+          {
+            "left": "customer",
+            "right": "customer",
+            "op": "equals_ci",
+            "fail_status": "customer_mismatch"
+          }
+        ],
+        "statuses": {
+          "no_match": "order_not_found",
+          "ambiguous": "manual_review",
+          "pass": "reply_with_status"
+        }
+      },
+      "spec_origin": "built-in template (offline)",
+      "code": "\"\"\"order_status_responder: Look up the order behind each customer status request and confirm it belongs to that customer.\n\nCompiled offline from the automation spec (no model available).\n\"\"\"\n\nLEFT_FIELDS = [\"request_id\", \"order_ref\", \"customer\"]\nRIGHT_FIELDS = [\"order_id\", \"customer\", \"status\"]\n\n\ndef _num(value):\n    return isinstance(value, (int, float)) and not isinstance(value, bool)\n\n\ndef _require(record, fields, side):\n    for name in fields:\n        if name not in record:\n            raise ValueError(side + \" record is missing field \" + repr(name))\n\n\ndef _key(value):\n    text = \"\" if value is None else str(value)\n    text = ''.join(ch for ch in text if ch in '0123456789')\n    return text\n\n\ndef _status(left, right):\n    a, b = left['customer'], right['customer']\n    if not (isinstance(a, str) and isinstance(b, str) and a.strip().casefold() == b.strip().casefold()):\n        return 'customer_mismatch'\n    return 'reply_with_status'\n\n\ndef run(left, right):\n    for record in right:\n        _require(record, RIGHT_FIELDS, \"right\")\n    for record in left:\n        _require(record, LEFT_FIELDS, \"left\")\n    index = {}\n    for record in right:\n        index.setdefault(_key(record['order_id']), []).append(record)\n    results = []\n    for record in left:\n        k = _key(record['order_ref'])\n        matches = index.get(k, []) if k else []\n        row = {\"left_id\": record['request_id'], \"right_id\": None, \"status\": 'order_not_found'}\n        if len(matches) > 1:\n            row[\"status\"] = 'manual_review'\n        elif len(matches) == 1:\n            row[\"right_id\"] = matches[0]['order_id']\n            row[\"status\"] = _status(record, matches[0])\n        results.append(row)\n    return results\n",
+      "code_hash": "3af798eb1a94b9cc164be16f595024fa1a0ba493d04ad762e480a383ee521462",
+      "version": 1,
+      "origin": "compiled from the spec (offline)",
+      "qa": {
+        "passed": true,
+        "pass_rate": 1.0,
+        "cases": 19,
+        "model_cases": 0,
+        "checks": [
+          {
+            "name": "sandbox_policy",
+            "passed": true,
+            "detail": "only allowed constructs"
+          },
+          {
+            "name": "no_credentials",
+            "passed": true,
+            "detail": "no hardcoded credentials"
+          },
+          {
+            "name": "runs",
+            "passed": true,
+            "detail": "ran in 0.075s"
+          },
+          {
+            "name": "output_shape",
+            "passed": true,
+            "detail": "one {left_id, right_id, status} per left record, in order"
+          },
+          {
+            "name": "matches_spec",
+            "passed": true,
+            "detail": "19/19 cases match the spec's expected output"
+          },
+          {
+            "name": "deterministic",
+            "passed": true,
+            "detail": "same output on a second run"
+          },
+          {
+            "name": "fails_loudly_on_schema_drift",
+            "passed": true,
+            "detail": "renaming 'order_ref' raised: ValueError: left record is missing field 'order_ref'"
+          }
+        ],
+        "advisories": []
+      },
+      "qa_failures": []
+    }
+  },
+  "collaboration": {
+    "feedback_loop_completed": true,
+    "revision_count": 0,
+    "qa_rounds": [
+      {
+        "round": 1,
+        "code_version": 1,
+        "code_hash": "3af798eb1a94b9cc164be16f595024fa1a0ba493d04ad762e480a383ee521462",
+        "passed": true,
+        "pass_rate": 1.0,
+        "failed_checks": []
+      }
+    ],
+    "priority_critique_rounds": 0,
+    "insight_critique_rounds": 0,
+    "evaluator_findings": [
+      "QA round 1 (code v1): passed",
+      "conflict critique: order_status_updates -> trust sample:workforce.task_events",
+      "conflict critique: crm_data_entry -> trust sample:workforce.task_events",
+      "conflict critique: invoice_matching -> trust sample:workforce.task_events"
+    ]
+  },
+  "stages": {
+    "discover": {
+      "sources": {
+        "tables": [
+          "people",
+          "timesheets",
+          "tickets",
+          "email_events",
+          "task_events"
+        ],
+        "joins": [
+          {
+            "left": "people.person_id",
+            "right": "timesheets.person_id"
+          },
+          {
+            "left": "people.person_id",
+            "right": "email_events.person_id"
+          },
+          {
+            "left": "people.person_id",
+            "right": "task_events.person_id"
+          },
+          {
+            "left": "timesheets.person_id",
+            "right": "email_events.person_id"
+          },
+          {
+            "left": "timesheets.person_id",
+            "right": "task_events.person_id"
+          },
+          {
+            "left": "email_events.case_ref",
+            "right": "task_events.case_ref"
+          },
+          {
+            "left": "email_events.event_id",
+            "right": "task_events.event_id"
+          },
+          {
+            "left": "email_events.person_id",
+            "right": "task_events.person_id"
+          }
+        ],
+        "reason": "offline: every catalog table, joined on shared *_id / case_ref columns",
+        "row_counts": {
+          "people": 12,
+          "timesheets": 827,
+          "tickets": 223,
+          "email_events": 2672,
+          "task_events": 8266
+        }
+      },
+      "reconciliation": {
+        "links": [
+          {
+            "task": "client_calls",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "crm_data_entry",
+            "ticket_category": null,
+            "routine": "crm_data_entry",
+            "confidence": 1.0
+          },
+          {
+            "task": "expense_review",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "inventory_reconciliation",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "invoice_matching",
+            "ticket_category": "invoice_matching",
+            "routine": "invoice_matching",
+            "confidence": 1.0
+          },
+          {
+            "task": "meeting_scheduling",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "month_end_close",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "office_requests",
+            "ticket_category": "office_requests",
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "onboarding_paperwork",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "order_status_updates",
+            "ticket_category": "order_status_updates",
+            "routine": "order_status_updates",
+            "confidence": 1.0
+          },
+          {
+            "task": "pipeline_reporting",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "quote_preparation",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "reporting",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "scheduling",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "shipping_exceptions",
+            "ticket_category": "shipping_exceptions",
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "timesheet_chasing",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "vendor_queries",
+            "ticket_category": "vendor_queries",
+            "routine": null,
+            "confidence": 1.0
+          }
+        ],
+        "cross_source_links": 8,
+        "people": 12,
+        "observations": 145
+      },
+      "conflicts": {
+        "conflicts": [
+          {
+            "task": "order_status_updates",
+            "values": {
+              "sample:workforce.task_events": 8.82,
+              "sample:workforce.tickets": 17.87,
+              "sample:workforce.timesheets": 47.88
+            },
+            "ratio": 5.43,
+            "world_model_choice": 8.82
+          },
+          {
+            "task": "crm_data_entry",
+            "values": {
+              "sample:workforce.task_events": 7.73,
+              "sample:workforce.timesheets": 33.71
+            },
+            "ratio": 4.36,
+            "world_model_choice": 7.73
+          },
+          {
+            "task": "invoice_matching",
+            "values": {
+              "sample:workforce.task_events": 32.86,
+              "sample:workforce.tickets": 19.47,
+              "sample:workforce.timesheets": 71.54
+            },
+            "ratio": 3.67,
+            "world_model_choice": 32.86
+          }
+        ],
+        "assessments": [
+          {
+            "task": "order_status_updates",
+            "trusted_source": "sample:workforce.task_events",
+            "explanation": "Sources differ 5.43x (activity 8.82 h/week, tickets 17.87 h/week, timesheets 47.88 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively."
+          },
+          {
+            "task": "crm_data_entry",
+            "trusted_source": "sample:workforce.task_events",
+            "explanation": "Sources differ 4.36x (activity 7.73 h/week, timesheets 33.71 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively."
+          },
+          {
+            "task": "invoice_matching",
+            "trusted_source": "sample:workforce.task_events",
+            "explanation": "Sources differ 3.67x (activity 32.86 h/week, tickets 19.47 h/week, timesheets 71.54 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively."
+          }
+        ]
+      }
+    },
+    "explain": {
+      "sub_questions": [
+        {
+          "id": "q1",
+          "question": "Which task categories take the most reported hours per week for the Operations team?"
+        },
+        {
+          "id": "q2",
+          "question": "How much hands-on time per week does each repeated case-based routine take in the activity log?"
+        },
+        {
+          "id": "q3",
+          "question": "How many inbound emails with attachments arrive per week, by subject category, that start work?"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "q1",
+          "question": "Which task categories take the most reported hours per week for the Operations team?",
+          "sql": "SELECT t.task_category, ROUND(SUM(t.hours) / 6.0, 2) AS hours_per_week, COUNT(DISTINCT t.person_id) AS people FROM workforce.timesheets t JOIN workforce.people p ON p.person_id = t.person_id WHERE p.team = 'Operations' GROUP BY t.task_category ORDER BY hours_per_week DESC LIMIT 8",
+          "rows": [
+            {
+              "task_category": "order_status_updates",
+              "hours_per_week": 47.88,
+              "people": 3
+            },
+            {
+              "task_category": "inventory_reconciliation",
+              "hours_per_week": 26.13,
+              "people": 3
+            },
+            {
+              "task_category": "shipping_exceptions",
+              "hours_per_week": 19.54,
+              "people": 3
+            },
+            {
+              "task_category": "scheduling",
+              "hours_per_week": 18.75,
+              "people": 3
+            }
+          ],
+          "attempts": 1
+        },
+        {
+          "id": "q2",
+          "question": "How much hands-on time per week does each repeated case-based routine take in the activity log?",
+          "sql": "SELECT app, action, COUNT(*) AS events, ROUND(SUM(duration_seconds) / 3600.0 / 6.0, 2) AS hours_per_week FROM workforce.task_events WHERE case_ref IS NOT NULL AND case_ref <> '' GROUP BY app, action ORDER BY hours_per_week DESC LIMIT 10",
+          "rows": [
+            {
+              "app": "ERP",
+              "action": "enter_invoice",
+              "events": 687,
+              "hours_per_week": 11.72
+            },
+            {
+              "app": "ERP",
+              "action": "lookup_purchase_order",
+              "events": 691,
+              "hours_per_week": 7.4
+            },
+            {
+              "app": "ERP",
+              "action": "match_to_po",
+              "events": 688,
+              "hours_per_week": 5.31
+            },
+            {
+              "app": "Email",
+              "action": "reply_customer_status",
+              "events": 477,
+              "hours_per_week": 4.39
+            },
+            {
+              "app": "Email",
+              "action": "reply_vendor_confirmation",
+              "events": 723,
+              "hours_per_week": 4.38
+            },
+            {
+              "app": "CRM",
+              "action": "create_contact",
+              "events": 326,
+              "hours_per_week": 4.06
+            },
+            {
+              "app": "ERP",
+              "action": "lookup_order",
+              "events": 458,
+              "hours_per_week": 3.48
+            },
+            {
+              "app": "CRM",
+              "action": "log_activity",
+              "events": 338,
+              "hours_per_week": 2.05
+            },
+            {
+              "app": "Email",
+              "action": "open_invoice_email",
+              "events": 723,
+              "hours_per_week": 1.63
+            },
+            {
+              "app": "Excel",
+              "action": "open_invoice_tracker",
+              "events": 687,
+              "hours_per_week": 1.38
+            }
+          ],
+          "attempts": 1
+        },
+        {
+          "id": "q3",
+          "question": "How many inbound emails with attachments arrive per week, by subject category, that start work?",
+          "sql": "SELECT subject_category, counterparty, ROUND(COUNT(*) / 6.0, 1) AS per_week FROM workforce.email_events WHERE direction = 'inbound' AND has_attachment = 'true' GROUP BY subject_category, counterparty ORDER BY per_week DESC LIMIT 8",
+          "rows": [
+            {
+              "subject_category": "invoice",
+              "counterparty": "external_vendor",
+              "per_week": 120.5
+            },
+            {
+              "subject_category": "status",
+              "counterparty": "internal",
+              "per_week": 11.3
+            },
+            {
+              "subject_category": "question",
+              "counterparty": "internal",
+              "per_week": 10.3
+            },
+            {
+              "subject_category": "meeting",
+              "counterparty": "internal",
+              "per_week": 9.3
+            },
+            {
+              "subject_category": "fyi",
+              "counterparty": "internal",
+              "per_week": 8.3
+            },
+            {
+              "subject_category": "question",
+              "counterparty": "external_customer",
+              "per_week": 4.8
+            },
+            {
+              "subject_category": "fyi",
+              "counterparty": "external_customer",
+              "per_week": 4.7
+            },
+            {
+              "subject_category": "meeting",
+              "counterparty": "external_customer",
+              "per_week": 3.8
+            }
+          ],
+          "attempts": 1
+        }
+      ],
+      "headline": "order_status_updates takes the most reported time: 47.88 hours per week across 3 people.",
+      "claims": [
+        {
+          "text": "order_status_updates takes the most reported time: 47.88 hours per week across 3 people.",
+          "evidence": [
+            {
+              "query": "q1",
+              "row": 0,
+              "column": "task_category",
+              "value": "order_status_updates"
+            },
+            {
+              "query": "q1",
+              "row": 0,
+              "column": "hours_per_week",
+              "value": 47.88
+            },
+            {
+              "query": "q1",
+              "row": 0,
+              "column": "people",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "text": "In the activity log, ERP enter_invoice alone takes 11.72 hands-on hours per week.",
+          "evidence": [
+            {
+              "query": "q2",
+              "row": 0,
+              "column": "app",
+              "value": "ERP"
+            },
+            {
+              "query": "q2",
+              "row": 0,
+              "column": "action",
+              "value": "enter_invoice"
+            },
+            {
+              "query": "q2",
+              "row": 0,
+              "column": "hours_per_week",
+              "value": 11.72
+            }
+          ]
+        },
+        {
+          "text": "In the activity log, ERP lookup_purchase_order alone takes 7.4 hands-on hours per week.",
+          "evidence": [
+            {
+              "query": "q2",
+              "row": 1,
+              "column": "app",
+              "value": "ERP"
+            },
+            {
+              "query": "q2",
+              "row": 1,
+              "column": "action",
+              "value": "lookup_purchase_order"
+            },
+            {
+              "query": "q2",
+              "row": 1,
+              "column": "hours_per_week",
+              "value": 7.4
+            }
+          ]
+        },
+        {
+          "text": "The work is triggered by about 120.5 inbound invoice emails with attachments per week from external_vendor.",
+          "evidence": [
+            {
+              "query": "q3",
+              "row": 0,
+              "column": "per_week",
+              "value": 120.5
+            },
+            {
+              "query": "q3",
+              "row": 0,
+              "column": "subject_category",
+              "value": "invoice"
+            },
+            {
+              "query": "q3",
+              "row": 0,
+              "column": "counterparty",
+              "value": "external_vendor"
+            }
+          ]
+        }
+      ],
+      "dropped_claims": [],
+      "critique_rounds": 0,
+      "objections": [
+        []
+      ]
+    },
+    "build": {
+      "history": [
+        {
+          "round": 1,
+          "code_version": 1,
+          "code_hash": "3af798eb1a94b9cc164be16f595024fa1a0ba493d04ad762e480a383ee521462",
+          "passed": true,
+          "pass_rate": 1.0,
+          "failed_checks": []
+        }
+      ]
+    }
+  },
+  "approval": {
+    "approval_id": "apr_b563d4dc5b5e",
+    "run_id": "5a7ec701d40f4053",
+    "automation": "order_status_responder",
+    "code_hash": "3af798eb1a94b9cc164be16f595024fa1a0ba493d04ad762e480a383ee521462",
+    "report_hash": "6c97ad46e77a9721eab9d48a055eb1dbd887ffe4b00c6ba6c1dc6e26e3e76e1f",
+    "memo": {
+      "decision": "approve_for_human_review",
+      "rationale": "order_status_updates runs 79.5 times a week (8.82 h/week hands-on). The automation passed all 19 QA cases after 1 round(s).",
+      "risks": [
+        "reply_customer_status sends email outside the team"
+      ],
+      "rollout": [
+        "dry run on one week of real records and compare with manual results",
+        "enable for one team member, keep manual review of non-pass statuses"
+      ],
+      "confidence": 0.93,
+      "confidence_formula": "0.45*QA pass rate + 0.2*evidence volume + 0.15*routine consistency + 0.2*(1 - risk)"
+    },
+    "status": "pending",
+    "requested_at": "2026-10-23T16:30:32.065Z",
+    "code_path": "state/automations/3af798eb1a94b9cc.py"
+  },
+  "mode": {
+    "sample_mode": true,
+    "model": "offline-fallback",
+    "data_source": "sample-sqlite",
+    "stages": [
+      "discover",
+      "explain",
+      "build"
+    ]
+  },
+  "usage": {
+    "model_calls": 0,
+    "data_queries": 15
+  },
+  "log_path": "logs/trace-5a7ec701d40f4053.jsonl",
+  "execution_time_seconds": 0.386
+}

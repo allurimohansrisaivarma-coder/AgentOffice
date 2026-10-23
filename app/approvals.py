@@ -15,6 +15,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+from app.config import ROOT
 from app.engines.world_model.ids import canonical_json, utc_now
 
 GENESIS = "0" * 64
@@ -22,6 +23,14 @@ GENESIS = "0" * 64
 
 def sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _display(path: Path) -> str:
+    """Repo-relative when possible, so responses don't reveal the host's directory layout."""
+    try:
+        return path.resolve().relative_to(ROOT).as_posix()
+    except ValueError:
+        return path.name
 
 
 class ApprovalLedger:
@@ -84,7 +93,7 @@ class ApprovalLedger:
                               "approver": e["approver"], "note": e["note"], "decided_at": e["at"]})
         if state is not None:
             code_file = self.code_dir / f"{state['code_hash'][:16]}.py"
-            state["code_path"] = str(code_file) if code_file.exists() else None
+            state["code_path"] = _display(code_file) if code_file.exists() else None
         return state
 
     def verify(self) -> Optional[int]:

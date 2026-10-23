@@ -20,7 +20,7 @@ from app.pipeline import run_pipeline
 from app.tracing import Tracer, verify_chain
 from run import create_app
 
-QUERY = "Where is the finance team losing time, and what should we automate first?"
+QUERY = "Which repetitive work should we automate first?"   # names no team, so every routine is a candidate
 
 
 class ScriptedGenerator:

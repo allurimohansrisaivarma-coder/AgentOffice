@@ -14,6 +14,7 @@ import json
 from typing import Any, Optional
 
 from app.agents.base import OFFLINE_MODEL, Agent, AgentError, extract_code
+from app.agents.stage1 import team_from_query
 from app.automation import oracle
 from app.automation.compiler import compile_spec
 from app.automation.sandbox import ALLOWED_IMPORTS, find_secrets, policy_violations, run_in_sandbox
@@ -42,7 +43,7 @@ EXAMPLE for a different routine:
 
 
 def _evidence_table(candidates: list[dict]) -> list[dict]:
-    keys = ("routine", "steps", "instances_per_week", "people", "active_hours_per_week", "avg_minutes_per_instance",
+    keys = ("routine", "team", "steps", "instances_per_week", "people", "active_hours_per_week", "avg_minutes_per_instance",
             "reported_hours_per_week", "ticket_logged_hours_per_week", "variant_share", "risk", "risk_reasons")
     return [{k: c[k] for k in keys} for c in candidates]
 
@@ -135,8 +136,13 @@ class ProductManager(Agent):
         candidates = evidence["routines"]
         if not candidates:
             raise AgentError(self.name, "no_candidates", "no repeated routines were found in the activity log")
+        team = team_from_query(query, sorted({c["team"] for c in candidates}))
+        scoped = [c for c in candidates if c["team"] == team]
+        if scoped:
+            candidates = scoped
         names = {c["routine"] for c in candidates}
-        self.log("intake", input_summary=query, output_summary=f"{len(candidates)} candidate routines: "
+        self.log("intake", input_summary=query, output_summary=(f"scoped to the {team} team: " if scoped else "")
+                 + f"{len(candidates)} candidate routines: "
                  + ", ".join(f"{c['routine']} ({c['active_hours_per_week']:g} h/week hands-on)" for c in candidates))
 
         prompt = (f"Question from the office team: {query}\n\nEvidence over {evidence['weeks']:g} weeks (computed from "

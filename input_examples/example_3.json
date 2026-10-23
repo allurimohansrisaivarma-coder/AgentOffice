@@ -1,0 +1,6 @@
+{
+  "request_id": "example-003",
+  "user_query": "Sales reps complain about CRM data entry. How much time does it really take compared with what they report, and is it worth automating?",
+  "context": {"track": "reasoning_architecture"},
+  "options": {"sample_mode": false}
+}

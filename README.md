@@ -1,38 +1,240 @@
-# AgentOffice (working name)
+# AgentOffice
 
-**A simulated AI team that finds where an office team's time goes, explains why with evidence, and then decides, builds and tests the automation that fixes it, with a human approving before anything goes live.**
+**A simulated AI office team. It finds where an office team's time goes, explains why with evidence, and then decides on, builds and tests the automation that fixes it. A human approves before anything goes live.**
 
-Open Agent Hackathon 2026 submission. Primary track: **Track 3, Reasoning Architecture.** Stages also address Track 1 (Fragmented Intelligence) and Track 2 (Explain Why).
+This is our Open Agent Hackathon 2026 submission. The primary track is **Track 3, Reasoning Architecture**. Stages 1 and 2 also address Track 1 (Fragmented Intelligence) and Track 2 (Explain Why).
 
-> **Status (23 Oct 2026):** scaffold only. The API, sponsor adapters, tracing and connection check exist; the agent pipeline does not yet, so `POST /run` returns a structured `not_implemented` error. This README only describes what the code actually does.
+> **Status (23 Oct 2026):** all three stages run end to end in **sample mode**, and the test suite passes (134 tests). We have **not yet run default mode against a live Zetaris instance or Meterless Nightshift**, because neither is installed yet. See [Done vs not yet](#done-vs-not-yet).
+
+## What it does
+
+You ask a question such as *"Where is the finance team losing time, and what should we automate first?"*. Twelve agents with distinct roles then work in three stages, and all of them read from and write to one shared **World Model**.
+
+```mermaid
+flowchart LR
+  Q[Question] --> SM[Source Mapper]
+  subgraph S1[1 Discover - Track 1]
+    SM --> RC[Reconciler] --> WM[(World Model)]
+    WM --> CC[Conflict Critic]
+  end
+  subgraph S2[2 Explain - Track 2]
+    RP[Research Planner] --> RT[Retriever] -->|SQL| ZT[(Zetaris)]
+    RT --> RW[Report Writer] <-->|objections| IC[Insight Critic]
+  end
+  subgraph S3[3 Decide and Build - Track 3]
+    PM[PM] <-->|critique| PC[Priority Critic]
+    PM -->|spec| EN[Engineer] -->|code| QA[QA] -->|failing cases| EN
+    QA --> MG[Manager] --> HA{{Human approval}}
+  end
+  CC --> RP
+  IC --> PM
+```
+
+| Stage | Agent | What it does | Model call? |
+|---|---|---|---|
+| 1 Discover | **Source Mapper** | Picks tables and join keys from the catalog, then probes each table | yes |
+| | **Reconciler** | Links the same task across timesheets, tickets and activity routines, and writes people (by ID only), teams, tasks, tools and their links | yes |
+| | **Conflict Critic** | Reads the conflicts the World Model surfaces (sources that disagree about the same fact) and judges which source to trust for what | yes |
+| 2 Explain | **Research Planner** | Splits the question into 2–4 sub-questions | yes |
+| | **Retriever** | Writes one guarded, read-only SQL query per sub-question. SQL errors go back to the model to fix (a bounded tool-use loop) | yes |
+| | **Report Writer** | Drafts claims and must cite the exact result cell behind every number | yes |
+| | **Insight Critic** | Checks every citation against the returned rows, plus a model wording review. Objections go back for revision, and unsupported claims are dropped | yes + rules |
+| 3 Build | **PM** | Ranks the mined routines by hours saved versus risk and writes a structured automation **spec** | yes |
+| | **Priority Critic** | Rejects claims above the hands-on time the activity log measures, and risk ratings below the evidence | rules |
+| | **Engineer** | Writes Python from the spec, and revises using QA's failing cases | yes |
+| | **QA** | Tests the code in a sandbox against expectations **computed from the spec, never from the code**, plus model-designed cases and an advisory code review | yes + rules |
+| | **Manager** | Writes the decision memo behind a rule gate, then requests human approval bound to the exact code hash | yes + rules |
+
+The loops are real and capped:
+- Priority Critic → PM: 2 rounds.
+- QA → Engineer: 3 revisions.
+- Insight Critic → Report Writer: 2 rounds.
+- Retriever SQL fix: 3 attempts.
+- Model calls: at most 40 per run.
+
+Every step is written to `logs/trace-<run_id>.jsonl`, a hash-chained log in which any edited or deleted line breaks the chain.
+
+### Why QA can't simply agree with the code
+
+The PM writes the automation as a spec in a small DSL, not as free text: a record matcher with key normalization, ordered checks and statuses ([`app/automation/spec.py`](app/automation/spec.py)). The spec has exact semantics, so QA builds its expected outputs from the spec alone ([`oracle.py`](app/automation/oracle.py)):
+
+- every status branch, plus check precedence
+- key-normalization variants (case and whitespace)
+- empty and ambiguous keys
+- values just inside and just outside numeric tolerances
+- seeded random mixes
+- a **renamed column**, which correct code must reject loudly
+
+It then runs the code in a sandbox ([`sandbox.py`](app/automation/sandbox.py)):
+- An AST policy allows only whitelisted stdlib imports, with no `eval`/`open`/reflection/dunder access.
+- The code runs in a `python -I` subprocess with an **empty environment** and a timeout.
+
+## Sponsor technology
+
+### Zetaris (data layer)
+All agent SQL goes through [`app/adapters/zetaris.py`](app/adapters/zetaris.py). It follows the REST contract (`/sql-editor/sqls/run`, Bearer key, `X-Org-ID`, a fresh UUID `X-Request-ID`), sends one statement per call, and retries only read-only statements, with timeouts and structured errors.
+
+Zetaris can't read local files, so the API serves each synthetic table as JSON (`GET /data/workforce/<table>`). [`scripts/load_zetaris.py`](scripts/load_zetaris.py) registers those endpoints as **Lightning REST tables**. It's a dry run by default; `--apply` runs one statement at a time and verifies row counts. *Not yet run against a live instance.*
+
+### Meterless
+- **Power rule.** Nightshift is the **primary model provider** ([`app/adapters/meterless.py`](app/adapters/meterless.py)). It follows the provider contract:
+  - provider `meterless` / "Meterless Runtime"
+  - pasted URLs normalized to `<host>/v1`, and the `rt-local` placeholder rejected
+  - a `meterless-app` header on every request, and `meterless-scope: user` on chat
+  - status from `GET /v1/models` (online, unauthorized or offline)
+  - auto-detect across ports 8088/8090/8787/11434
+  - connect links (`/connect#k=`)
+  - a 180-second timeout
+
+  To test the connection, use `GET /providers/meterless` or `scripts/check_connections.py --detect`.
+- **Build rule: World Model engine** ([`app/engines/world_model/`](app/engines/world_model/)). We wrote it from scratch in Python, following the Meterless reference design:
+  - content-hash stable IDs (`ent_` + sha256 of `type:normalized name`)
+  - an append-only observation log, with provenance back to source rows required
+  - a 10-step idempotent ingest: reconcile → cluster → persist → score → infer → edges → views → patch source items → aggregates → mark stale
+  - canonical reconstruction (latest, union, longest text, most confident, provenance-weighted)
+  - merge proposals that are never applied automatically
+  - a structured, budgeted context builder
+
+  It's in a working user-facing feature: every stage reads its context from it and writes what it learns back. Stage 1's source conflicts *are* the World Model's conflict records. 18 tests cover the engine, including:
+  - re-ingest yields an empty diff
+  - resume after a crash
+  - 10 concurrent writers match a serial run
+
+### NVIDIA
+Nemotron runs through Nightshift lanes; no local GPU is used. *We haven't yet pinned the exact Nemotron `meterless/*` route, because Nightshift isn't configured yet.* Every model call's trace records the model that actually answered.
 
 ## Quick start (Windows PowerShell)
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-Copy-Item .env.example .env          # then fill in your own values; never commit .env
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Check the sponsor services (Zetaris and Meterless Nightshift are reported separately; exit code 0 only if every check passes):
+**Sample mode** needs no keys and no network. It runs the real agent logic on the committed synthetic data, and needs no `.env` file.
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\check_connections.py
+.\.venv\Scripts\python.exe scripts\run_examples.py --sample
 ```
 
-It runs `SELECT 1` and `SHOW LIGHTNING DATABASES` on Zetaris, then `GET /models` and one short chat call on Nightshift, and writes each result to `logs/trace-<id>.jsonl`.
-
-Start the API on `0.0.0.0:8000` (`GET /health`, `POST /run`):
+Or start the API and call it yourself:
 
 ```powershell
-.\.venv\Scripts\python.exe run.py
+$env:SAMPLE_MODE = "true"; .\.venv\Scripts\python.exe run.py
 ```
 
-- Hackathon brief and agent rules: [AGENTS.md](AGENTS.md)
-- What we're building and in what order: [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md)
-- Design ideas: [docs/INSPIRATION.md](docs/INSPIRATION.md)
+```bash
+curl -X POST http://localhost:8000/run -H "Content-Type: application/json" -d @input_examples/example_1.json
+```
 
-Sponsor technology: Zetaris (data layer), Meterless Nightshift (primary model provider, NVIDIA Nemotron lanes), Meterless World Model engine (+ H-MEM planned).
+**Default mode** needs a running Zetaris instance and Meterless Nightshift; see [docs/PROJECT_PLAN.md §6](docs/PROJECT_PLAN.md).
 
-Developed with Claude Code. All AI-generated code is reviewed and tested by the team.
+1. Copy `.env.example` to `.env` and fill in your values. Never commit `.env`.
+2. Check both services:
+   ```powershell
+   .\.venv\Scripts\python.exe scripts\check_connections.py --detect
+   ```
+3. Register the data in Zetaris (dry run first, then `--apply`):
+   ```powershell
+   .\.venv\Scripts\python.exe scripts\load_zetaris.py
+   ```
+4. Run the examples:
+   ```powershell
+   .\.venv\Scripts\python.exe scripts\run_examples.py
+   ```
+
+**Docker** (the image targets Python 3.11):
+
+```bash
+docker build -t oah-submission .
+docker run --rm -p 8000:8000 --env-file .env oah-submission
+```
+
+## API
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /run` | `{"request_id", "user_query", "context", "options": {"sample_mode", "stages": ["discover", "explain", "build"]}}`. Returns `agents_used`, `result{summary, findings, confidence, ranking, decision, automation}`, `collaboration{feedback_loop_completed, revision_count, evaluator_findings, …}`, `stages`, `approval`, `log_path` and `execution_time_seconds`. Failures return `{status: "error", error{type, message, recoverable}, trace_id}`. |
+| `GET /approvals/{id}` / `POST /approvals/{id}` | The human approval gate: `{"decision": "approve" \| "reject", "approver", "code_hash"}`. It's hash-chained and bound to the code hash. Approving only records the decision; nothing is deployed. |
+| `GET /providers/meterless` | Test Connection for the primary provider. The token is never returned. |
+| `GET /data/workforce/{table}` | Serves the synthetic tables for Zetaris REST tables. |
+| `GET /health` | Configuration status. No external calls. |
+
+## Examples
+
+[`input_examples/`](input_examples/) holds three questions, about Finance, Operations and Sales. [`output_examples/sample_mode/`](output_examples/sample_mode/) holds the **real responses and traces from sample-mode runs**; the app never reads them. Different questions give different results:
+
+| Example | Chosen automation | QA |
+|---|---|---|
+| Finance: where are we losing time? | `invoice_po_matcher` (about 23 h/week, high risk) | 22/22 cases |
+| Operations: what repetitive work is eating the week? | `order_status_responder` (about 6.2 h/week, medium risk) | 19/19 cases |
+| Sales: is CRM data entry worth automating? | `lead_contact_deduper` (about 5.4 h/week, medium risk) | 22/22 cases |
+
+*Default-mode outputs (Zetaris + Nemotron) will be added once those services are running.*
+
+## Sample mode and fallbacks
+
+`SAMPLE_MODE=true` (or `options.sample_mode`) loads the committed synthetic CSVs into SQLite under the same `workforce` schema name, so the agents' SQL runs unchanged. In this mode:
+- Every Zetaris call is logged as `zetaris: skipped (sample mode)`.
+- No model is called. Each agent uses its own deterministic, data-driven fallback, logged as `model: offline-fallback`:
+  - The PM ranks by measured hours and uses a built-in spec template.
+  - The Engineer compiles the spec.
+  - The writer cites cells from fixed queries.
+- QA, the Priority and Insight Critics' rule checks, the sandbox and the World Model run exactly as in default mode.
+
+Sample mode returns no saved answers.
+
+## Data
+
+All the data is **synthetic** and generated by a committed, deterministic script; see [data/README.md](data/README.md). The people and events are invented, and emails use `example.com`. Agents refer to people by `person_id` only, and a test checks that no name reaches any prompt.
+
+## Repository map
+
+```
+app/adapters/       zetaris.py, meterless.py, http.py (timeouts, bounded retries, structured errors)
+app/engines/world_model/   Meterless World Model engine (store, 10-step ingest, context builder)
+app/agents/         base.py (traced model + data calls), stage1.py, stage2.py, stage3.py
+app/automation/     spec DSL, QA oracle, sandbox, offline compiler
+app/analysis/       routine mining from the activity log
+app/data.py         data-layer seam (Zetaris / sample SQLite)
+app/approvals.py    hash-chained human approval ledger
+app/pipeline.py     the three-stage run
+run.py              FastAPI on 0.0.0.0:$PORT
+scripts/            check_connections, load_zetaris, generate_workforce_data, run_examples
+```
+
+## Done vs not yet
+
+| Done (tested) | Not yet |
+|---|---|
+| Three stages, 12 agents, real critique and revision loops (tested with a scripted model test double) | **A default-mode run against live Zetaris + Nightshift** (not installed yet) |
+| World Model engine, wired into every stage | Pinning a Nemotron `meterless/*` route for the NVIDIA award |
+| Meterless provider contract, connection check, auto-detect | Running `load_zetaris.py --apply`; the `--views` statements are unverified |
+| Sample mode from an empty `.env` | Building the Docker image and validating from a fresh clone |
+| Sandbox, QA oracle, approvals, hash-chained traces | H-MEM (second engine, planned) |
+
+## Known limitations
+
+- **The sandbox on Windows** has no memory limit (no `rlimit`), so the timeout and the static AST policy are the guards there. POSIX and Docker add CPU and memory limits.
+- **The Priority Critic** treats hands-on time measured in the activity log as the ceiling on hours saved. That's conservative, and it's an assumption.
+- **Confidence** comes from a stated heuristic formula (shown in each response), not from calibrated probabilities.
+- **Token budgets** use the `ceil(chars / 4)` heuristic.
+- **The Insight Critic** accepts a number only if it equals a cited value, or a ratio or percentage of two cited values. Integers up to 10 always pass. Otherwise valid derived numbers must be computed in SQL.
+- **World Model aliases** apply to mentions made after they're registered; similar names become merge proposals and are never merged automatically.
+- **Agent SQL** must stay within a portable subset (documented in `app/data.py`) so that it runs on both Zetaris and SQLite.
+
+## Tools, libraries and disclosures
+
+- **Models:** Meterless Nightshift (primary; NVIDIA Nemotron lanes). Any OpenAI-compatible endpoint can be used as a secondary provider (`LLM_PROVIDER=openai_compatible`).
+- **Agent framework:** none. The agents are plain Python written for this project.
+- **Libraries:**
+  - FastAPI (MIT)
+  - Uvicorn (BSD-3-Clause)
+  - httpx (BSD-3-Clause)
+  - python-dotenv (BSD-3-Clause)
+  - pytest (MIT, development only)
+- **Open-source code adapted:** none. Design ideas, not code, are listed in [docs/INSPIRATION.md](docs/INSPIRATION.md). The World Model follows the Meterless reference *design*, reimplemented.
+- **Pre-existing components:** none. All code was written in this repository from 23 Oct 2026.
+- **AI coding tool:** developed with **Claude Code** (Anthropic). All AI-generated code is reviewed and tested by the team.
+
+The hackathon brief and agent rules are in [AGENTS.md](AGENTS.md), and the plan is in [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md).

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Any, Optional
 
 from app.agents.base import OFFLINE_MODEL, Agent, AgentError
 from app.engines.world_model import entity_observation, relationship_observation
@@ -252,6 +252,14 @@ class ConflictCritic(Agent):
         return {"conflicts": conflicts, "assessments": assessments}
 
 
-def team_from_query(query: str, teams: list[str]) -> str | None:
+TEAM_WORDS = {"ops": "Operations", "operation": "Operations", "accounting": "Finance", "accounts": "Finance",
+              "sales": "Sales", "admin": "Admin", "hr": "Admin"}
+
+
+def team_from_query(query: str, teams: list[str]) -> Optional[str]:
+    """The team a question is about, if it names one ("ops" counts as Operations)."""
     words = set(re.findall(r"[a-z]+", query.lower()))
-    return next((t for t in teams if t.lower() in words), None)
+    direct = next((t for t in teams if t.lower() in words), None)
+    if direct:
+        return direct
+    return next((TEAM_WORDS[w] for w in sorted(words) if w in TEAM_WORDS and TEAM_WORDS[w] in teams), None)

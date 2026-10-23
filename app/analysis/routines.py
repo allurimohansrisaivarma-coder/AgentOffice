@@ -49,6 +49,8 @@ def gather(query: QueryFn, *, min_instances: int = 10) -> dict:
                        "self-reported hours per task category")
     tickets = query("SELECT category, SUM(logged_minutes) AS minutes, COUNT(*) AS tickets "
                     "FROM workforce.tickets GROUP BY category", "time logged in the ticket system")
+    team_of = {r["person_id"]: r["team"] for r in query("SELECT person_id, team FROM workforce.people",
+                                                        "which team each person is in")}
 
     days = {str(e["ts"])[:10] for e in events}
     weeks = max(len(days) / 5, 1e-9)
@@ -84,9 +86,11 @@ def gather(query: QueryFn, *, min_instances: int = 10) -> dict:
         best = max(overlaps.items(), key=lambda kv: (kv[1], category_hours[kv[0]]), default=(None, 0))
         category = best[0] if best[1] > 0 else None
         risk, risk_reasons = _risk(list(canonical))
+        teams = Counter(team_of.get(p, "unknown") for p in people)
         routines.append({
             "routine": category or "_".join(a for _, a in (canonical[0], canonical[-1])),
             "timesheet_category": category,
+            "team": teams.most_common(1)[0][0],
             "steps": [f"{app}.{action}" for app, action in canonical],
             "instances": len(case_ids),
             "instances_per_week": round(len(case_ids) / weeks, 1),
