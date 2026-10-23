@@ -29,17 +29,21 @@ def test_run_without_config_is_structured_error(make_settings):
     assert body["trace_id"] and Path(body["log_path"]).exists()
 
 
-def test_run_reports_unbuilt_pipeline_honestly(make_settings):
+def test_sample_run_succeeds_with_a_clean_trace(make_settings):
     s = make_settings()
     r = TestClient(create_app(s)).post("/run", json={**BODY, "options": {"sample_mode": True}})
     body = r.json()
-    assert r.status_code == 501
-    assert body["error"]["type"] == "not_implemented"
+    assert r.status_code == 200 and body["status"] == "success"
+    for key in ("request_id", "trace_id", "agents_used", "result", "collaboration", "log_path",
+                "execution_time_seconds"):
+        assert key in body
+    assert {"summary", "findings", "confidence"} <= set(body["result"])
+    assert {"feedback_loop_completed", "revision_count", "evaluator_findings"} <= set(body["collaboration"])
 
     log = Path(body["log_path"])
     assert verify_chain(log) is None
     text = log.read_text(encoding="utf-8")
-    assert '"action": "run_started"' in text and '"action": "run_failed"' in text
+    assert '"action": "run_started"' in text and '"action": "run_completed"' in text
     for secret in s.secret_values():
         assert secret not in text
 

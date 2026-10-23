@@ -7,6 +7,7 @@ error (AGENTS.md section 9), never a stack trace.
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional
 
@@ -19,7 +20,10 @@ from pydantic import BaseModel, Field
 from app import data
 from app.adapters import meterless
 from app.adapters.http import AdapterError
+from app.agents.base import AgentError
+from app.approvals import ApprovalLedger
 from app.config import ROOT, Settings, load_settings
+from app.engines.world_model import open_world
 from app.llm import build_generator
 from app.pipeline import run_pipeline
 from app.tracing import Tracer, new_run_id
@@ -30,6 +34,13 @@ class RunRequest(BaseModel):
     user_query: str = Field(min_length=1, max_length=4000)
     context: dict[str, Any] = Field(default_factory=dict)
     options: dict[str, Any] = Field(default_factory=dict)
+
+
+class ApprovalDecision(BaseModel):
+    decision: str = Field(pattern="^(approve|reject)$")
+    approver: str = Field(min_length=1, max_length=200)
+    note: str = Field(default="", max_length=2000)
+    code_hash: Optional[str] = Field(default=None, description="if given, must match the requested code")
 
 
 def _display_path(path: Path) -> str:
@@ -101,6 +112,34 @@ def create_app(settings: Settings) -> FastAPI:
         routes = [m for m in status["models"] if m.startswith("meterless/")]
         return {**info, "status": status["status"], "detail": status["detail"], "routes": routes}
 
+    approvals = ApprovalLedger(settings.world_db_path.parent)
+    worlds: dict[bool, tuple] = {}
+
+    def world(sample_mode: bool) -> tuple:
+        """One shared World Model per mode, so sample runs never mix with real Zetaris facts."""
+        if sample_mode not in worlds:
+            path = settings.world_db_path
+            worlds[sample_mode] = open_world(replace(settings, world_db_path=path.with_name(
+                path.stem + "-sample" + path.suffix)) if sample_mode else settings)
+        return worlds[sample_mode]
+
+    @app.get("/approvals/{approval_id}")
+    def get_approval(approval_id: str):
+        approval = approvals.get(approval_id)
+        if approval is None:
+            return _error(404, "not_found", f"no approval {approval_id!r}", False)
+        return approval
+
+    @app.post("/approvals/{approval_id}")
+    def decide_approval(approval_id: str, body: ApprovalDecision):
+        try:
+            return approvals.decide(approval_id, decision=body.decision, approver=body.approver, note=body.note,
+                                    code_hash=body.code_hash)
+        except KeyError:
+            return _error(404, "not_found", f"no approval {approval_id!r}", False)
+        except ValueError as e:
+            return _error(409, "conflict", str(e), False)
+
     @app.post("/run")
     def run(req: RunRequest):
         started = time.monotonic()
@@ -127,17 +166,20 @@ def create_app(settings: Settings) -> FastAPI:
 
         try:
             generator = None if sample_mode else build_generator(settings)
-            result = run_pipeline(req.user_query, req.context, settings=settings,
-                                  tracer=tracer, generator=generator)
+            store, pipeline, builder = world(sample_mode)
+            result = run_pipeline(req.user_query, req.context, settings=settings, tracer=tracer,
+                                  generator=generator, sample_mode=sample_mode, store=store, pipeline=pipeline,
+                                  builder=builder, approvals=approvals)
         except AdapterError as e:
             err = e.to_dict()
             return fail(503, err["type"], err["message"], e.recoverable)
-        except NotImplementedError as e:
-            return fail(501, "not_implemented", str(e), False)
+        except AgentError as e:
+            return fail(502, f"agent_{e.type}", tracer.mask(str(e)), e.recoverable)
         except Exception as e:  # last resort: report, don't dump a stack trace
             return fail(500, "internal_error", f"{type(e).__name__}: {tracer.mask(str(e))}", False)
 
-        tracer.event("Orchestrator", "run_completed", output_summary=result.get("result", {}))
+        tracer.event("Orchestrator", "run_completed", output_summary=result["result"]["summary"],
+                     confidence=result["result"]["confidence"])
         return {
             "request_id": req.request_id,
             "trace_id": run_id,

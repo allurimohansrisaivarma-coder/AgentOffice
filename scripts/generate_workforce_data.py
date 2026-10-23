@@ -30,7 +30,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "data" / "sample" / "workforce"
 SEED = 20261022
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 START = date(2026, 8, 31)        # Monday
 WORKDAYS = 30                     # six weeks
 
@@ -64,18 +64,19 @@ TICKET_LOGGING = {"invoice_matching": 0.35, "vendor_queries": 0.9, "shipping_exc
                   "office_requests": 0.9, "order_status_updates": 0.5}
 
 ROUTINES = {
-    "invoice_matching": [("Email", "open_invoice_email", 40), ("PDF", "download_attachment", 25),
-                         ("Excel", "open_invoice_tracker", 20), ("ERP", "lookup_purchase_order", 90),
-                         ("ERP", "enter_invoice", 150), ("ERP", "match_to_po", 60),
-                         ("Email", "reply_vendor_confirmation", 70)],
-    "crm_data_entry": [("Email", "open_lead_email", 30), ("CRM", "search_contact", 25),
-                       ("CRM", "create_contact", 120), ("CRM", "log_activity", 60)],
-    "order_status_updates": [("Email", "open_status_request", 30), ("ERP", "lookup_order", 70),
-                             ("Email", "reply_customer_status", 90)],
+    "invoice_matching": [("Email", "open_invoice_email", 45), ("PDF", "download_attachment", 30),
+                         ("Excel", "open_invoice_tracker", 40), ("ERP", "lookup_purchase_order", 210),
+                         ("ERP", "enter_invoice", 330), ("ERP", "match_to_po", 150),
+                         ("Email", "reply_vendor_confirmation", 120)],
+    "crm_data_entry": [("Email", "open_lead_email", 40), ("CRM", "search_contact", 60),
+                       ("CRM", "create_contact", 240), ("CRM", "log_activity", 120)],
+    "order_status_updates": [("Email", "open_status_request", 40), ("ERP", "lookup_order", 150),
+                             ("Email", "reply_customer_status", 180)],
 }
-ROUTINE_OWNERS = {"invoice_matching": ("Finance", "AP clerk", 4),
-                  "crm_data_entry": ("Sales", "Account executive", 2),
-                  "order_status_updates": ("Operations", "Ops coordinator", 2)}
+# routine -> (team, role, cases per person per day)
+ROUTINE_OWNERS = {"invoice_matching": ("Finance", "AP clerk", 12),
+                  "crm_data_entry": ("Sales", "Account executive", 6),
+                  "order_status_updates": ("Operations", "Ops coordinator", 8)}
 
 
 def _workdays():
@@ -135,7 +136,7 @@ def generate(seed: int = SEED) -> dict[str, list[dict]]:
         for p in owners:
             for day in days:
                 clock = 9 * 3600 + rng.randint(0, 1800)
-                for i in range(per_day + rng.randint(-1, 1)):
+                for i in range(per_day + rng.randint(-2, 2)):
                     case = f"{task[:3].upper()}-{day.strftime('%m%d')}-{p['person_id'][1:]}-{i + 1}"
                     if task == "invoice_matching":
                         emails.append({"event_id": f"E{len(emails) + 1:05d}", "person_id": p["person_id"],
@@ -156,7 +157,7 @@ def generate(seed: int = SEED) -> dict[str, list[dict]]:
                                        "ts": _ts(day, clock), "app": app, "action": action, "case_ref": case,
                                        "duration_seconds": str(duration)})
                         clock += duration + rng.randint(5, 60)
-                    clock += rng.randint(600, 3600)
+                    clock += rng.randint(120, 900)
 
     # background email noise for everyone
     for p in people:
