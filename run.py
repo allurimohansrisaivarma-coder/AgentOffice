@@ -16,6 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app import data
 from app.adapters import meterless
 from app.adapters.http import AdapterError
 from app.config import ROOT, Settings, load_settings
@@ -71,6 +72,17 @@ def create_app(settings: Settings) -> FastAPI:
             "llm_provider": settings.llm_provider,
             "missing_config": settings.missing_for_default_mode(),
         }
+
+    tables = {t["table"] for t in data.catalog()}
+
+    @app.get("/data/workforce/{table}")
+    def workforce_table(table: str):
+        """Serves the synthetic tables for Zetaris to register as REST tables."""
+        if table not in tables:
+            return _error(404, "not_found", f"no table {table!r}; available: {', '.join(sorted(tables))}", False)
+        _, _, rows = data.load_table(table)
+        return {"table": table, "synthetic": True, "generator": "scripts/generate_workforce_data.py",
+                "rows": rows}
 
     @app.get("/providers/meterless")
     def meterless_status() -> dict:

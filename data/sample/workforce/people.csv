@@ -1,0 +1,13 @@
+person_id,name,team,role,email,synthetic
+P001,Ana Dune,Finance,AP clerk,ana.dune@example.com,true
+P002,Ben Ives,Finance,AP clerk,ben.ives@example.com,true
+P003,Chloe North,Finance,Finance analyst,chloe.north@example.com,true
+P004,Dev Ellery,Finance,Finance manager,dev.ellery@example.com,true
+P005,Elif Juno,Operations,Ops coordinator,elif.juno@example.com,true
+P006,Farid Arden,Operations,Ops coordinator,farid.arden@example.com,true
+P007,Grace Fenn,Operations,Ops lead,grace.fenn@example.com,true
+P008,Hugo Kade,Sales,Account executive,hugo.kade@example.com,true
+P009,Isla Brook,Sales,Account executive,isla.brook@example.com,true
+P010,Jonah Gale,Sales,Sales ops,jonah.gale@example.com,true
+P011,Kemi Lark,Admin,Office admin,kemi.lark@example.com,true
+P012,Liam Calder,Admin,HR generalist,liam.calder@example.com,true

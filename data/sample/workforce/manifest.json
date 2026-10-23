@@ -1,0 +1,80 @@
+{
+  "dataset": "workforce",
+  "synthetic": true,
+  "generator": "scripts/generate_workforce_data.py",
+  "generator_version": 1,
+  "seed": 20261022,
+  "period": {
+    "start": "2026-08-31",
+    "end": "2026-10-09",
+    "workdays": 30
+  },
+  "note": "Synthetic data. All people, emails and events are invented; emails use the reserved example.com domain.",
+  "tables": {
+    "people": {
+      "rows": 12,
+      "columns": [
+        "person_id",
+        "name",
+        "team",
+        "role",
+        "email",
+        "synthetic"
+      ],
+      "sha256": "444187d42b7859d867b9eaf1c5c7330d0338b39f0463b1dd89384a8290bc7f72"
+    },
+    "timesheets": {
+      "rows": 827,
+      "columns": [
+        "entry_id",
+        "person_id",
+        "work_date",
+        "task_category",
+        "tools",
+        "hours"
+      ],
+      "sha256": "66c15a087f5512ba3f9059005bf403b6f548cc3178349c418137363fb905dc88"
+    },
+    "tickets": {
+      "rows": 223,
+      "columns": [
+        "ticket_id",
+        "assignee_id",
+        "team",
+        "category",
+        "opened_at",
+        "closed_at",
+        "status",
+        "logged_minutes"
+      ],
+      "sha256": "152a88615ebd807cbf3ffc3511fb6c971f59a70aec798ca914185b12485c0def"
+    },
+    "email_events": {
+      "rows": 2211,
+      "columns": [
+        "event_id",
+        "person_id",
+        "sent_at",
+        "direction",
+        "counterparty",
+        "subject_category",
+        "has_attachment",
+        "case_ref"
+      ],
+      "sha256": "23db2d20f841b0211050a76605a9d262d9a3a9dc41963b14c5c4e1ec06ba9c7f"
+    },
+    "task_events": {
+      "rows": 2613,
+      "columns": [
+        "event_id",
+        "person_id",
+        "ts",
+        "app",
+        "action",
+        "case_ref",
+        "duration_seconds"
+      ],
+      "sha256": "f0a0db080a79c34ea307140807983c4544f9f5bfffb8ba763875a795c0116993"
+    }
+  }
+}

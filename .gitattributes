@@ -1,0 +1,2 @@
+# Generated data must stay byte-identical to the generator output on every OS.
+data/** text eol=lf
