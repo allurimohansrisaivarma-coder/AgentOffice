@@ -2,7 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.http import AdapterError
-from app.data import SampleSQLClient, ZetarisSource, build_data_source, catalog, load_table
+from app.data import (
+    SampleSQLClient, ZetarisSource, build_data_source, catalog, load_table, rewrite_for_zetaris,
+)
 from run import create_app
 from scripts import generate_workforce_data as gen
 from scripts.load_zetaris import statements, verification_queries
@@ -78,11 +80,28 @@ def test_api_serves_tables_for_zetaris(make_settings):
 
 
 def test_zetaris_load_plan_is_one_statement_each():
-    plan = statements("http://host.docker.internal:8000", views=True)
+    plan = statements("http://host.docker.internal:8000")
     assert plan[0][1].startswith("CREATE LIGHTNING DATABASE workforce_api")
     rest = [sql for purpose, sql in plan if purpose.startswith("register")]
-    assert len(rest) == 5
+    assert len(rest) == 5 and len(plan) == 6
     assert 'endpoint "http://host.docker.internal:8000/data/workforce/people"' in rest[0]
     assert all(not sql.rstrip().endswith(";") for _, sql in plan)
-    assert any("SCHEMASTORE VIEW workforce.timesheets" in sql for _, sql in plan)
     assert len(verification_queries()) == 5
+
+
+TABLES = {"people", "timesheets", "tickets", "email_events", "task_events"}
+SUB = "(SELECT r.* FROM workforce_api.{t} LATERAL VIEW explode(rows) AS r)"
+
+
+@pytest.mark.parametrize("sql, expected", [
+    ("SELECT COUNT(*) AS n FROM workforce.timesheets",
+     f"SELECT COUNT(*) AS n FROM {SUB.format(t='timesheets')} AS timesheets"),
+    ("SELECT t.hours FROM workforce.timesheets t JOIN workforce.people AS p ON p.person_id = t.person_id",
+     f"SELECT t.hours FROM {SUB.format(t='timesheets')} AS t JOIN {SUB.format(t='people')} AS p "
+     "ON p.person_id = t.person_id"),
+    ("SELECT category FROM workforce.tickets WHERE status = 'closed' GROUP BY category",
+     f"SELECT category FROM {SUB.format(t='tickets')} AS tickets WHERE status = 'closed' GROUP BY category"),
+    ("SELECT * FROM workforce.salaries", "SELECT * FROM workforce.salaries"),    # unknown: left alone
+])
+def test_agent_sql_is_rewritten_for_zetaris_rest_tables(sql, expected):
+    assert rewrite_for_zetaris(sql, TABLES) == expected

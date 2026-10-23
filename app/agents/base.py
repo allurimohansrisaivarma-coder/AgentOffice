@@ -155,8 +155,11 @@ class Agent:
             self.log("data_query", status="error", target_agent=target, input_summary=sql,
                      output_summary=e.message, error_type=e.to_dict()["type"], purpose=purpose)
             raise
+        executed = getattr(ctx.data, "last_executed", None)
+        extra = {"executed_sql": executed} if executed and executed != sql else {}
         self.log("data_query", target_agent=target, input_summary=sql, output_summary=f"{len(rows)} rows",
-                 purpose=purpose, data_source=ctx.data.name, elapsed_s=round(time.monotonic() - started, 2))
+                 purpose=purpose, data_source=ctx.data.name, elapsed_s=round(time.monotonic() - started, 2),
+                 **extra)
         return rows
 
     # ---------------------------------------------------------------- world model

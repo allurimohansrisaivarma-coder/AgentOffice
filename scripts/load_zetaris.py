@@ -2,7 +2,7 @@
 
     python scripts/load_zetaris.py                      # dry run: print every statement, run nothing
     python scripts/load_zetaris.py --apply              # run them one at a time, then verify row counts
-    python scripts/load_zetaris.py --apply --views      # also create flat workforce.<table> views
+    python scripts/load_zetaris.py --verify             # only re-check the row counts (read-only)
 
 Zetaris cannot read files on this machine and has no INSERT for data entry,
 so the AgentOffice API serves each table as JSON at GET /data/workforce/<table>
@@ -13,8 +13,11 @@ on Docker Desktop that is http://host.docker.internal:<PORT> (override with
 
 Statements follow the Zetaris getting-started SQL reference: one statement per
 call, no trailing semicolon. CREATE statements need an administrator key.
-The --views step (CREATE OR REPLACE SCHEMASTORE VIEW) is unverified against a
-live instance: check its output before relying on it.
+No views are needed: the data adapter (app/data.py) rewrites the agents'
+`workforce.<table>` into a read of the REST table at query time.
+
+Verified on a local Zetaris 2.4.3 install (23 Oct 2026): all 6 statements
+succeed and every row count matches the generator's manifest.
 """
 
 from __future__ import annotations
@@ -31,13 +34,10 @@ if str(ROOT) not in sys.path:
 from app.adapters.http import AdapterError  # noqa: E402
 from app.adapters.zetaris import from_settings  # noqa: E402
 from app.config import load_settings  # noqa: E402
-from app.data import catalog  # noqa: E402
-
-LIGHTNING_DB = "workforce_api"
-VIEW_CONTAINER = "workforce"
+from app.data import LIGHTNING_DB, catalog  # noqa: E402
 
 
-def statements(public_url: str, *, views: bool = False) -> list[tuple[str, str]]:
+def statements(public_url: str) -> list[tuple[str, str]]:
     """(purpose, SQL) pairs, in the order they must run."""
     base = public_url.rstrip("/")
     out = [("create database",
@@ -52,12 +52,6 @@ def statements(public_url: str, *, views: bool = False) -> list[tuple[str, str]]
                      f'  response_type "JSON",\n'
                      f'  insecure_ssl "false"\n'
                      f") HEADER () BODY ()"))
-    if views:
-        for t in tables:
-            cols = ", ".join(f"r.{c['name']} AS {c['name']}" for c in t["columns"])
-            out.append((f"view {VIEW_CONTAINER}.{t['table']} (unverified)",
-                        f"CREATE OR REPLACE SCHEMASTORE VIEW {VIEW_CONTAINER}.{t['table']} AS "
-                        f"SELECT {cols} FROM {LIGHTNING_DB}.{t['table']} LATERAL VIEW explode(rows) AS r"))
     return out
 
 
@@ -69,16 +63,16 @@ def verification_queries() -> list[tuple[str, str, int]]:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Register the synthetic workforce tables in Zetaris.")
     parser.add_argument("--apply", action="store_true", help="run the statements (default: dry run)")
-    parser.add_argument("--views", action="store_true", help="also create flat workforce.<table> views")
+    parser.add_argument("--verify", action="store_true", help="only re-check row counts (read-only)")
     parser.add_argument("--public-url", default=os.environ.get("AGENTOFFICE_PUBLIC_URL"),
                         help="URL the Zetaris container uses to reach this API")
     args = parser.parse_args(argv)
 
     settings = load_settings()
     public_url = args.public_url or f"http://host.docker.internal:{settings.port}"
-    plan = statements(public_url, views=args.views)
+    plan = [] if args.verify else statements(public_url)
 
-    if not args.apply:
+    if not args.apply and not args.verify:
         print(f"DRY RUN: {len(plan)} statements (nothing sent). Re-run with --apply to execute.\n")
         for purpose, sql in plan:
             print(f"-- {purpose}\n{sql}\n")

@@ -1,7 +1,9 @@
 """The data layer seam: Zetaris in default mode, the same SQL on SQLite in sample mode.
 
 Agents write SQL against `workforce.<table>`. In default mode that runs on
-Zetaris (see scripts/load_zetaris.py for how the tables get there). In sample
+Zetaris (see scripts/load_zetaris.py for how the tables get there), with each
+reference rewritten to read the matching REST table (rewrite_for_zetaris
+below; the trace records the executed SQL). In sample
 mode it runs on an in-memory SQLite copy of the committed synthetic CSVs,
 attached under the same `workforce` name, so the SQL is unchanged. Sample mode
 is read-only and is always logged as a skipped Zetaris call by the caller.
@@ -15,6 +17,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import sqlite3
 import threading
 from pathlib import Path
@@ -119,14 +122,40 @@ class SampleSQLClient:
         self._conn.close()
 
 
+LIGHTNING_DB = "workforce_api"
+_SQL_WORDS = {"where", "group", "order", "join", "left", "right", "inner", "outer", "full", "cross", "natural",
+              "on", "using", "limit", "union", "intersect", "except", "having", "lateral", "window", "select"}
+_TABLE_REF = re.compile(r"\bworkforce\.([a-z_][a-z0-9_]*)\b(\s+(?:as\s+)?([a-z_][a-z0-9_]*))?", re.I)
+
+
+def rewrite_for_zetaris(sql: str, tables: set[str]) -> str:
+    """Agents write `workforce.<table>`; in Zetaris each table is a REST table holding
+    {"rows": [...]}, so read it as (SELECT r.* FROM workforce_api.<table> LATERAL VIEW
+    explode(rows) AS r). Aliases are kept; an unaliased table gets its own name as alias,
+    so `timesheets.hours` still resolves. No database objects are created."""
+    def replace(m: re.Match) -> str:
+        table = m.group(1).lower()
+        if table not in tables:
+            return m.group(0)
+        sub = f"(SELECT r.* FROM {LIGHTNING_DB}.{table} LATERAL VIEW explode(rows) AS r)"
+        alias = m.group(3)
+        if alias and alias.lower() not in _SQL_WORDS:
+            return f"{sub} AS {alias}"
+        return f"{sub} AS {table}{m.group(2) or ''}"
+    return _TABLE_REF.sub(replace, sql)
+
+
 class ZetarisSource:
     name = "zetaris"
 
-    def __init__(self, client: zetaris.ZetarisClient):
+    def __init__(self, client: zetaris.ZetarisClient, tables: Optional[set[str]] = None):
         self._client = client
+        self._tables = tables if tables is not None else set(load_manifest()["tables"])
+        self.last_executed: Optional[str] = None
 
     def run_sql(self, sql: str, limit: int = 100) -> list[dict]:
-        return self._client.run_sql(sql, limit=limit)
+        self.last_executed = rewrite_for_zetaris(sql, self._tables)
+        return self._client.run_sql(self.last_executed, limit=limit)
 
     def close(self) -> None:
         self._client.close()

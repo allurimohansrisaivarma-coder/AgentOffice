@@ -79,7 +79,13 @@ It then runs the code in a sandbox ([`sandbox.py`](app/automation/sandbox.py)):
 ### Zetaris (data layer)
 All agent SQL goes through [`app/adapters/zetaris.py`](app/adapters/zetaris.py). It follows the REST contract (`/sql-editor/sqls/run`, Bearer key, `X-Org-ID`, a fresh UUID `X-Request-ID`), sends one statement per call, and retries only read-only statements, with timeouts and structured errors.
 
-Zetaris can't read local files, so the API serves each synthetic table as JSON (`GET /data/workforce/<table>`). [`scripts/load_zetaris.py`](scripts/load_zetaris.py) registers those endpoints as **Lightning REST tables**. It's a dry run by default; `--apply` runs one statement at a time and verifies row counts. *Not yet run against a live instance.*
+Zetaris can't read local files, so the API serves each synthetic table as JSON (`GET /data/workforce/<table>`). [`scripts/load_zetaris.py`](scripts/load_zetaris.py) registers those endpoints as **Lightning REST tables**. It's a dry run by default; `--apply` runs one statement at a time and verifies row counts.
+
+The agents write `workforce.<table>`. The adapter rewrites each reference to read its REST table, `(SELECT r.* FROM workforce_api.<table> LATERAL VIEW explode(rows) AS r)`, so no views or other extra objects are needed. The trace records the SQL that actually ran.
+
+**We verified this on a local Zetaris 2.4.3 install:**
+- All 6 statements succeed, and every row count matches the generator's manifest.
+- The pipeline's 15 queries run on Zetaris, and the findings are identical to sample mode.
 
 ### Meterless
 - **Power rule.** Nightshift is the **primary model provider** ([`app/adapters/meterless.py`](app/adapters/meterless.py)). It follows the provider contract:
@@ -226,10 +232,11 @@ scripts/            check_connections, load_zetaris, generate_workforce_data, ru
 
 | Done (tested) | Not yet |
 |---|---|
-| Three stages, 13 agents, real critique and revision loops (tested with a scripted model test double) | **A default-mode run against live Zetaris + Nightshift** (not installed yet) |
+| Three stages, 13 agents, real critique and revision loops (tested with a scripted model test double) | **A default-mode run with Nightshift** (the installer is currently blocked by antivirus) |
 | World Model engine, wired into every stage | Pinning a Nemotron `meterless/*` route for the NVIDIA award |
 | H-MEM engine: cross-run memory that changes later decisions | H-MEM dreaming and sleep consolidation (not built) |
-| Meterless provider contract, connection check, auto-detect | Running `load_zetaris.py --apply`; the `--views` statements are unverified |
+| Meterless provider contract, connection check, auto-detect | |
+| Zetaris: tables loaded and verified; every pipeline query runs on live Zetaris with results identical to sample mode | |
 | Sample mode from an empty `.env`; Docker image built from a fresh clone, 152 tests passing on Python 3.11 inside it, with no `.env` and no network keys (AGENTS.md §16) | Docker → Nightshift reachability (needs Nightshift running) |
 | Sandbox, QA oracle, approvals, hash-chained traces | |
 
