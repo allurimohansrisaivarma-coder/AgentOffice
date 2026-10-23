@@ -22,6 +22,7 @@ dist/
 # Runtime output
 logs/*
 !logs/.gitkeep
+state/
 
 # OS / editors
 .DS_Store

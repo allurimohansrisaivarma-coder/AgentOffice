@@ -26,6 +26,7 @@ def make_settings(tmp_path):
             log_level="INFO",
             log_dir=tmp_path / "logs",
             port=8000,
+            world_db_path=tmp_path / "state" / "world.db",
         )
         return replace(base, **overrides)
     return _make
@@ -42,6 +43,6 @@ def isolated_env(monkeypatch):
     for name in ("LLM_PROVIDER", "METERLESS_BASE_URL", "METERLESS_RUNTIME_TOKEN",
                  "METERLESS_MODEL", "METERLESS_APP", "MODEL_BASE_URL", "MODEL_API_KEY",
                  "MODEL_NAME", "ZETARIS_REST_URL", "ZETARIS_ORG_ID", "ZETARIS_API_KEY",
-                 "SAMPLE_MODE", "LOG_LEVEL", "LOG_DIR", "PORT"):
+                 "SAMPLE_MODE", "LOG_LEVEL", "LOG_DIR", "PORT", "WORLD_DB_PATH"):
         monkeypatch.delenv(name, raising=False)
     return config

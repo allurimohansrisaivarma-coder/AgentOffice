@@ -59,6 +59,7 @@ class Settings:
     log_level: str
     log_dir: Path
     port: int
+    world_db_path: Path = ROOT / "state" / "world.db"
     http_timeout_s: float = 30.0
     model_timeout_s: float = 90.0
     max_retries: int = 2
@@ -115,4 +116,5 @@ def load_settings(env_file: Optional[Path] = ROOT / ".env") -> Settings:
         log_level=_get("LOG_LEVEL", "INFO").upper(),
         log_dir=log_dir,
         port=_get_int("PORT", 8000),
+        world_db_path=Path(_get("WORLD_DB_PATH") or ROOT / "state" / "world.db"),
     )
