@@ -21,8 +21,10 @@ from app import data
 from app.adapters import meterless
 from app.adapters.http import AdapterError
 from app.agents.base import AgentError
+from app.agents.memory import record_approval
 from app.approvals import ApprovalLedger
 from app.config import ROOT, Settings, load_settings
+from app.engines.hmem import open_memory
 from app.engines.world_model import open_world
 from app.llm import build_generator
 from app.pipeline import STAGES, run_pipeline
@@ -114,6 +116,13 @@ def create_app(settings: Settings) -> FastAPI:
 
     approvals = ApprovalLedger(settings.world_db_path.parent)
     worlds: dict[bool, tuple] = {}
+    memories: dict[bool, tuple] = {}
+
+    def memory(sample_mode: bool) -> tuple:
+        """One H-MEM store per mode, kept apart like the World Models."""
+        if sample_mode not in memories:
+            memories[sample_mode] = open_memory(settings, sample_mode)
+        return memories[sample_mode]
 
     def world(sample_mode: bool) -> tuple:
         """One shared World Model per mode, so sample runs never mix with real Zetaris facts."""
@@ -133,12 +142,18 @@ def create_app(settings: Settings) -> FastAPI:
     @app.post("/approvals/{approval_id}")
     def decide_approval(approval_id: str, body: ApprovalDecision):
         try:
-            return approvals.decide(approval_id, decision=body.decision, approver=body.approver, note=body.note,
-                                    code_hash=body.code_hash)
+            decided = approvals.decide(approval_id, decision=body.decision, approver=body.approver, note=body.note,
+                                       code_hash=body.code_hash)
         except KeyError:
             return _error(404, "not_found", f"no approval {approval_id!r}", False)
         except ValueError as e:
             return _error(409, "conflict", str(e), False)
+        # The human's decision becomes a long-term H-MEM preference that later runs must respect.
+        store, _ = memory(bool(decided.get("sample_mode")))
+        outcome = record_approval(store, decided)
+        return {**decided, "memory": {"status": outcome["status"], "id": outcome["memory"]["id"]
+                                      if outcome["memory"] else None, "superseded": [
+                                          c["loser"] for c in outcome["conflicts"] if c["decision_confidence"] >= 0.7]}}
 
     @app.post("/run")
     def run(req: RunRequest):
@@ -167,12 +182,14 @@ def create_app(settings: Settings) -> FastAPI:
         try:
             generator = None if sample_mode else build_generator(settings)
             store, pipeline, builder = world(sample_mode)
+            mem_store, recall = memory(sample_mode)
             stages = req.options.get("stages", list(STAGES))
             if not isinstance(stages, list) or not stages or not set(stages) <= set(STAGES):
                 return fail(422, "invalid_request", f"options.stages must be a list drawn from {list(STAGES)}", True)
             result = run_pipeline(req.user_query, req.context, settings=settings, tracer=tracer,
                                   generator=generator, sample_mode=sample_mode, store=store, pipeline=pipeline,
-                                  builder=builder, approvals=approvals, stages=stages)
+                                  builder=builder, approvals=approvals, memory=mem_store, recall=recall,
+                                  stages=stages, request_id=req.request_id)
         except AdapterError as e:
             err = e.to_dict()
             return fail(503, err["type"], err["message"], e.recoverable)
