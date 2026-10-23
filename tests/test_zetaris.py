@@ -42,6 +42,25 @@ def test_run_sql_follows_rest_contract(make_settings):
     assert _uuid(seen["body"]["queryId"])
 
 
+def test_header_and_list_rows_become_typed_records(make_settings):
+    body = {"headers": ["task_category", "hours", "people", "code", "ratio"],
+            "data": [["invoice_matching", "71.54", "4", "007", "1e3"], ["x", "-2", "0", "", "abc"]],
+            "total": 2, "timeUsed": 12}
+    client = from_settings(make_settings(), transport=httpx.MockTransport(lambda r: httpx.Response(200, json=body)))
+    rows = client.run_sql("SELECT 1")
+    assert rows[0] == {"task_category": "invoice_matching", "hours": 71.54, "people": 4, "code": "007",
+                       "ratio": 1000.0}
+    assert rows[1] == {"task_category": "x", "hours": -2, "people": 0, "code": "", "ratio": "abc"}
+
+
+def test_list_rows_without_headers_are_rejected(make_settings):
+    body = {"data": [["1"]]}
+    client = from_settings(make_settings(), transport=httpx.MockTransport(lambda r: httpx.Response(200, json=body)))
+    with pytest.raises(AdapterError) as e:
+        client.run_sql("SELECT 1")
+    assert e.value.type == "invalid_response" and "headers" in e.value.message
+
+
 def test_multiple_statements_rejected_before_any_request(make_settings):
     def handler(request):
         raise AssertionError("no request should be sent")

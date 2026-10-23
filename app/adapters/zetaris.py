@@ -1,12 +1,15 @@
 """Zetaris Lightning REST adapter: the data layer every finding is grounded in.
 
 Contract (AGENTS.md 5.1): POST {ZETARIS_REST_URL}/sql-editor/sqls/run with
-Bearer key, X-Org-ID and a fresh UUID X-Request-ID; ONE statement per call;
-rows come back in `.data`.
+Bearer key, X-Org-ID and a fresh UUID X-Request-ID; ONE statement per call.
+Observed response (local 2.4.3): {"headers": [column names], "data": [[cells
+as strings]], "total", "timeUsed"}; run_sql returns [{column: value}] with
+numbers restored, the same shape the sample-mode SQLite source returns.
 """
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Optional
 
@@ -48,6 +51,37 @@ def is_read_only(sql: str) -> bool:
     return sql.lstrip().lower().startswith(_READ_ONLY_PREFIXES)
 
 
+_INT = re.compile(r"^-?(0|[1-9]\d*)$")
+_FLOAT = re.compile(r"^-?\d+\.\d+([eE][-+]?\d+)?$|^-?\d+[eE][-+]?\d+$")
+
+
+def coerce(value):
+    """Zetaris returns every cell as a string; turn number-shaped strings back into numbers.
+
+    Codes with leading zeros ("007") stay strings, so identifiers are never mangled.
+    """
+    if not isinstance(value, str):
+        return value
+    if _INT.match(value):
+        return int(value)
+    if _FLOAT.match(value):
+        return float(value)
+    return value
+
+
+def to_records(body: dict) -> list:
+    """{"headers": [...], "data": [[...]]} -> [{header: value}]; dict rows pass through unchanged."""
+    rows = body.get("data")
+    headers = body.get("headers")
+    if not isinstance(rows, list):
+        raise ValueError("no `data` list")
+    if rows and isinstance(rows[0], list):
+        if not isinstance(headers, list) or len(headers) != len(rows[0]):
+            raise ValueError("rows are lists but `headers` does not name their columns")
+        return [{h: coerce(v) for h, v in zip(headers, row)} for row in rows]
+    return rows
+
+
 class ZetarisClient:
     def __init__(self, base_url: str, org_id: str, api_key: str, *,
                  timeout_s: float = 30.0, max_retries: int = 2,
@@ -79,12 +113,11 @@ class ZetarisClient:
                   "source": "SqlEditor", "limit": limit},
         )
         body = json_body(response, SERVICE)
-        rows = body.get("data") if isinstance(body, dict) else None
-        if not isinstance(rows, list):
-            raise AdapterError(SERVICE, "invalid_response",
-                               f"no `data` list in response: {str(body)[:200]}",
-                               recoverable=False, status_code=response.status_code)
-        return rows
+        try:
+            return to_records(body if isinstance(body, dict) else {})
+        except ValueError as e:
+            raise AdapterError(SERVICE, "invalid_response", f"{e} in response: {str(body)[:200]}",
+                               recoverable=False, status_code=response.status_code) from None
 
     def close(self) -> None:
         self._client.close()
