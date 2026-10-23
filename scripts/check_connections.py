@@ -5,8 +5,9 @@
     python scripts/check_connections.py --json           # machine-readable
 
 Zetaris: `SELECT 1`, then `SHOW LIGHTNING DATABASES` (both read-only).
-Meterless Nightshift: GET /models, then one short chat call, reporting which
-model actually answered (/healthz OK does not prove a model is connected).
+Meterless Nightshift: GET /models decides online / unauthorized / offline,
+then one short chat call reports which model actually answered (/healthz OK
+does not prove a model is connected). --detect scans the standard ports first.
 
 Every check is also written to logs/trace-<id>.jsonl. Secrets are never
 printed. Exit code is 0 only if every check that ran passed.
@@ -99,17 +100,40 @@ def check_zetaris(settings: Settings, tracer: Tracer,
         client.close()
 
 
+def detect_meterless(settings: Settings, tracer: Tracer,
+                     transport: Optional[httpx.BaseTransport] = None) -> tuple[Check, Settings]:
+    """Auto Detect: scan the standard ports; use the hit if no base URL is configured."""
+    def detect():
+        found = meterless.auto_detect(settings.meterless_runtime_token, app_name=settings.meterless_app,
+                                      transport=transport)
+        if found is None:
+            raise AdapterError("meterless", "not_found",
+                               f"no runtime answered on ports {', '.join(map(str, meterless.DETECT_PORTS))}",
+                               recoverable=True)
+        return f"found {found['base_url']} ({found['status']})", None
+
+    check = _run(tracer, "meterless", "detect", detect)
+    if check.status == "pass" and not settings.meterless_base_url:
+        settings = replace(settings, meterless_base_url=check.detail.split()[1])
+    return check, settings
+
+
 def check_meterless(settings: Settings, tracer: Tracer,
                     transport: Optional[httpx.BaseTransport] = None) -> list[Check]:
     try:
         client = meterless.meterless_client(settings, transport=transport)
-    except AdapterError:
-        missing = [n for n in settings.missing_for_default_mode() if n.startswith("METERLESS")]
-        return [Check("meterless", "config", "fail",
-                      f"not configured: set {', '.join(missing) or 'METERLESS_*'} in .env")]
+    except AdapterError as e:
+        return [Check("meterless", "config", "fail", f"not configured: {e.message}")]
 
     def models():
-        ids = client.list_models()
+        # Status comes from GET /v1/models: online, unauthorized or offline.
+        status = meterless.probe(settings.meterless_base_url, settings.meterless_runtime_token,
+                                 app_name=settings.meterless_app, timeout_s=settings.http_timeout_s,
+                                 transport=transport)
+        if status["status"] != "online":
+            raise AdapterError("meterless", status["status"], status["detail"],
+                               recoverable=status["status"] == "offline")
+        ids = status["models"]
         listed = "listed" if settings.meterless_model in ids else "NOT listed"
         nemotron = [i for i in ids if "nemotron" in i.lower()]
         return (f"{len(ids)} model(s); configured {settings.meterless_model!r} {listed}; "
@@ -156,6 +180,8 @@ def main(argv: Optional[list[str]] = None, settings: Optional[Settings] = None,
     parser.add_argument("--retries", type=int, default=0,
                         help="retries per call (default 0, so failures show up fast)")
     parser.add_argument("--json", action="store_true", help="print results as JSON")
+    parser.add_argument("--detect", action="store_true",
+                        help="scan ports 8088/8090/8787/11434 for Nightshift first")
     args = parser.parse_args(argv)
 
     settings = replace(settings or load_settings(), max_retries=max(0, args.retries))
@@ -166,6 +192,9 @@ def main(argv: Optional[list[str]] = None, settings: Optional[Settings] = None,
     if args.only in (None, "zetaris"):
         results += check_zetaris(settings, tracer, transports.get("zetaris"))
     if args.only in (None, "meterless"):
+        if args.detect:
+            detected, settings = detect_meterless(settings, tracer, transports.get("meterless"))
+            results.append(detected)
         results += check_meterless(settings, tracer, transports.get("meterless"))
 
     if args.json:

@@ -99,11 +99,19 @@ def load_settings(env_file: Optional[Path] = ROOT / ".env") -> Settings:
     if provider not in PROVIDERS:
         raise ValueError(f"LLM_PROVIDER must be one of {PROVIDERS}, got {provider!r}")
 
+    from app.adapters.meterless import normalize_base_url, parse_connect_link
+
+    meterless_url, meterless_token = _get("METERLESS_BASE_URL"), _get("METERLESS_RUNTIME_TOKEN")
+    if _get("METERLESS_CONNECT_LINK"):
+        # A Nightshift connect link carries both; explicit variables still win.
+        link_url, link_key = parse_connect_link(_get("METERLESS_CONNECT_LINK"))
+        meterless_url, meterless_token = meterless_url or link_url, meterless_token or link_key
+
     log_dir = Path(_get("LOG_DIR") or ROOT / "logs")
     return Settings(
         llm_provider=provider,
-        meterless_base_url=_get("METERLESS_BASE_URL").rstrip("/"),
-        meterless_runtime_token=_get("METERLESS_RUNTIME_TOKEN"),
+        meterless_base_url=normalize_base_url(meterless_url),
+        meterless_runtime_token=meterless_token,
         meterless_model=_get("METERLESS_MODEL", "meterless/auto"),
         meterless_app=_get("METERLESS_APP", "agentoffice"),
         model_base_url=_get("MODEL_BASE_URL").rstrip("/"),

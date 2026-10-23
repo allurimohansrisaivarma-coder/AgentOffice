@@ -40,7 +40,7 @@ def no_backoff(monkeypatch):
 @pytest.fixture
 def isolated_env(monkeypatch):
     """Clear every variable load_settings reads, so the developer's .env can't leak in."""
-    for name in ("LLM_PROVIDER", "METERLESS_BASE_URL", "METERLESS_RUNTIME_TOKEN",
+    for name in ("LLM_PROVIDER", "METERLESS_BASE_URL", "METERLESS_RUNTIME_TOKEN", "METERLESS_CONNECT_LINK",
                  "METERLESS_MODEL", "METERLESS_APP", "MODEL_BASE_URL", "MODEL_API_KEY",
                  "MODEL_NAME", "ZETARIS_REST_URL", "ZETARIS_ORG_ID", "ZETARIS_API_KEY",
                  "SAMPLE_MODE", "LOG_LEVEL", "LOG_DIR", "PORT", "WORLD_DB_PATH"):

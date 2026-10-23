@@ -50,8 +50,28 @@ def test_services_reported_separately(make_settings, capsys):
     assert code == 1
     assert results["zetaris.select_1"]["status"] == "pass"
     assert results["meterless.models"]["status"] == "fail"
-    assert "meterless_unreachable" in results["meterless.models"]["detail"]
+    assert "meterless_offline" in results["meterless.models"]["detail"]
     assert results["meterless.chat"]["status"] == "skip"
+
+
+def test_wrong_token_reports_unauthorized(make_settings, capsys):
+    code, results, _ = _run(make_settings(), capsys, "--only", "meterless",
+                            meterless=lambda r: httpx.Response(401))
+    assert code == 1
+    assert "meterless_unauthorized" in results["meterless.models"]["detail"]
+
+
+def test_detect_finds_runtime_and_fills_missing_base_url(make_settings, capsys):
+    def only_8090(request):
+        if request.url.port != 8090:
+            raise httpx.ConnectError("refused", request=request)
+        return meterless_ok(request)
+
+    code, results, _ = _run(make_settings(meterless_base_url=""), capsys, "--only", "meterless", "--detect",
+                            meterless=only_8090)
+    assert code == 0
+    assert "found http://127.0.0.1:8090/v1 (online)" in results["meterless.detect"]["detail"]
+    assert results["meterless.chat"]["status"] == "pass"
 
 
 def test_zetaris_failure_skips_second_query(make_settings, capsys):

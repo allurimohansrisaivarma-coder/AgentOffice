@@ -16,6 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app.adapters import meterless
 from app.adapters.http import AdapterError
 from app.config import ROOT, Settings, load_settings
 from app.llm import build_generator
@@ -70,6 +71,23 @@ def create_app(settings: Settings) -> FastAPI:
             "llm_provider": settings.llm_provider,
             "missing_config": settings.missing_for_default_mode(),
         }
+
+    @app.get("/providers/meterless")
+    def meterless_status() -> dict:
+        """Test Connection for the primary provider. Never returns the token."""
+        token = settings.meterless_runtime_token
+        base_url = settings.meterless_base_url or meterless.DEFAULT_BASE_URL
+        info = {"id": meterless.PROVIDER_ID, "name": meterless.PROVIDER_NAME,
+                "primary": settings.llm_provider == "meterless", "base_url": base_url,
+                "model": settings.meterless_model, "token_set": bool(token)}
+        try:
+            meterless.check_token(token)
+        except AdapterError as e:
+            return {**info, "status": "not_configured", "detail": e.message, "routes": []}
+        status = meterless.probe(base_url, token, app_name=settings.meterless_app,
+                                 timeout_s=settings.http_timeout_s)
+        routes = [m for m in status["models"] if m.startswith("meterless/")]
+        return {**info, "status": status["status"], "detail": status["detail"], "routes": routes}
 
     @app.post("/run")
     def run(req: RunRequest):

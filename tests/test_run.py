@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -41,6 +42,14 @@ def test_run_reports_unbuilt_pipeline_honestly(make_settings):
     assert '"action": "run_started"' in text and '"action": "run_failed"' in text
     for secret in s.secret_values():
         assert secret not in text
+
+
+def test_meterless_status_endpoint_never_returns_token(make_settings):
+    s = make_settings(meterless_runtime_token="rt-local")
+    body = TestClient(create_app(s)).get("/providers/meterless").json()
+    assert body["id"] == "meterless" and body["name"] == "Meterless Runtime" and body["primary"] is True
+    assert body["status"] == "not_configured" and body["token_set"] is True
+    assert "rt-local" not in json.dumps({k: v for k, v in body.items() if k != "detail"})
 
 
 def test_invalid_request_is_structured(make_settings):
