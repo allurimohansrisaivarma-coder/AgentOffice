@@ -4,7 +4,7 @@
 
 This is our Open Agent Hackathon 2026 submission. The primary track is **Track 3, Reasoning Architecture**. Stages 1 and 2 also address Track 1 (Fragmented Intelligence) and Track 2 (Explain Why).
 
-> **Status (23 Oct 2026):** all three stages, plus cross-run memory, run end to end in **sample mode**, and the test suite passes (150 tests). We have **not yet run default mode against a live Zetaris instance or Meterless Nightshift**, because neither is installed yet. See [Done vs not yet](#done-vs-not-yet).
+> **Status (23 Oct 2026):** all three stages, plus cross-run memory, run end to end in **sample mode**, both locally and in the Docker image. The test suite passes (152 tests, also on Python 3.11 inside the image). We have **not yet run default mode against a live Zetaris instance or Meterless Nightshift**, because neither is installed yet. See [Done vs not yet](#done-vs-not-yet).
 
 ## What it does
 
@@ -164,6 +164,10 @@ docker build -t oah-submission .
 docker run --rm -p 8000:8000 --env-file .env oah-submission
 ```
 
+Without keys, run sample mode with `docker run --rm -p 8000:8000 -e SAMPLE_MODE=true oah-submission`.
+
+Inside the container, `localhost` would mean the container itself. So `localhost`/`127.0.0.1` URLs in `.env` are rewritten to `host.docker.internal`, where Zetaris and Nightshift run. `GET /health` shows the effective addresses, and `AGENTOFFICE_NO_HOST_REWRITE=true` turns the rewrite off.
+
 ## API
 
 | Endpoint | Purpose |
@@ -226,7 +230,7 @@ scripts/            check_connections, load_zetaris, generate_workforce_data, ru
 | World Model engine, wired into every stage | Pinning a Nemotron `meterless/*` route for the NVIDIA award |
 | H-MEM engine: cross-run memory that changes later decisions | H-MEM dreaming and sleep consolidation (not built) |
 | Meterless provider contract, connection check, auto-detect | Running `load_zetaris.py --apply`; the `--views` statements are unverified |
-| Sample mode from an empty `.env` | Building the Docker image and validating from a fresh clone |
+| Sample mode from an empty `.env`; Docker image built from a fresh clone, 152 tests passing on Python 3.11 inside it, with no `.env` and no network keys (AGENTS.md §16) | Docker → Nightshift reachability (needs Nightshift running) |
 | Sandbox, QA oracle, approvals, hash-chained traces | |
 
 ## Known limitations

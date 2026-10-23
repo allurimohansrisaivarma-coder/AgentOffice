@@ -10,6 +10,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 
@@ -38,6 +39,25 @@ def _get_int(name: str, default: int) -> int:
         return int(value) if value else default
     except ValueError:
         raise ValueError(f"{name} must be an integer, got {value!r}") from None
+
+
+def in_container() -> bool:
+    return Path("/.dockerenv").exists() or _get_bool("AGENTOFFICE_IN_DOCKER")
+
+
+def host_alias(url: str, enabled: bool) -> str:
+    """Inside a container, localhost is the container itself: point it at the host instead.
+
+    Zetaris (published by Docker on the host's 127.0.0.1) and Nightshift run on the
+    host, so http://localhost:8888 becomes http://host.docker.internal:8888.
+    """
+    if not url or not enabled:
+        return url
+    parts = urlsplit(url)
+    if parts.hostname not in ("localhost", "127.0.0.1", "::1"):
+        return url
+    netloc = "host.docker.internal" + (f":{parts.port}" if parts.port else "")
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 
 @dataclass(frozen=True)
@@ -108,16 +128,17 @@ def load_settings(env_file: Optional[Path] = ROOT / ".env") -> Settings:
         meterless_url, meterless_token = meterless_url or link_url, meterless_token or link_key
 
     log_dir = Path(_get("LOG_DIR") or ROOT / "logs")
+    rewrite = in_container() and not _get_bool("AGENTOFFICE_NO_HOST_REWRITE")
     return Settings(
         llm_provider=provider,
-        meterless_base_url=normalize_base_url(meterless_url),
+        meterless_base_url=host_alias(normalize_base_url(meterless_url), rewrite),
         meterless_runtime_token=meterless_token,
         meterless_model=_get("METERLESS_MODEL", "meterless/auto"),
         meterless_app=_get("METERLESS_APP", "agentoffice"),
-        model_base_url=_get("MODEL_BASE_URL").rstrip("/"),
+        model_base_url=host_alias(_get("MODEL_BASE_URL").rstrip("/"), rewrite),
         model_api_key=_get("MODEL_API_KEY"),
         model_name=_get("MODEL_NAME"),
-        zetaris_rest_url=_get("ZETARIS_REST_URL").rstrip("/"),
+        zetaris_rest_url=host_alias(_get("ZETARIS_REST_URL").rstrip("/"), rewrite),
         zetaris_org_id=_get("ZETARIS_ORG_ID", "1"),
         zetaris_api_key=_get("ZETARIS_API_KEY"),
         sample_mode=_get_bool("SAMPLE_MODE"),

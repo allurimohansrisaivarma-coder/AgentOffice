@@ -84,6 +84,9 @@ def create_app(settings: Settings) -> FastAPI:
             "sample_mode": settings.sample_mode,
             "llm_provider": settings.llm_provider,
             "missing_config": settings.missing_for_default_mode(),
+            # Effective addresses (no secrets): inside a container, localhost is rewritten to the host.
+            "endpoints": {"zetaris": settings.zetaris_rest_url or None,
+                          "meterless": settings.meterless_base_url or None},
         }
 
     tables = {t["table"] for t in data.catalog()}
