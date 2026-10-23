@@ -1,8 +1,9 @@
 {
   "request_id": "example-001",
-  "trace_id": "c5b655cdca8b4a13",
+  "trace_id": "281dbe848cd141e3",
   "status": "success",
   "agents_used": [
+    "MemoryKeeperAgent",
     "SourceMapperAgent",
     "ReconcilerAgent",
     "ConflictCriticAgent",
@@ -133,7 +134,7 @@
           {
             "name": "runs",
             "passed": true,
-            "detail": "ran in 0.07s"
+            "detail": "ran in 0.058s"
           },
           {
             "name": "output_shape",
@@ -171,7 +172,8 @@
         "code_hash": "c778c9443948d48812acdd929ccca9c3e286cb984da14745717b92ced4ce02f1",
         "passed": true,
         "pass_rate": 1.0,
-        "failed_checks": []
+        "failed_checks": [],
+        "failure_purposes": []
       }
     ],
     "priority_critique_rounds": 0,
@@ -671,17 +673,20 @@
           "code_hash": "c778c9443948d48812acdd929ccca9c3e286cb984da14745717b92ced4ce02f1",
           "passed": true,
           "pass_rate": 1.0,
-          "failed_checks": []
+          "failed_checks": [],
+          "failure_purposes": []
         }
       ]
     }
   },
   "approval": {
-    "approval_id": "apr_e8025ba4214c",
-    "run_id": "c5b655cdca8b4a13",
+    "approval_id": "apr_087fa3875113",
+    "run_id": "281dbe848cd141e3",
     "automation": "invoice_po_matcher",
+    "routine": "invoice_matching",
+    "sample_mode": true,
     "code_hash": "c778c9443948d48812acdd929ccca9c3e286cb984da14745717b92ced4ce02f1",
-    "report_hash": "2d9e9f9875ff3da799abbf7228671c2b3ca5937515095e6e1aae1352ecbe113e",
+    "report_hash": "2e8463d738698bf02ef99a2959a41c9ff0ddda0b4a49a2ec5ad7094a85144cca",
     "memo": {
       "decision": "approve_for_human_review",
       "rationale": "invoice_matching runs 120.5 times a week (32.86 h/week hands-on). The automation passed all 22 QA cases after 1 round(s).",
@@ -698,7 +703,7 @@
       "confidence_formula": "0.45*QA pass rate + 0.2*evidence volume + 0.15*routine consistency + 0.2*(1 - risk)"
     },
     "status": "pending",
-    "requested_at": "2026-10-23T16:30:31.670Z",
+    "requested_at": "2026-10-23T16:47:31.596Z",
     "code_path": "state/automations/c778c9443948d488.py"
   },
   "mode": {
@@ -715,6 +720,40 @@
     "model_calls": 0,
     "data_queries": 15
   },
-  "log_path": "logs/trace-c5b655cdca8b4a13.jsonl",
-  "execution_time_seconds": 0.413
+  "memory": {
+    "retrieved": [],
+    "human_decisions_applied": {},
+    "mined": [
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "For order_status_updates hours, trust sample:workforce.task_events: Sources differ 5.43x (activity 8.82 h/week, tickets 17.87 h/week, timesheets 47.88 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively.",
+        "id": "mem_ff576f6470889bd8",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "For crm_data_entry hours, trust sample:workforce.task_events: Sources differ 4.36x (activity 7.73 h/week, timesheets 33.71 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively.",
+        "id": "mem_7cd191d494425f3c",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "For invoice_matching hours, trust sample:workforce.task_events: Sources differ 3.67x (activity 32.86 h/week, tickets 19.47 h/week, timesheets 71.54 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively.",
+        "id": "mem_8cbca7a51218d177",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Run 281dbe848cd141e3 chose invoice_matching; Manager decision approve_for_human_review (confidence 0.85).",
+        "id": "mem_658a90da4806d257",
+        "conflicts": 0
+      }
+    ]
+  },
+  "log_path": "logs/trace-281dbe848cd141e3.jsonl",
+  "execution_time_seconds": 0.812
 }

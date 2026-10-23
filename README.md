@@ -4,11 +4,11 @@
 
 This is our Open Agent Hackathon 2026 submission. The primary track is **Track 3, Reasoning Architecture**. Stages 1 and 2 also address Track 1 (Fragmented Intelligence) and Track 2 (Explain Why).
 
-> **Status (23 Oct 2026):** all three stages run end to end in **sample mode**, and the test suite passes (134 tests). We have **not yet run default mode against a live Zetaris instance or Meterless Nightshift**, because neither is installed yet. See [Done vs not yet](#done-vs-not-yet).
+> **Status (23 Oct 2026):** all three stages, plus cross-run memory, run end to end in **sample mode**, and the test suite passes (150 tests). We have **not yet run default mode against a live Zetaris instance or Meterless Nightshift**, because neither is installed yet. See [Done vs not yet](#done-vs-not-yet).
 
 ## What it does
 
-You ask a question such as *"Where is the finance team losing time, and what should we automate first?"*. Twelve agents with distinct roles then work in three stages, and all of them read from and write to one shared **World Model**.
+You ask a question such as *"Where is the finance team losing time, and what should we automate first?"*. Thirteen agents with distinct roles then work in three stages. They all read from and write to one shared **World Model**, and they carry lessons and human decisions from one run to the next in **H-MEM**.
 
 ```mermaid
 flowchart LR
@@ -22,12 +22,16 @@ flowchart LR
     RT --> RW[Report Writer] <-->|objections| IC[Insight Critic]
   end
   subgraph S3[3 Decide and Build - Track 3]
+    MK[Memory Keeper] -->|recall| PM
     PM[PM] <-->|critique| PC[Priority Critic]
     PM -->|spec| EN[Engineer] -->|code| QA[QA] -->|failing cases| EN
     QA --> MG[Manager] --> HA{{Human approval}}
   end
   CC --> RP
   IC --> PM
+  HM[(H-MEM)] --> MK
+  HA -->|decision| HM
+  MG -.->|run events mined| HM
 ```
 
 | Stage | Agent | What it does | Model call? |
@@ -43,7 +47,8 @@ flowchart LR
 | | **Priority Critic** | Rejects claims above the hands-on time the activity log measures, and risk ratings below the evidence | rules |
 | | **Engineer** | Writes Python from the spec, and revises using QA's failing cases | yes |
 | | **QA** | Tests the code in a sandbox against expectations **computed from the spec, never from the code**, plus model-designed cases and an advisory code review | yes + rules |
-| | **Manager** | Writes the decision memo behind a rule gate, then requests human approval bound to the exact code hash | yes + rules |
+| | **Manager** | Writes the decision memo behind a rule gate, then requests human approval bound to the exact code hash. It never re-submits code a human already rejected; it escalates instead | yes + rules |
+| memory | **Memory Keeper** | Recalls memories for each candidate routine at the start of the build stage, passes the human decisions on record to the PM and Manager, and mines the run's events (QA verdicts, critiques, trust decisions, outcome) into H-MEM | yes |
 
 The loops are real and capped:
 - Priority Critic → PM: 2 rounds.
@@ -99,6 +104,15 @@ Zetaris can't read local files, so the API serves each synthetic table as JSON (
   - re-ingest yields an empty diff
   - resume after a crash
   - 10 concurrent writers match a serial run
+- **Second engine: H-MEM** ([`app/engines/hmem/`](app/engines/hmem/)). We wrote it from scratch, following the Meterless H-MEM reference contract:
+  - **Records:** the reference fields, the four types (personal, factual, preference, general) and the three layers (short_term, working, long_term). A record with no source is rejected by construction.
+  - **Approval boundary:** a programmable `ApprovalPolicy` decides which proposals become durable memory.
+  - **Reinforcement:** proposing the same memory again raises its confidence by 0.05 and promotes it one layer.
+  - **Conflicts:** detected by opposing phrases, conflicting numbers or divergent claims about the same entity. They're auto-resolved only at decision confidence ≥ 0.70; the loser gets `supersededBy` and is never deleted. Anything less certain is tagged for human review.
+  - **Retrieval:** the reference's 8-signal formula, `clamp01(0.35 semantic + 0.20 keyword + 0.10 tag + 0.10 domain + 0.15 entity + 0.05 layer + 0.05 recency − 0.20 superseded) × confidence`, with a 0.35 threshold and the top 5, returned with a `retrievalReason` for each memory.
+  - **Audit:** an append-only, hash-chained trust ledger in `logs/hmem-ledger*.jsonl`.
+
+  **What it changes:** when a human rejects an automation, the next run proposes a different routine. If there's no alternative, the Manager escalates the identical rejected code instead of asking again. The Engineer's prompt carries QA lessons from earlier runs. 16 tests cover the engine, including this three-session behaviour: learned → retrieved → behaved differently.
 
 ### NVIDIA
 Nemotron runs through Nightshift lanes; no local GPU is used. *We haven't yet pinned the exact Nemotron `meterless/*` route, because Nightshift isn't configured yet.* Every model call's trace records the model that actually answered.
@@ -155,7 +169,7 @@ docker run --rm -p 8000:8000 --env-file .env oah-submission
 | Endpoint | Purpose |
 |---|---|
 | `POST /run` | `{"request_id", "user_query", "context", "options": {"sample_mode", "stages": ["discover", "explain", "build"]}}`. Returns `agents_used`, `result{summary, findings, confidence, ranking, decision, automation}`, `collaboration{feedback_loop_completed, revision_count, evaluator_findings, …}`, `stages`, `approval`, `log_path` and `execution_time_seconds`. Failures return `{status: "error", error{type, message, recoverable}, trace_id}`. |
-| `GET /approvals/{id}` / `POST /approvals/{id}` | The human approval gate: `{"decision": "approve" \| "reject", "approver", "code_hash"}`. It's hash-chained and bound to the code hash. Approving only records the decision; nothing is deployed. |
+| `GET /approvals/{id}` / `POST /approvals/{id}` | The human approval gate: `{"decision": "approve" \| "reject", "approver", "note", "code_hash"}`. It's hash-chained and bound to the code hash. The decision also becomes a long-term H-MEM preference that later runs respect. Approving only records the decision; nothing is deployed. |
 | `GET /providers/meterless` | Test Connection for the primary provider. The token is never returned. |
 | `GET /data/workforce/{table}` | Serves the synthetic tables for Zetaris REST tables. |
 | `GET /health` | Configuration status. No external calls. |
@@ -193,7 +207,8 @@ All the data is **synthetic** and generated by a committed, deterministic script
 ```
 app/adapters/       zetaris.py, meterless.py, http.py (timeouts, bounded retries, structured errors)
 app/engines/world_model/   Meterless World Model engine (store, 10-step ingest, context builder)
-app/agents/         base.py (traced model + data calls), stage1.py, stage2.py, stage3.py
+app/engines/hmem/   Meterless H-MEM engine (store + approval policy + conflicts, retrieval, mining, trust ledger)
+app/agents/         base.py (traced model + data calls), stage1.py, stage2.py, stage3.py, memory.py
 app/automation/     spec DSL, QA oracle, sandbox, offline compiler
 app/analysis/       routine mining from the activity log
 app/data.py         data-layer seam (Zetaris / sample SQLite)
@@ -207,11 +222,12 @@ scripts/            check_connections, load_zetaris, generate_workforce_data, ru
 
 | Done (tested) | Not yet |
 |---|---|
-| Three stages, 12 agents, real critique and revision loops (tested with a scripted model test double) | **A default-mode run against live Zetaris + Nightshift** (not installed yet) |
+| Three stages, 13 agents, real critique and revision loops (tested with a scripted model test double) | **A default-mode run against live Zetaris + Nightshift** (not installed yet) |
 | World Model engine, wired into every stage | Pinning a Nemotron `meterless/*` route for the NVIDIA award |
+| H-MEM engine: cross-run memory that changes later decisions | H-MEM dreaming and sleep consolidation (not built) |
 | Meterless provider contract, connection check, auto-detect | Running `load_zetaris.py --apply`; the `--views` statements are unverified |
 | Sample mode from an empty `.env` | Building the Docker image and validating from a fresh clone |
-| Sandbox, QA oracle, approvals, hash-chained traces | H-MEM (second engine, planned) |
+| Sandbox, QA oracle, approvals, hash-chained traces | |
 
 ## Known limitations
 
@@ -222,6 +238,9 @@ scripts/            check_connections, load_zetaris, generate_workforce_data, ru
 - **The Insight Critic** accepts a number only if it equals a cited value, or a ratio or percentage of two cited values. Integers up to 10 always pass. Otherwise valid derived numbers must be computed in SQL.
 - **World Model aliases** apply to mentions made after they're registered; similar names become merge proposals and are never merged automatically.
 - **Agent SQL** must stay within a portable subset (documented in `app/data.py`) so that it runs on both Zetaris and SQLite.
+- **H-MEM's semantic signal** is the cosine of hashed bag-of-words and bigram vectors, not a neural embedding, so no embedding model is needed. Paraphrases with no shared words score low.
+- **H-MEM dreaming and sleep consolidation** aren't built. Layers are promoted only by reinforcement.
+- **Mined lessons** start as `short_term` at confidence 0.6–0.8, so they usually fall below the 0.35 retrieval threshold until they're reinforced across runs. Human decisions are `long_term` and are always applied, by exact lookup, not by ranking.
 
 ## Tools, libraries and disclosures
 

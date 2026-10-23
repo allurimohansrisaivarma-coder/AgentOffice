@@ -17,7 +17,7 @@ from typing import Iterable, Optional
 
 from app.agents.base import Agent, RunContext
 from app.agents.memory import MemoryKeeper
-from app.agents.stage1 import ConflictCritic, Reconciler, SourceMapper
+from app.agents.stage1 import ConflictCritic, Reconciler, SourceMapper, team_from_query
 from app.agents.stage2 import explain
 from app.agents.stage3 import Engineer, Manager, ProductManager, QAAgent
 from app.analysis.routines import gather
@@ -53,8 +53,10 @@ def _build(ctx: RunContext, orchestrator: Orchestrator, keeper: Optional[MemoryK
     world = ctx.builder.build(query, types=["routine", "automation_candidate", "automation", "task",
                                             "data_quality_issue"], depth=1, token_budget=1500)
     routines = [c["routine"] for c in evidence["routines"]]
+    team = team_from_query(query, sorted({c["team"] for c in evidence["routines"]}))
+    in_scope = [c["routine"] for c in evidence["routines"] if c["team"] == team] or routines
     decisions = keeper.decisions(routines) if keeper else {}
-    recalled = keeper.hydrate(query, routines) if keeper else {"memories": []}
+    recalled = keeper.hydrate(query, in_scope) if keeper else {"memories": []}
     context = {
         "verified_findings": [c["text"] for c in (explained or {}).get("claims", [])],
         "source_conflicts": conflicts.get("assessments", []),

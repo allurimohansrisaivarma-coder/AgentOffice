@@ -1,8 +1,9 @@
 {
   "request_id": "example-003",
-  "trace_id": "da76939f8c744501",
+  "trace_id": "02e0a8b1121e4faf",
   "status": "success",
   "agents_used": [
+    "MemoryKeeperAgent",
     "SourceMapperAgent",
     "ReconcilerAgent",
     "ConflictCriticAgent",
@@ -131,7 +132,7 @@
           {
             "name": "runs",
             "passed": true,
-            "detail": "ran in 0.066s"
+            "detail": "ran in 0.057s"
           },
           {
             "name": "output_shape",
@@ -169,7 +170,8 @@
         "code_hash": "da9f680146da0396d25087ecd1c4d7fdcfd82448dd053f0506c59919883452f2",
         "passed": true,
         "pass_rate": 1.0,
-        "failed_checks": []
+        "failed_checks": [],
+        "failure_purposes": []
       }
     ],
     "priority_critique_rounds": 0,
@@ -664,17 +666,20 @@
           "code_hash": "da9f680146da0396d25087ecd1c4d7fdcfd82448dd053f0506c59919883452f2",
           "passed": true,
           "pass_rate": 1.0,
-          "failed_checks": []
+          "failed_checks": [],
+          "failure_purposes": []
         }
       ]
     }
   },
   "approval": {
-    "approval_id": "apr_7b8e04eed0a3",
-    "run_id": "da76939f8c744501",
+    "approval_id": "apr_0b8794662573",
+    "run_id": "02e0a8b1121e4faf",
     "automation": "lead_contact_deduper",
+    "routine": "crm_data_entry",
+    "sample_mode": true,
     "code_hash": "da9f680146da0396d25087ecd1c4d7fdcfd82448dd053f0506c59919883452f2",
-    "report_hash": "735a904cbbae246e3bc6109d2d2c210b762132ce6f8bfa09feeddfbb42fbe9d8",
+    "report_hash": "2b92672badb1482d16b8888b1fb359a8957db1c63a2d85e2897b7f9b9055285f",
     "memo": {
       "decision": "approve_for_human_review",
       "rationale": "crm_data_entry runs 56.3 times a week (7.73 h/week hands-on). The automation passed all 22 QA cases after 1 round(s).",
@@ -689,7 +694,7 @@
       "confidence_formula": "0.45*QA pass rate + 0.2*evidence volume + 0.15*routine consistency + 0.2*(1 - risk)"
     },
     "status": "pending",
-    "requested_at": "2026-10-23T16:30:32.452Z",
+    "requested_at": "2026-10-23T16:47:32.391Z",
     "code_path": "state/automations/da9f680146da0396.py"
   },
   "mode": {
@@ -706,6 +711,48 @@
     "model_calls": 0,
     "data_queries": 15
   },
-  "log_path": "logs/trace-da76939f8c744501.jsonl",
-  "execution_time_seconds": 0.382
+  "memory": {
+    "retrieved": [
+      {
+        "id": "mem_7cd191d494425f3c",
+        "content": "For crm_data_entry hours, trust sample:workforce.task_events: Sources differ 4.36x (activity 7.73 h/week, timesheets 33.71 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively.",
+        "layer": "working",
+        "score": 0.3864,
+        "retrievalReason": "domain 'crm_data_entry' requested; entity 1.00, domain 1.00, semantic 0.28"
+      }
+    ],
+    "human_decisions_applied": {},
+    "mined": [
+      {
+        "status": "reinforced",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "For order_status_updates hours, trust sample:workforce.task_events: Sources differ 5.43x (activity 8.82 h/week, tickets 17.87 h/week, timesheets 47.88 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively.",
+        "id": "mem_ff576f6470889bd8",
+        "conflicts": 0
+      },
+      {
+        "status": "reinforced",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "For crm_data_entry hours, trust sample:workforce.task_events: Sources differ 4.36x (activity 7.73 h/week, timesheets 33.71 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively.",
+        "id": "mem_7cd191d494425f3c",
+        "conflicts": 0
+      },
+      {
+        "status": "reinforced",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "For invoice_matching hours, trust sample:workforce.task_events: Sources differ 3.67x (activity 32.86 h/week, tickets 19.47 h/week, timesheets 71.54 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively.",
+        "id": "mem_8cbca7a51218d177",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Run 02e0a8b1121e4faf chose crm_data_entry; Manager decision approve_for_human_review (confidence 0.93).",
+        "id": "mem_d66f9c0829ac5563",
+        "conflicts": 0
+      }
+    ]
+  },
+  "log_path": "logs/trace-02e0a8b1121e4faf.jsonl",
+  "execution_time_seconds": 0.401
 }

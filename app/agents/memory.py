@@ -41,14 +41,26 @@ class MemoryKeeper(Agent):
                 latest[m["facts"]["routine"]] = m
         return latest
 
-    def hydrate(self, query: str, routines: list[str]) -> dict:
-        payload = self.ctx.recall.retrieve(query, domains=routines, entities=[f"routine:{r}" for r in routines],
-                                           actor=self.name)
+    def hydrate(self, query: str, routines: list[str], top_n: int = 5) -> dict:
+        """One scoped retrieval per candidate routine (its domain + entity), merged and re-ranked."""
+        merged: dict[str, dict] = {}
+        considered = 0
+        for routine in routines:
+            payload = self.ctx.recall.retrieve(f"{query} {routine.replace('_', ' ')}", domains=[routine],
+                                               entities=[f"routine:{routine}"], top_n=2, actor=self.name,
+                                               strategy="per-candidate", record_reads=False)
+            considered = payload["considered"]
+            for m in payload["memories"]:
+                if m["id"] not in merged or m["score"] > merged[m["id"]]["score"]:
+                    merged[m["id"]] = m
+        memories = sorted(merged.values(), key=lambda m: (-m["score"], m["id"]))[:top_n]
+        if memories:
+            self.ctx.memory.touch([m["id"] for m in memories], actor=self.name, reason=f"recalled for: {query[:120]}")
         self.log("hmem_retrieve", target_agent="PMAgent", input_summary=query, output_summary=[
             {"id": m["id"], "score": m["score"], "layer": m["layer"], "reason": m["retrievalReason"],
-             "content": m["content"][:120]} for m in payload["memories"]] or "no memories above the threshold",
-                 considered=payload["considered"], strategy=payload["strategy"])
-        return payload
+             "content": m["content"][:120]} for m in memories] or "no memories above the threshold",
+                 considered=considered, strategy="per-candidate")
+        return {"strategy": "per-candidate", "memories": memories, "considered": considered}
 
     def lessons_for(self, routine: str, spec_summary: str) -> dict:
         payload = self.ctx.recall.retrieve(spec_summary, domains=[routine], entities=[f"routine:{routine}"],
