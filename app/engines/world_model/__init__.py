@@ -16,9 +16,14 @@ from app.engines.world_model.ingest import (
 from app.engines.world_model.store import SCHEMA_VERSION, WorldStoreService
 
 
+# Hours per week for one task come from several systems with different trust:
+# the canonical value is the most confident source's, and disagreement stays visible as a conflict.
+DEFAULT_POLICY = {"task": {"hours_per_week": "most_confident"}}
+
+
 def open_world(settings) -> tuple[WorldStoreService, IngestPipelineService, ContextBuilderService]:
     store = WorldStoreService(settings.world_db_path)
-    return store, IngestPipelineService(store), ContextBuilderService(store)
+    return store, IngestPipelineService(store, policy=DEFAULT_POLICY), ContextBuilderService(store)
 
 
 __all__ = [

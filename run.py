@@ -25,7 +25,7 @@ from app.approvals import ApprovalLedger
 from app.config import ROOT, Settings, load_settings
 from app.engines.world_model import open_world
 from app.llm import build_generator
-from app.pipeline import run_pipeline
+from app.pipeline import STAGES, run_pipeline
 from app.tracing import Tracer, new_run_id
 
 
@@ -167,9 +167,12 @@ def create_app(settings: Settings) -> FastAPI:
         try:
             generator = None if sample_mode else build_generator(settings)
             store, pipeline, builder = world(sample_mode)
+            stages = req.options.get("stages", list(STAGES))
+            if not isinstance(stages, list) or not stages or not set(stages) <= set(STAGES):
+                return fail(422, "invalid_request", f"options.stages must be a list drawn from {list(STAGES)}", True)
             result = run_pipeline(req.user_query, req.context, settings=settings, tracer=tracer,
                                   generator=generator, sample_mode=sample_mode, store=store, pipeline=pipeline,
-                                  builder=builder, approvals=approvals)
+                                  builder=builder, approvals=approvals, stages=stages)
         except AdapterError as e:
             err = e.to_dict()
             return fail(503, err["type"], err["message"], e.recoverable)

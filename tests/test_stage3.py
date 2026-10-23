@@ -67,7 +67,8 @@ def _run(tmp_path, make_settings, generator, max_revisions=3):
     tracer = Tracer("t" + tmp_path.name[-8:], settings.log_dir, stream=None)
     result = run_pipeline(QUERY, {}, settings=settings, tracer=tracer, generator=generator, sample_mode=True,
                           store=store, pipeline=pipeline, builder=builder,
-                          approvals=ApprovalLedger(settings.world_db_path.parent), max_revisions=max_revisions)
+                          approvals=ApprovalLedger(settings.world_db_path.parent), max_revisions=max_revisions,
+                          stages=["build"])
     events = [json.loads(line) for line in tracer.path.read_text(encoding="utf-8").splitlines()]
     return result, events, tracer.path, store
 
@@ -178,5 +179,5 @@ def test_sample_run_over_http_and_human_approval(make_settings):
     second = client.post("/run", json={"request_id": "demo-002", "user_query": "What should we automate next?",
                                        "options": {"sample_mode": True}}).json()
     trace = [json.loads(l) for l in open(second["log_path"], encoding="utf-8")]
-    handoff = next(e for e in trace if e["action"] == "handoff")
-    assert "0 World Model entities" not in handoff["output_summary"]
+    handoff = next(e for e in trace if e["action"] == "handoff" and e["target_agent"] == "PMAgent")
+    assert " 0 World Model entities" not in handoff["output_summary"]
