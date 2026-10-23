@@ -8,7 +8,7 @@ Open Agent Hackathon 2026 submission. Primary track: **Track 3, Reasoning Archit
 
 - Hackathon brief and agent rules: [AGENTS.md](AGENTS.md)
 - What we're building and in what order: [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md)
-- Declared pre-existing work: [PREEXISTING.md](PREEXISTING.md). `autostack_base/` is our earlier AutoStack project, kept unchanged as a reference.
+- Design ideas: [docs/INSPIRATION.md](docs/INSPIRATION.md)
 
 Sponsor technology: Zetaris (data layer), Meterless Nightshift (primary model provider, NVIDIA Nemotron lanes), Meterless World Model engine (+ H-MEM planned).
 
