@@ -2,11 +2,13 @@
 
     1 Discover  Source Mapper -> Reconciler -> World Model -> Conflict Critic          (Track 1)
     2 Explain   Research Planner -> Retriever <-> data -> Report Writer <-> Insight Critic   (Track 2)
-    3 Build     PM <-> Priority Critic -> Engineer -> QA -> Engineer (revise, capped) -> QA -> Manager
-                -> human approval request bound to the code hash                    (Track 3, primary)
+    3 Build     Memory Keeper (recall) -> PM <-> Priority Critic -> Engineer -> QA -> Engineer (revise,
+                capped) -> QA -> Manager -> human approval request bound to the code hash   (Track 3, primary)
+    end         Memory Keeper mines the run into H-MEM
 
 Every step is traced; everything learned is written to the World Model, and
-each stage reads what the earlier ones wrote.
+each stage reads what the earlier ones wrote. H-MEM carries lessons and human
+decisions from one run to the next.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from __future__ import annotations
 from typing import Iterable, Optional
 
 from app.agents.base import Agent, RunContext
+from app.agents.memory import MemoryKeeper
 from app.agents.stage1 import ConflictCritic, Reconciler, SourceMapper
 from app.agents.stage2 import explain
 from app.agents.stage3 import Engineer, Manager, ProductManager, QAAgent
@@ -21,6 +24,7 @@ from app.analysis.routines import gather
 from app.approvals import ApprovalLedger
 from app.config import Settings
 from app.data import build_data_source, catalog
+from app.engines.hmem import MemoryRetrievalService, MemoryStoreService
 from app.engines.world_model import (
     ContextBuilderService, IngestPipelineService, WorldStoreService, entity_observation, relationship_observation,
 )
@@ -43,41 +47,49 @@ def _discover(ctx: RunContext, query: str, tables: list[dict]) -> tuple[dict, di
     return evidence, conflicts, {"sources": mapping, "reconciliation": recon, "conflicts": conflicts}
 
 
-def _build(ctx: RunContext, orchestrator: Orchestrator, query: str, evidence: dict, explained: Optional[dict],
-           conflicts: dict, approvals: ApprovalLedger, max_revisions: int) -> dict:
+def _build(ctx: RunContext, orchestrator: Orchestrator, keeper: Optional[MemoryKeeper], query: str, evidence: dict,
+           explained: Optional[dict], conflicts: dict, approvals: ApprovalLedger, max_revisions: int) -> dict:
     pm, engineer, qa, manager = ProductManager(ctx), Engineer(ctx), QAAgent(ctx), Manager(ctx)
     world = ctx.builder.build(query, types=["routine", "automation_candidate", "automation", "task",
                                             "data_quality_issue"], depth=1, token_budget=1500)
+    routines = [c["routine"] for c in evidence["routines"]]
+    decisions = keeper.decisions(routines) if keeper else {}
+    recalled = keeper.hydrate(query, routines) if keeper else {"memories": []}
     context = {
         "verified_findings": [c["text"] for c in (explained or {}).get("claims", [])],
         "source_conflicts": conflicts.get("assessments", []),
         "world_model": [{"type": e["type"], "name": e["name"], "attributes": e["attributes"]}
                         for e in world["entities"][:12]],
+        "memories_from_earlier_runs": [f"[{m['layer']}] {m['content']}" for m in recalled["memories"]],
     }
     orchestrator.log("handoff", target_agent=pm.name, output_summary=
                      f"{len(evidence['routines'])} mined routines, {len(context['verified_findings'])} verified "
-                     f"findings, {len(world['entities'])} World Model entities as context")
-    plan = pm.plan(query, evidence, context)
+                     f"findings, {len(world['entities'])} World Model entities, {len(recalled['memories'])} memories, "
+                     f"{len(decisions)} human decisions on record as context")
+    plan = pm.plan(query, evidence, context, blocked=decisions)
     candidate = next(c for c in evidence["routines"] if c["routine"] == plan["chosen"])
     spec = plan["spec"]
     orchestrator.log("handoff", target_agent=engineer.name, output_summary=f"spec {spec['name']} ({plan['spec_origin']})")
 
-    draft = engineer.build(spec)
+    lessons = keeper.lessons_for(candidate["routine"], spec["summary"]) if keeper else None
+    draft = engineer.build(spec, lessons)
     history = []
     for round_no in range(1, max_revisions + 2):
         report = qa.review(spec, draft, round_no=round_no)
         history.append({"round": round_no, "code_version": draft["version"], "code_hash": draft["code_hash"],
                         "passed": report["passed"], "pass_rate": report["pass_rate"],
-                        "failed_checks": [c["name"] for c in report["checks"] if not c["passed"]]})
+                        "failed_checks": [c["name"] for c in report["checks"] if not c["passed"]],
+                        "failure_purposes": sorted({f["purpose"] for f in report["failures"]})[:5]})
         if report["passed"] or round_no > max_revisions:
             break
         draft = engineer.revise(spec, draft, report)
 
-    memo = manager.decide(query, plan, candidate, draft, report, history)
+    memo = manager.decide(query, plan, candidate, draft, report, history, prior=decisions.get(candidate["routine"]))
     approval = None
     if memo["decision"] == "approve_for_human_review":
-        approval = approvals.request(run_id=ctx.run_id, automation=spec["name"], code=draft["code"], report=report,
-                                     decision_memo=memo)
+        approval = approvals.request(run_id=ctx.run_id, automation=spec["name"], routine=candidate["routine"],
+                                     code=draft["code"], report=report, decision_memo=memo,
+                                     sample_mode=ctx.sample_mode)
         manager.log("request_approval", target_agent="Human", status="pending",
                     output_summary=f"{approval['approval_id']} for code {approval['code_hash'][:12]}")
     run_ctx = [("run", ctx.run_id)]
@@ -92,18 +104,23 @@ def _build(ctx: RunContext, orchestrator: Orchestrator, query: str, evidence: di
                                  source=manager.source(), contexts=run_ctx),
     ], "automation decision")
     return {"plan": plan, "candidate": candidate, "spec": spec, "draft": draft, "report": report,
-            "history": history, "memo": memo, "approval": approval}
+            "history": history, "memo": memo, "approval": approval,
+            "memory": {"retrieved": [{k: m[k] for k in ("id", "content", "layer", "score", "retrievalReason")}
+                                     for m in recalled["memories"]],
+                       "human_decisions_applied": {r: m["content"] for r, m in decisions.items()}}}
 
 
 def run_pipeline(user_query: str, context: dict, *, settings: Settings, tracer: Tracer,
                  generator: Optional[Generator], sample_mode: bool, store: WorldStoreService,
                  pipeline: IngestPipelineService, builder: ContextBuilderService, approvals: ApprovalLedger,
-                 max_revisions: int = 3, stages: Iterable[str] = STAGES) -> dict:
+                 memory: Optional[MemoryStoreService] = None, recall: Optional[MemoryRetrievalService] = None,
+                 max_revisions: int = 3, stages: Iterable[str] = STAGES, request_id: Optional[str] = None) -> dict:
     stages = [s for s in STAGES if s in set(stages)] or list(STAGES)
     data = build_data_source(settings, sample_mode)
     ctx = RunContext(run_id=tracer.run_id, settings=settings, tracer=tracer, generator=generator, data=data,
                      store=store, pipeline=pipeline, builder=builder, sample_mode=sample_mode,
-                     max_revisions=max_revisions)
+                     memory=memory, recall=recall, max_revisions=max_revisions)
+    keeper = MemoryKeeper(ctx) if memory is not None and recall is not None else None
     orchestrator = Orchestrator(ctx)
     ctx.agents_used.remove("Orchestrator")
     orchestrator.log("plan_run", input_summary=user_query, output_summary=
@@ -123,14 +140,32 @@ def run_pipeline(user_query: str, context: dict, *, settings: Settings, tracer: 
                              f"{len(conflicts['assessments'])} source conflicts to account for")
             explained = explain(ctx, user_query, tables, conflicts)
         if "build" in stages:
-            built = _build(ctx, orchestrator, user_query, evidence, explained, conflicts, approvals, max_revisions)
+            built = _build(ctx, orchestrator, keeper, user_query, evidence, explained, conflicts, approvals,
+                           max_revisions)
     finally:
         close = getattr(data, "close", None)
         if close:
             close()
+    mined = []
+    if keeper:
+        mined = keeper.mine({
+            "run_id": ctx.run_id, "request_id": request_id, "routines": [r["routine"] for r in evidence["routines"]],
+            "routine": built["candidate"]["routine"] if built else None,
+            "automation": built["spec"]["name"] if built else None,
+            "qa_rounds": built["history"] if built else [],
+            "qa_failure_purposes": {h["round"]: h["failure_purposes"] for h in built["history"]} if built else {},
+            "priority_issues": [i for issues in built["plan"]["priority_critiques"] for i in issues] if built else [],
+            "conflict_assessments": conflicts.get("assessments", []),
+            "insight_objections": [o for objs in (explained or {}).get("objections", []) for o in objs],
+            "decision": built["memo"]["decision"] if built else None,
+            "confidence": built["memo"]["confidence"] if built else None,
+        })
     if "Orchestrator" in ctx.agents_used:
         ctx.agents_used.remove("Orchestrator")
-    return _result(ctx, stages, evidence, discovered, explained, built, conflicts, data.name)
+    result = _result(ctx, stages, evidence, discovered, explained, built, conflicts, data.name)
+    result["memory"] = {**(built["memory"] if built else {"retrieved": [], "human_decisions_applied": {}}),
+                        "mined": mined}
+    return result
 
 
 def _result(ctx, stages, evidence, discovered, explained, built, conflicts, data_name) -> dict:
