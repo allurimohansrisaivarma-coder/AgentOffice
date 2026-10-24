@@ -267,4 +267,4 @@ scripts/            check_connections, load_zetaris, generate_workforce_data, ru
 - **Pre-existing components:** none. All code was written in this repository from 23 Oct 2026.
 - **AI coding tool:** developed with **Claude Code** (Anthropic). All AI-generated code is reviewed and tested by the team.
 
-The hackathon brief and agent rules are in [AGENTS.md](AGENTS.md), and the plan is in [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md).
+The hackathon brief and agent rules are in [AGENTS.md](AGENTS.md), and the plan is in [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md). The sponsor technology explanation is in [docs/SPONSOR_TECH.md](docs/SPONSOR_TECH.md), and the demo script is in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
