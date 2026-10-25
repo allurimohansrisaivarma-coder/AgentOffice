@@ -6,7 +6,20 @@ This is our Open Agent Hackathon 2026 submission. The primary track is **Track 3
 
 > **Status (25 Oct 2026):** task mode, the analysis pipeline, the chat UI and the Windows desktop island all run end to end in **sample mode** and in **default mode** (Zetaris + Meterless Nightshift serving NVIDIA Nemotron). Live traces, outputs and filled workbooks are in [`output_examples/`](output_examples/). See [Done vs not yet](#done-vs-not-yet).
 
+## What it can do
+
+| You say | What the team does | How |
+|---|---|---|
+| "Fill in each employee's team and role from the staff directory, fix the dates, add GST, flag claims over 500, total by team" + a spreadsheet | Plans the steps, writes and tests a Python automation, asks you to approve it, then returns the filled workbook | Data Profiler (Zetaris SQL on your upload) → PM writes a step spec → Spec Critic checks it on your data → Engineer (Nemotron) writes code → QA tests it against an independent reference of the spec → Manager → you approve the code hash → Operator runs it |
+| The same request next week | Runs the automation you already approved, after re-testing it on the new file | H-MEM remembers the approval; the code hash must match |
+| Look-ups, tidying, mapping, maths, splitting/joining, dates, flags, filters, de-duplication, sorting, group totals | Any combination, in one plan, across sheets or against company tables in Zetaris | A fixed step vocabulary with exact semantics, so QA can compute the right answer independently |
+| "Where is the finance team losing time, and what should we automate first?" | Finds where the hours go, explains why with cited rows, ranks what to automate, builds and tests it | 13 agents in three stages over the workforce tables in Zetaris, sharing one World Model |
+
+Nothing is written before you approve, every step is in a hash-chained trace (`logs/trace-<run_id>.jsonl`), and every number traces back to SQL rows.
+
 ## Use it
+
+![The AgentOffice island at the top of the screen](docs/images/ui-island-idle.png)
 
 - **Desktop app (Windows, recommended):** run `powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1` once to get an **AgentOffice** shortcut on the Desktop and in the Start menu (`-Startup` also starts it with Windows), or double-click `AgentOffice.pyw`. No terminal and no browser tab: the background service starts hidden (log in `logs/agentoffice-server.log`), the island appears at the top of the screen, **Ctrl+Shift+Space** opens it from any app, and the power button in the panel quits everything. Starting it twice just opens the island. The first launch may show a Windows Firewall prompt for `pythonw.exe`; allow it on private networks, because Zetaris (in Docker) reads your uploads from the service.
 - **Chat UI in a browser:** start the API (`python run.py`) and open http://localhost:8000. A dark "dynamic island" pill sits at the top; click it or press **Ctrl+Shift+Space** (or **Ctrl+K**) and it opens into a chat panel. Drop a CSV/Excel file on it or pick a demo file, type what you want, and watch the team work live.
@@ -17,7 +30,9 @@ This is our Open Agent Hackathon 2026 submission. The primary track is **Track 3
 |---|---|---|
 | ![Each agent step streams into the chat](docs/images/ui-team-at-work.png) | ![The plan in plain steps with QA checks](docs/images/ui-plan-and-qa.png) | ![Filled spreadsheet ready to download](docs/images/ui-done.png) |
 
-*Screens from the expense-claims demo in sample mode.*
+*Screens from the expense-claims demo in sample mode. Folded away, the island keeps reporting progress:*
+
+![The island reading: Your file is ready](docs/images/ui-island.png)
 
 **Submission materials:** the slide deck ([PDF](docs/AgentOffice-deck.pdf), [HTML source](docs/deck/), rebuilt with `python scripts/build_deck.py --pdf`), the [sponsor technology explanation](docs/SPONSOR_TECH.md) with the tests that prove each engine, the [demo script](docs/DEMO_SCRIPT.md), and [`metadata.json`](metadata.json). Team: **Automaters**.
 
@@ -195,7 +210,7 @@ curl -X POST http://localhost:8000/run -H "Content-Type: application/json" -d @i
 
 In sample mode the PM can only plan the three bundled demo files (it uses their built-in specs, and says so); any other upload returns a clear `agent_no_offline_plan` error. Your own files need default mode.
 
-**Default mode** needs a running Zetaris instance and Meterless Nightshift; see [docs/PROJECT_PLAN.md §6](docs/PROJECT_PLAN.md).
+**Default mode** needs a running Zetaris instance (local Docker) and Meterless Nightshift with an NVIDIA provider connected (the route `meterless/deep` must be listed in `GET /v1/models`).
 
 1. Copy `.env.example` to `.env` and fill in your values. Never commit `.env`.
 2. Check both services:
@@ -303,7 +318,8 @@ app/data.py         data-layer seam (Zetaris / sample SQLite), including upload_
 app/approvals.py    hash-chained human approval ledger
 app/pipeline.py     the three-stage analysis run
 run.py              FastAPI on 0.0.0.0:$PORT: UI + API
-scripts/            island (desktop), check_connections, load_zetaris, generate_workforce_data,
+AgentOffice.pyw     the Windows desktop app (hidden service + island); install_shortcut.ps1 makes the shortcuts
+scripts/            island (desktop), install_shortcut, check_connections, load_zetaris, generate_workforce_data,
                     generate_task_samples, run_examples, build_deck
 docs/               deck/ (slide source) + AgentOffice-deck.pdf, SPONSOR_TECH.md, DEMO_SCRIPT.md, images/
 metadata.json       project, team and sponsor usage for the submission form
@@ -314,7 +330,7 @@ metadata.json       project, team and sponsor usage for the submission form
 | Done (tested) | Not yet |
 |---|---|
 | Task mode: upload, Zetaris profiling, step spec + spec critic, engineer/QA loop against the reference runtime, approval bound to the code hash, filled XLSX/CSV with an audit sheet, H-MEM reuse | Running the desktop island on macOS/Linux (browser UI works everywhere) |
-| Chat UI (island + panel, live agent timeline, approval card, downloads) and the Windows desktop island with a global hotkey | Scheduled runs of approved automations on new files |
+| Chat UI (island + panel, live agent timeline, approval card, downloads) and the Windows desktop app: shortcut, hidden service, global hotkey, quit button | Scheduled runs of approved automations on new files |
 | Analysis pipeline: three stages, 13 agents, real critique and revision loops | H-MEM dreaming and sleep consolidation (not built) |
 | Live default-mode runs with Nemotron via Nightshift (`meterless/deep` → `nvidia/nemotron-3-ultra-550b-a55b`), traces in `output_examples/` | |
 | World Model and H-MEM engines, wired into both modes | |
@@ -355,4 +371,4 @@ metadata.json       project, team and sponsor usage for the submission form
 - **Pre-existing components:** none. All code was written in this repository from 23 Oct 2026.
 - **AI coding tool:** developed with **Claude Code** (Anthropic). All AI-generated code is reviewed and tested by the team.
 
-The hackathon brief and agent rules are in [AGENTS.md](AGENTS.md), and the plan is in [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md). The sponsor technology explanation is in [docs/SPONSOR_TECH.md](docs/SPONSOR_TECH.md), and the demo script is in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+The sponsor technology explanation is in [docs/SPONSOR_TECH.md](docs/SPONSOR_TECH.md), and the demo script is in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).

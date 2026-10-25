@@ -75,6 +75,13 @@ island-browser/
 tmp/
 temp/
 
+# Local AI-assistant instructions, planning notes and personal tooling (kept on disk, not in the repo)
+CLAUDE.md
+AGENTS.md
+.claude/
+docs/PROJECT_PLAN.md
+scripts/auto_push.ps1
+
 # Scratch files from the demo script and local tools
 /run1.json
 /run2.json

@@ -7,13 +7,13 @@
     GET  /tasks/{id}            a spreadsheet task: plan, code, QA, decision ; GET /tasks/{id}/code
     POST /tasks/{id}/decision   human approve/reject (bound to the code hash); approve runs the code
     GET  /files/{file_id}       a filled spreadsheet
-    POST /run                   the workforce-analysis pipeline, synchronous (AGENTS.md section 9 contract)
+    POST /run                   the workforce-analysis pipeline, synchronous (the hackathon's /run contract)
     GET  /approvals[/{id}] ; POST /approvals/{id}
     GET  /health ; GET /config ; GET /providers/meterless
     GET  /data/workforce/{table} ; GET /data/uploads/cells      (what Zetaris pulls as REST tables)
 
 Every run gets a trace file, and every failure comes back as a structured
-error (AGENTS.md section 9), never a stack trace.
+error ({status: "error", error: {type, message, recoverable}}), never a stack trace.
 """
 
 from __future__ import annotations

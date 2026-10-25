@@ -1,6 +1,6 @@
 """Zetaris Lightning REST adapter: the data layer every finding is grounded in.
 
-Contract (AGENTS.md 5.1): POST {ZETARIS_REST_URL}/sql-editor/sqls/run with
+Contract (Zetaris REST API): POST {ZETARIS_REST_URL}/sql-editor/sqls/run with
 Bearer key, X-Org-ID and a fresh UUID X-Request-ID; ONE statement per call.
 Observed response (local 2.4.3): {"headers": [column names], "data": [[cells
 as strings]], "total", "timeUsed"}; run_sql returns [{column: value}] with

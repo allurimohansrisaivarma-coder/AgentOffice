@@ -16,7 +16,6 @@ from __future__ import annotations
 import copy
 import json
 import re
-import unicodedata
 from typing import Any
 
 OPS = {
@@ -224,8 +223,3 @@ TEMPLATES: dict[str, dict] = {
 
 def template_for(routine: str) -> dict:
     return copy.deepcopy(TEMPLATES[routine])
-
-
-def slug(text: str) -> str:
-    plain = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]+", "_", plain.lower()).strip("_")[:41] or "automation"

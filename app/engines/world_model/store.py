@@ -144,10 +144,6 @@ class WorldStoreService:
         row = self._one("SELECT record FROM entities WHERE id=?", (entity_id,))
         return json.loads(row["record"]) if row else None
 
-    def get_relationship(self, relationship_id: str) -> Optional[dict]:
-        row = self._one("SELECT record FROM relationships WHERE id=?", (relationship_id,))
-        return json.loads(row["record"]) if row else None
-
     def get_context(self, context_id: str) -> Optional[dict]:
         row = self._one("SELECT * FROM contexts WHERE id=?", (context_id,))
         if row is None:
@@ -161,12 +157,6 @@ class WorldStoreService:
         return {"id": row["id"], "kind": row["kind"], "name": row["name"],
                 "first_seen_at": row["first_seen_at"],
                 "entities": entities, "relationships": relationships}
-
-    def list_contexts(self, kind: Optional[str] = None) -> list[dict]:
-        sql, params = "SELECT * FROM contexts", []
-        if kind:
-            sql, params = sql + " WHERE kind=?", [normalize_type(kind)]
-        return [dict(r) for r in self._rows(sql + " ORDER BY kind, name", params)]
 
     def lookup_id(self, type: str, name: str) -> str:
         """The ID a (type, name) resolves to: a registered alias, else the stable hash."""

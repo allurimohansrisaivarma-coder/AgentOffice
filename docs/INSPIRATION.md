@@ -1,6 +1,6 @@
 # Design inspiration (ideas only, no code)
 
-These are design patterns worth reimplementing from scratch. **No code is copied into this repo.** If code is ever copied from an earlier project, it must be declared on the HackOS form (see AGENTS.md section 4).
+These are design patterns worth reimplementing from scratch. **No code is copied into this repo.** If code is ever copied from an earlier project, it must be declared on the HackOS form as a pre-existing component.
 
 ## 1. Detect → Generate → Test → Repair → Approve → Run
 
