@@ -1,12 +1,884 @@
 {
   "request_id": "example-001",
-  "trace_id": "43c9c248a6c347ea",
-  "status": "error",
-  "error": {
-    "type": "zetaris_bad_request",
-    "message": "HTTP 400: {\"msg\":\"REST API call failed: Connection refused\\n  URL: GET http://host.docker.internal:8000/data/workforce/people\\n  Content-Type: application/x-www-form-urlencoded\\n  Headers: Map()\\n  Request body: Map()\\n  Response body: \\n  Equivalent curl (sensitive values masked, replace before running):\\ncu",
-    "recoverable": false
+  "trace_id": "3e2eb29691a640cf",
+  "status": "success",
+  "agents_used": [
+    "MemoryKeeperAgent",
+    "SourceMapperAgent",
+    "ReconcilerAgent",
+    "ConflictCriticAgent",
+    "ResearchPlannerAgent",
+    "RetrieverAgent",
+    "ReportWriterAgent",
+    "InsightCriticAgent",
+    "PMAgent",
+    "EngineerAgent",
+    "QAAgent",
+    "ManagerAgent",
+    "PriorityCritic"
+  ],
+  "result": {
+    "summary": "Finance team spends most time on invoice processing; top ERP actions are enter_invoice, lookup_purchase_order, and match_to_po. Automate invoice_matching first: about 24.4 h/week saved (high risk). The invoice_matching_matcher automation passed all 28 spec-derived QA cases after 1 QA round(s); Manager decision: approve_for_human_review.",
+    "findings": [
+      "The finance team comprises Ana Dune (AP clerk), Ben Ives (AP clerk), Chloe North (Finance analyst), and Dev Ellery (Finance manager).",
+      "In task_events, the three most time-consuming actions are ERP enter_invoice (253,129 seconds), ERP lookup_purchase_order (159,878 seconds), and ERP match_to_po (114,780 seconds).",
+      "Timesheets show invoice_matching as the largest category with 429.25 total hours (71.54 avg hours/week), which is 2.9 times the next largest category expense_review (145.75 total hours, 24.29 avg hours/week).",
+      "Tickets confirm invoice_matching as the top category with 7,008 total logged minutes (1,168 avg minutes/week), exceeding vendor_queries (5,833 total minutes, 972 avg minutes/week) by 20%.",
+      "Data conflict: order_status_updates - Task_events records actual hands‑on time (8.82 h), while tickets (17.87 h) only capture voluntarily logged effort and timesheets (47.88 h) are self‑reported and typically inflated.",
+      "Data conflict: crm_data_entry - Task_events provides measured activity (7.73 h); timesheets (33.71 h) rely on self‑reporting and tend to overstate the true effort.",
+      "Data conflict: invoice_matching - Task_events reflects real hands‑on work (32.86 h), whereas tickets (19.47 h) represent only time people chose to log and timesheets (71.54 h) are self‑reported and likely exaggerated.",
+      "invoice_matching: 120.5 runs/week by 2 people, 32.86 h/week hands-on in the activity log (timesheets report 71.54 h/week, tickets log 19.47 h/week); risk high",
+      "order_status_updates: 79.5 runs/week by 2 people, 8.82 h/week hands-on in the activity log (timesheets report 47.88 h/week, tickets log 17.87 h/week); risk medium",
+      "crm_data_entry: 56.3 runs/week by 2 people, 7.73 h/week hands-on in the activity log (timesheets report 33.71 h/week, not tracked in tickets); risk medium"
+    ],
+    "confidence": 0.85,
+    "ranking": [
+      {
+        "routine": "invoice_matching",
+        "estimated_hours_saved_per_week": 24.4,
+        "risk": "high",
+        "reason": "Task_events shows 32.86 active hours/week; ERP enter_invoice, lookup_purchase_order, and match_to_po alone consume 24.4 hours/week. Automating the match-and-enter steps would recover most hands‑on time, but writes financial records and sends external emails, so risk remains high."
+      }
+    ],
+    "decision": {
+      "decision": "approve_for_human_review",
+      "rationale": "The finance team spends 32.86 active hours/week (120.5 invoices) on invoice matching, with ERP lookup, entry, and matching consuming ~24.4 hours/week. Automating the record-matching and entry steps can recover most of this time. QA passed (100% pass rate over 28 cases), but advisories flag floating-point precision, bool handling, Unicode vendor comparison, sparse error context, and monolithic logic — all fixable before production. Risk is high because the routine writes financial records in ERP and sends external vendor emails, so human oversight is required before full automation.",
+      "risks": [
+        "Financial record integrity: ERP.enter_invoice and ERP.match_to_po write directly to the ERP; errors could create incorrect liabilities.",
+        "External communication: Email.reply_vendor_confirmation sends emails outside the team; wrong matches could trigger incorrect vendor notifications.",
+        "Amount comparison precision: Floating-point rounding near the 0.5% threshold may cause false mismatches or false passes.",
+        "Boolean coercion: isinstance(amount, (int, float)) accepts True/False as 1/0, risking silent data corruption.",
+        "Vendor name matching: .lower() is ASCII-centric; international vendor names may not match correctly without .casefold().",
+        "Debugging difficulty: Validation errors lack record index and side (left/right), slowing incident response.",
+        "Maintainability: Monolithic matching logic hinders testing, review, and future changes."
+      ],
+      "rollout": [
+        "Remediate QA advisories: switch amount comparisons to Decimal with epsilon, exclude bool from numeric checks, use .casefold() for vendor names, enrich error messages with record context, and refactor matching into pure helper functions.",
+        "Deploy to staging in shadow mode: run automation alongside current process without writing to ERP or sending emails; log all decisions for comparison.",
+        "Two-week parallel run with human review: every automated match is reviewed by a finance analyst; track false positives/negatives and time saved.",
+        "Gradual rollout with human-in-the-loop: enable auto-match for 'pass' statuses only after analyst sign-off; route 'ambiguous' and 'no_match' to manual queue.",
+        "Monitor key metrics weekly: match accuracy (target >99.5%), hours saved vs. 24.4h target, error rates, and vendor complaint volume.",
+        "Full automation approval: after 4 weeks of stable metrics and zero critical incidents, present results for final production sign-off."
+      ],
+      "confidence": 0.85,
+      "confidence_formula": "0.45*QA pass rate + 0.2*evidence volume + 0.15*routine consistency + 0.2*(1 - risk)"
+    },
+    "automation": {
+      "name": "invoice_matching_matcher",
+      "routine": "invoice_matching",
+      "spec": {
+        "name": "invoice_matching_matcher",
+        "routine": "invoice_matching",
+        "summary": "Match each incoming invoice to its purchase order and verify vendor and amount before auto‑entering into ERP.",
+        "left": {
+          "name": "incoming_invoices",
+          "id_field": "invoice_id",
+          "fields": {
+            "invoice_id": "str",
+            "po_number": "str",
+            "vendor": "str",
+            "amount": "number",
+            "invoice_date": "str"
+          }
+        },
+        "right": {
+          "name": "purchase_orders",
+          "id_field": "po_id",
+          "fields": {
+            "po_id": "str",
+            "po_number": "str",
+            "vendor": "str",
+            "amount": "number",
+            "po_date": "str",
+            "status": "str"
+          }
+        },
+        "key": {
+          "left": "po_number",
+          "right": "po_number",
+          "normalize": [
+            "digits_only"
+          ]
+        },
+        "checks": [
+          {
+            "left": "vendor",
+            "right": "vendor",
+            "op": "equals_ci",
+            "fail_status": "vendor_mismatch"
+          },
+          {
+            "left": "amount",
+            "right": "amount",
+            "op": "within_pct",
+            "value": 0.5,
+            "fail_status": "amount_mismatch"
+          }
+        ],
+        "statuses": {
+          "no_match": "po_not_found",
+          "ambiguous": "manual_review",
+          "pass": "auto_match_and_enter"
+        }
+      },
+      "spec_origin": "written by meterless/meterless/deep",
+      "code": "from typing import Any, List, Dict, Optional\nimport re\n\ndef run(left: List[Dict[str, Any]], right: List[Dict[str, Any]]) -> List[Dict[str, Any]]:\n    # Validate left records\n    left_fields = {\"invoice_id\", \"po_number\", \"vendor\", \"amount\", \"invoice_date\"}\n    for i, rec in enumerate(left):\n        for field in left_fields:\n            if field not in rec:\n                raise ValueError(field)\n    \n    # Validate right records\n    right_fields = {\"po_id\", \"po_number\", \"vendor\", \"amount\", \"po_date\", \"status\"}\n    for i, rec in enumerate(right):\n        for field in right_fields:\n            if field not in rec:\n                raise ValueError(field)\n    \n    # Precompute normalized PO numbers for right records\n    def digits_only(s: str) -> str:\n        return re.sub(r'[^0-9]', '', s)\n    \n    right_norm_map: Dict[str, List[Dict[str, Any]]] = {}\n    for r in right:\n        k = digits_only(r[\"po_number\"])\n        if k not in right_norm_map:\n            right_norm_map[k] = []\n        right_norm_map[k].append(r)\n    \n    results = []\n    for l in left:\n        k = digits_only(l[\"po_number\"])\n        \n        if not k or k not in right_norm_map:\n            results.append({\n                \"left_id\": l[\"invoice_id\"],\n                \"right_id\": None,\n                \"status\": \"po_not_found\"\n            })\n            continue\n        \n        matches = right_norm_map[k]\n        if len(matches) > 1:\n            results.append({\n                \"left_id\": l[\"invoice_id\"],\n                \"right_id\": None,\n                \"status\": \"manual_review\"\n            })\n            continue\n        \n        r = matches[0]\n        right_id = r[\"po_id\"]\n        \n        # Check vendor (equals_ci)\n        left_vendor = l[\"vendor\"]\n        right_vendor = r[\"vendor\"]\n        if not isinstance(left_vendor, str) or not isinstance(right_vendor, str):\n            results.append({\n                \"left_id\": l[\"invoice_id\"],\n                \"right_id\": right_id,\n                \"status\": \"vendor_mismatch\"\n            })\n            continue\n        if left_vendor.strip().lower() != right_vendor.strip().lower():\n            results.append({\n                \"left_id\": l[\"invoice_id\"],\n                \"right_id\": right_id,\n                \"status\": \"vendor_mismatch\"\n            })\n            continue\n        \n        # Check amount (within_pct 0.5%)\n        left_amount = l[\"amount\"]\n        right_amount = r[\"amount\"]\n        if not isinstance(left_amount, (int, float)) or not isinstance(right_amount, (int, float)):\n            results.append({\n                \"left_id\": l[\"invoice_id\"],\n                \"right_id\": right_id,\n                \"status\": \"amount_mismatch\"\n            })\n            continue\n        tolerance = 0.5 / 100 * abs(right_amount)\n        if abs(left_amount - right_amount) > tolerance:\n            results.append({\n                \"left_id\": l[\"invoice_id\"],\n                \"right_id\": right_id,\n                \"status\": \"amount_mismatch\"\n            })\n            continue\n        \n        # All checks passed\n        results.append({\n            \"left_id\": l[\"invoice_id\"],\n            \"right_id\": right_id,\n            \"status\": \"auto_match_and_enter\"\n        })\n    \n    return results\n",
+      "code_hash": "2acb3fe6588d49c1375a1f7a48e4f7b0ccdb4c71f07ce9d13cf9d79582700273",
+      "version": 1,
+      "origin": "written by meterless/meterless/deep",
+      "qa": {
+        "passed": true,
+        "pass_rate": 1.0,
+        "cases": 28,
+        "model_cases": 6,
+        "checks": [
+          {
+            "name": "sandbox_policy",
+            "passed": true,
+            "detail": "only allowed constructs"
+          },
+          {
+            "name": "no_credentials",
+            "passed": true,
+            "detail": "no hardcoded credentials"
+          },
+          {
+            "name": "runs",
+            "passed": true,
+            "detail": "ran in 0.087s"
+          },
+          {
+            "name": "output_shape",
+            "passed": true,
+            "detail": "one {left_id, right_id, status} per left record, in order"
+          },
+          {
+            "name": "matches_spec",
+            "passed": true,
+            "detail": "28/28 cases match the spec's expected output"
+          },
+          {
+            "name": "deterministic",
+            "passed": true,
+            "detail": "same output on a second run"
+          },
+          {
+            "name": "fails_loudly_on_schema_drift",
+            "passed": true,
+            "detail": "renaming 'po_number' raised: ValueError: po_number"
+          }
+        ],
+        "advisories": [
+          {
+            "severity": "warning",
+            "detail": "Floating-point precision in amount comparison may cause false mismatches near the 0.5% boundary (e.g., 1005.0000000001 vs 1005.0). Consider using Decimal or a small epsilon."
+          },
+          {
+            "severity": "warning",
+            "detail": "isinstance(amount, (int, float)) accepts bool (True/False) because bool is a subclass of int. Add explicit bool exclusion to prevent True/False being treated as 1/0."
+          },
+          {
+            "severity": "info",
+            "detail": "Vendor comparison uses .lower() which is ASCII-centric; .casefold() provides better Unicode case-insensitivity for international vendor names."
+          },
+          {
+            "severity": "info",
+            "detail": "Field validation raises ValueError with only the field name, not the record index or side (left/right), making debugging harder in large batches."
+          },
+          {
+            "severity": "info",
+            "detail": "Matching logic is monolithic; extracting normalization, vendor check, and amount check into pure helper functions would improve testability and readability."
+          }
+        ]
+      },
+      "qa_failures": []
+    }
   },
-  "log_path": "logs/trace-43c9c248a6c347ea.jsonl",
-  "execution_time_seconds": 15.694
+  "collaboration": {
+    "feedback_loop_completed": true,
+    "revision_count": 0,
+    "qa_rounds": [
+      {
+        "round": 1,
+        "code_version": 1,
+        "code_hash": "2acb3fe6588d49c1375a1f7a48e4f7b0ccdb4c71f07ce9d13cf9d79582700273",
+        "passed": true,
+        "pass_rate": 1.0,
+        "failed_checks": [],
+        "failure_purposes": []
+      }
+    ],
+    "priority_critique_rounds": 0,
+    "insight_critique_rounds": 2,
+    "evaluator_findings": [
+      "insight critique round 1: claim 4: The claim states that automating specific ERP actions 'would address the largest time sink,' which is a causal claim about the effect of automation that the data does not support. The data only shows where time is currently spent, not that automation would reduce it.",
+      "insight critique round 2: claim 4: The claim states that the top three ERP actions 'correspond to' the invoice_matching category, but the provided data does not establish a direct link between the task_events actions and the timesheets/tickets categories. This is a generalization beyond the evidence.",
+      "QA round 1 (code v1): passed",
+      "conflict critique: order_status_updates -> trust zetaris:workforce.task_events",
+      "conflict critique: crm_data_entry -> trust zetaris:workforce.task_events",
+      "conflict critique: invoice_matching -> trust zetaris:workforce.task_events"
+    ]
+  },
+  "stages": {
+    "discover": {
+      "sources": {
+        "tables": [
+          "people",
+          "timesheets",
+          "tickets",
+          "task_events"
+        ],
+        "joins": [
+          {
+            "left": "people.person_id",
+            "right": "timesheets.person_id"
+          },
+          {
+            "left": "people.person_id",
+            "right": "tickets.assignee_id"
+          },
+          {
+            "left": "people.person_id",
+            "right": "task_events.person_id"
+          }
+        ],
+        "reason": "To identify where the finance team loses time, we first filter finance team members from the people table (team='Finance'). Then we join with timesheets to see self-reported hours per task_category, with tickets to see logged_minutes per ticket category, and with task_events to see granular app/action durations. This multi-source view reveals high-time, repetitive tasks (e.g., invoice_matching, expense_review, vendor_queries) that are prime automation candidates.",
+        "row_counts": {
+          "people": 12,
+          "timesheets": 827,
+          "tickets": 223,
+          "task_events": 8266
+        }
+      },
+      "reconciliation": {
+        "links": [
+          {
+            "task": "client_calls",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "crm_data_entry",
+            "ticket_category": null,
+            "routine": "crm_data_entry",
+            "confidence": 1.0
+          },
+          {
+            "task": "expense_review",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "inventory_reconciliation",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "invoice_matching",
+            "ticket_category": "invoice_matching",
+            "routine": "invoice_matching",
+            "confidence": 1.0
+          },
+          {
+            "task": "meeting_scheduling",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "month_end_close",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "office_requests",
+            "ticket_category": "office_requests",
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "onboarding_paperwork",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "order_status_updates",
+            "ticket_category": "order_status_updates",
+            "routine": "order_status_updates",
+            "confidence": 1.0
+          },
+          {
+            "task": "pipeline_reporting",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "quote_preparation",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "reporting",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "scheduling",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "shipping_exceptions",
+            "ticket_category": "shipping_exceptions",
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "timesheet_chasing",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "vendor_queries",
+            "ticket_category": "vendor_queries",
+            "routine": null,
+            "confidence": 1.0
+          }
+        ],
+        "cross_source_links": 8,
+        "people": 12,
+        "observations": 145
+      },
+      "conflicts": {
+        "conflicts": [
+          {
+            "task": "order_status_updates",
+            "values": {
+              "zetaris:workforce.task_events": 8.82,
+              "zetaris:workforce.tickets": 17.87,
+              "zetaris:workforce.timesheets": 47.88
+            },
+            "ratio": 5.43,
+            "world_model_choice": 8.82
+          },
+          {
+            "task": "crm_data_entry",
+            "values": {
+              "zetaris:workforce.task_events": 7.73,
+              "zetaris:workforce.timesheets": 33.71
+            },
+            "ratio": 4.36,
+            "world_model_choice": 7.73
+          },
+          {
+            "task": "invoice_matching",
+            "values": {
+              "zetaris:workforce.task_events": 32.86,
+              "zetaris:workforce.tickets": 19.47,
+              "zetaris:workforce.timesheets": 71.54
+            },
+            "ratio": 3.67,
+            "world_model_choice": 32.86
+          }
+        ],
+        "assessments": [
+          {
+            "task": "order_status_updates",
+            "trusted_source": "zetaris:workforce.task_events",
+            "explanation": "Task_events records actual hands‑on time (8.82 h), while tickets (17.87 h) only capture voluntarily logged effort and timesheets (47.88 h) are self‑reported and typically inflated."
+          },
+          {
+            "task": "crm_data_entry",
+            "trusted_source": "zetaris:workforce.task_events",
+            "explanation": "Task_events provides measured activity (7.73 h); timesheets (33.71 h) rely on self‑reporting and tend to overstate the true effort."
+          },
+          {
+            "task": "invoice_matching",
+            "trusted_source": "zetaris:workforce.task_events",
+            "explanation": "Task_events reflects real hands‑on work (32.86 h), whereas tickets (19.47 h) represent only time people chose to log and timesheets (71.54 h) are self‑reported and likely exaggerated."
+          }
+        ]
+      }
+    },
+    "explain": {
+      "sub_questions": [
+        {
+          "id": "q1",
+          "question": "Which people belong to the finance team (team='Finance') and what are their person_ids, names, and roles?"
+        },
+        {
+          "id": "q2",
+          "question": "For finance team members, what is the total hours spent per task_category in timesheets over the available period?"
+        },
+        {
+          "id": "q3",
+          "question": "For finance team members, what is the total logged_minutes per ticket category in tickets?"
+        },
+        {
+          "id": "q4",
+          "question": "For finance team members, what are the top 10 app/action combinations by total duration_seconds in task_events, and what is the average duration per event for each?"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "q1",
+          "question": "Which people belong to the finance team (team='Finance') and what are their person_ids, names, and roles?",
+          "sql": "SELECT person_id, name, role FROM workforce.people WHERE team = 'Finance' LIMIT 30",
+          "rows": [
+            {
+              "person_id": "P001",
+              "name": "Ana Dune",
+              "role": "AP clerk"
+            },
+            {
+              "person_id": "P002",
+              "name": "Ben Ives",
+              "role": "AP clerk"
+            },
+            {
+              "person_id": "P003",
+              "name": "Chloe North",
+              "role": "Finance analyst"
+            },
+            {
+              "person_id": "P004",
+              "name": "Dev Ellery",
+              "role": "Finance manager"
+            }
+          ],
+          "attempts": 1
+        },
+        {
+          "id": "q2",
+          "question": "For finance team members, what is the total hours spent per task_category in timesheets over the available period?",
+          "sql": "SELECT t.task_category, SUM(t.hours) AS total_hours, SUM(t.hours) / 6.0 AS avg_hours_per_week FROM workforce.timesheets t JOIN workforce.people p ON t.person_id = p.person_id WHERE p.team = 'Finance' GROUP BY t.task_category ORDER BY total_hours DESC LIMIT 30",
+          "rows": [
+            {
+              "task_category": "invoice_matching",
+              "total_hours": 429.25,
+              "avg_hours_per_week": 71.54166666666667
+            },
+            {
+              "task_category": "expense_review",
+              "total_hours": 145.75,
+              "avg_hours_per_week": 24.291666666666668
+            },
+            {
+              "task_category": "vendor_queries",
+              "total_hours": 132.5,
+              "avg_hours_per_week": 22.083333333333332
+            },
+            {
+              "task_category": "reporting",
+              "total_hours": 102.75,
+              "avg_hours_per_week": 17.125
+            },
+            {
+              "task_category": "month_end_close",
+              "total_hours": 89.25,
+              "avg_hours_per_week": 14.875
+            }
+          ],
+          "attempts": 1
+        },
+        {
+          "id": "q3",
+          "question": "For finance team members, what is the total logged_minutes per ticket category in tickets?",
+          "sql": "SELECT t.category, SUM(t.logged_minutes) AS total_logged_minutes, SUM(t.logged_minutes) / 6.0 AS avg_logged_minutes_per_week FROM workforce.tickets t JOIN workforce.people p ON t.assignee_id = p.person_id WHERE p.team = 'Finance' GROUP BY t.category ORDER BY total_logged_minutes DESC LIMIT 30",
+          "rows": [
+            {
+              "category": "invoice_matching",
+              "total_logged_minutes": 7008,
+              "avg_logged_minutes_per_week": 1168.0
+            },
+            {
+              "category": "vendor_queries",
+              "total_logged_minutes": 5833,
+              "avg_logged_minutes_per_week": 972.166667
+            }
+          ],
+          "attempts": 1
+        },
+        {
+          "id": "q4",
+          "question": "For finance team members, what are the top 10 app/action combinations by total duration_seconds in task_events, and what is the average duration per event for each?",
+          "sql": "SELECT te.app, te.action, SUM(te.duration_seconds) AS total_duration_seconds, AVG(te.duration_seconds) AS avg_duration_seconds FROM workforce.task_events te JOIN workforce.people p ON te.person_id = p.person_id WHERE p.team = 'Finance' GROUP BY te.app, te.action ORDER BY total_duration_seconds DESC LIMIT 10",
+          "rows": [
+            {
+              "app": "ERP",
+              "action": "enter_invoice",
+              "total_duration_seconds": 253129,
+              "avg_duration_seconds": 368.45560407569144
+            },
+            {
+              "app": "ERP",
+              "action": "lookup_purchase_order",
+              "total_duration_seconds": 159878,
+              "avg_duration_seconds": 231.37192474674384
+            },
+            {
+              "app": "ERP",
+              "action": "match_to_po",
+              "total_duration_seconds": 114780,
+              "avg_duration_seconds": 166.83139534883722
+            },
+            {
+              "app": "Email",
+              "action": "reply_vendor_confirmation",
+              "total_duration_seconds": 94620,
+              "avg_duration_seconds": 130.8713692946058
+            },
+            {
+              "app": "Chat",
+              "action": "reply_message",
+              "total_duration_seconds": 69114,
+              "avg_duration_seconds": 164.94988066825775
+            },
+            {
+              "app": "Email",
+              "action": "open_invoice_email",
+              "total_duration_seconds": 35258,
+              "avg_duration_seconds": 48.76625172890733
+            },
+            {
+              "app": "Excel",
+              "action": "open_invoice_tracker",
+              "total_duration_seconds": 29892,
+              "avg_duration_seconds": 43.51091703056768
+            },
+            {
+              "app": "PDF",
+              "action": "download_attachment",
+              "total_duration_seconds": 22195,
+              "avg_duration_seconds": 32.26017441860465
+            }
+          ],
+          "attempts": 1
+        }
+      ],
+      "headline": "Finance team spends most time on invoice processing; top ERP actions are enter_invoice, lookup_purchase_order, and match_to_po.",
+      "claims": [
+        {
+          "text": "The finance team comprises Ana Dune (AP clerk), Ben Ives (AP clerk), Chloe North (Finance analyst), and Dev Ellery (Finance manager).",
+          "evidence": [
+            {
+              "query": "q1",
+              "row": 0,
+              "column": "name",
+              "value": "Ana Dune"
+            },
+            {
+              "query": "q1",
+              "row": 0,
+              "column": "role",
+              "value": "AP clerk"
+            },
+            {
+              "query": "q1",
+              "row": 1,
+              "column": "name",
+              "value": "Ben Ives"
+            },
+            {
+              "query": "q1",
+              "row": 1,
+              "column": "role",
+              "value": "AP clerk"
+            },
+            {
+              "query": "q1",
+              "row": 2,
+              "column": "name",
+              "value": "Chloe North"
+            },
+            {
+              "query": "q1",
+              "row": 2,
+              "column": "role",
+              "value": "Finance analyst"
+            },
+            {
+              "query": "q1",
+              "row": 3,
+              "column": "name",
+              "value": "Dev Ellery"
+            },
+            {
+              "query": "q1",
+              "row": 3,
+              "column": "role",
+              "value": "Finance manager"
+            }
+          ]
+        },
+        {
+          "text": "In task_events, the three most time-consuming actions are ERP enter_invoice (253,129 seconds), ERP lookup_purchase_order (159,878 seconds), and ERP match_to_po (114,780 seconds).",
+          "evidence": [
+            {
+              "query": "q4",
+              "row": 0,
+              "column": "app",
+              "value": "ERP"
+            },
+            {
+              "query": "q4",
+              "row": 0,
+              "column": "action",
+              "value": "enter_invoice"
+            },
+            {
+              "query": "q4",
+              "row": 0,
+              "column": "total_duration_seconds",
+              "value": 253129
+            },
+            {
+              "query": "q4",
+              "row": 1,
+              "column": "app",
+              "value": "ERP"
+            },
+            {
+              "query": "q4",
+              "row": 1,
+              "column": "action",
+              "value": "lookup_purchase_order"
+            },
+            {
+              "query": "q4",
+              "row": 1,
+              "column": "total_duration_seconds",
+              "value": 159878
+            },
+            {
+              "query": "q4",
+              "row": 2,
+              "column": "app",
+              "value": "ERP"
+            },
+            {
+              "query": "q4",
+              "row": 2,
+              "column": "action",
+              "value": "match_to_po"
+            },
+            {
+              "query": "q4",
+              "row": 2,
+              "column": "total_duration_seconds",
+              "value": 114780
+            }
+          ]
+        },
+        {
+          "text": "Timesheets show invoice_matching as the largest category with 429.25 total hours (71.54 avg hours/week), which is 2.9 times the next largest category expense_review (145.75 total hours, 24.29 avg hours/week).",
+          "evidence": [
+            {
+              "query": "q2",
+              "row": 0,
+              "column": "task_category",
+              "value": "invoice_matching"
+            },
+            {
+              "query": "q2",
+              "row": 0,
+              "column": "total_hours",
+              "value": 429.25
+            },
+            {
+              "query": "q2",
+              "row": 0,
+              "column": "avg_hours_per_week",
+              "value": 71.54166666666667
+            },
+            {
+              "query": "q2",
+              "row": 1,
+              "column": "task_category",
+              "value": "expense_review"
+            },
+            {
+              "query": "q2",
+              "row": 1,
+              "column": "total_hours",
+              "value": 145.75
+            },
+            {
+              "query": "q2",
+              "row": 1,
+              "column": "avg_hours_per_week",
+              "value": 24.291666666666668
+            }
+          ]
+        },
+        {
+          "text": "Tickets confirm invoice_matching as the top category with 7,008 total logged minutes (1,168 avg minutes/week), exceeding vendor_queries (5,833 total minutes, 972 avg minutes/week) by 20%.",
+          "evidence": [
+            {
+              "query": "q3",
+              "row": 0,
+              "column": "category",
+              "value": "invoice_matching"
+            },
+            {
+              "query": "q3",
+              "row": 0,
+              "column": "total_logged_minutes",
+              "value": 7008
+            },
+            {
+              "query": "q3",
+              "row": 0,
+              "column": "avg_logged_minutes_per_week",
+              "value": 1168.0
+            },
+            {
+              "query": "q3",
+              "row": 1,
+              "column": "category",
+              "value": "vendor_queries"
+            },
+            {
+              "query": "q3",
+              "row": 1,
+              "column": "total_logged_minutes",
+              "value": 5833
+            },
+            {
+              "query": "q3",
+              "row": 1,
+              "column": "avg_logged_minutes_per_week",
+              "value": 972.166667
+            }
+          ]
+        }
+      ],
+      "dropped_claims": [],
+      "critique_rounds": 2,
+      "objections": [
+        [
+          "claim 4: The claim states that automating specific ERP actions 'would address the largest time sink,' which is a causal claim about the effect of automation that the data does not support. The data only shows where time is currently spent, not that automation would reduce it."
+        ],
+        [
+          "claim 4: The claim states that the top three ERP actions 'correspond to' the invoice_matching category, but the provided data does not establish a direct link between the task_events actions and the timesheets/tickets categories. This is a generalization beyond the evidence."
+        ],
+        []
+      ]
+    },
+    "build": {
+      "history": [
+        {
+          "round": 1,
+          "code_version": 1,
+          "code_hash": "2acb3fe6588d49c1375a1f7a48e4f7b0ccdb4c71f07ce9d13cf9d79582700273",
+          "passed": true,
+          "pass_rate": 1.0,
+          "failed_checks": [],
+          "failure_purposes": []
+        }
+      ]
+    }
+  },
+  "approval": {
+    "approval_id": "apr_22778d8e34b1",
+    "run_id": "3e2eb29691a640cf",
+    "automation": "invoice_matching_matcher",
+    "routine": "invoice_matching",
+    "sample_mode": false,
+    "code_hash": "2acb3fe6588d49c1375a1f7a48e4f7b0ccdb4c71f07ce9d13cf9d79582700273",
+    "report_hash": "0a5a084e1c8f7ec1e31adc86ea2fb12c3d4c010e5d6c33ff76a34126402a7029",
+    "memo": {
+      "decision": "approve_for_human_review",
+      "rationale": "The finance team spends 32.86 active hours/week (120.5 invoices) on invoice matching, with ERP lookup, entry, and matching consuming ~24.4 hours/week. Automating the record-matching and entry steps can recover most of this time. QA passed (100% pass rate over 28 cases), but advisories flag floating-point precision, bool handling, Unicode vendor comparison, sparse error context, and monolithic logic — all fixable before production. Risk is high because the routine writes financial records in ERP and sends external vendor emails, so human oversight is required before full automation.",
+      "risks": [
+        "Financial record integrity: ERP.enter_invoice and ERP.match_to_po write directly to the ERP; errors could create incorrect liabilities.",
+        "External communication: Email.reply_vendor_confirmation sends emails outside the team; wrong matches could trigger incorrect vendor notifications.",
+        "Amount comparison precision: Floating-point rounding near the 0.5% threshold may cause false mismatches or false passes.",
+        "Boolean coercion: isinstance(amount, (int, float)) accepts True/False as 1/0, risking silent data corruption.",
+        "Vendor name matching: .lower() is ASCII-centric; international vendor names may not match correctly without .casefold().",
+        "Debugging difficulty: Validation errors lack record index and side (left/right), slowing incident response.",
+        "Maintainability: Monolithic matching logic hinders testing, review, and future changes."
+      ],
+      "rollout": [
+        "Remediate QA advisories: switch amount comparisons to Decimal with epsilon, exclude bool from numeric checks, use .casefold() for vendor names, enrich error messages with record context, and refactor matching into pure helper functions.",
+        "Deploy to staging in shadow mode: run automation alongside current process without writing to ERP or sending emails; log all decisions for comparison.",
+        "Two-week parallel run with human review: every automated match is reviewed by a finance analyst; track false positives/negatives and time saved.",
+        "Gradual rollout with human-in-the-loop: enable auto-match for 'pass' statuses only after analyst sign-off; route 'ambiguous' and 'no_match' to manual queue.",
+        "Monitor key metrics weekly: match accuracy (target >99.5%), hours saved vs. 24.4h target, error rates, and vendor complaint volume.",
+        "Full automation approval: after 4 weeks of stable metrics and zero critical incidents, present results for final production sign-off."
+      ],
+      "confidence": 0.85,
+      "confidence_formula": "0.45*QA pass rate + 0.2*evidence volume + 0.15*routine consistency + 0.2*(1 - risk)"
+    },
+    "status": "pending",
+    "requested_at": "2026-10-25T08:55:44.669Z",
+    "code_path": "state/automations/2acb3fe6588d49c1.py"
+  },
+  "mode": {
+    "sample_mode": false,
+    "model": "meterless/meterless/deep",
+    "data_source": "zetaris",
+    "stages": [
+      "discover",
+      "explain",
+      "build"
+    ]
+  },
+  "usage": {
+    "model_calls": 20,
+    "data_queries": 15
+  },
+  "memory": {
+    "retrieved": [],
+    "human_decisions_applied": {},
+    "mined": [
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "For invoice_matching, crm_data_entry, and order_status_updates, trust zetaris:workforce.task_events for actual hands-on time (measured activity) over timesheets (self-reported, inflated) and tickets (voluntarily logged, incomplete).",
+        "id": "mem_99b7b298bf782774",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Task_events shows invoice_matching at 32.86h/week vs timesheets 71.54h and tickets 19.47h; use measured hands-on time to size automation savings, not self-reported estimates.",
+        "id": "mem_71036ebb0b5cd271",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Avoid causal claims that automation will reduce time; data only shows current time allocation, not automation impact. Insight Critic rejected such unsupported claims.",
+        "id": "mem_eb40950882c79ff6",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Don't assume direct links between task_events actions (ERP enter_invoice, lookup_purchase_order) and timesheets/tickets categories (invoice_matching) without explicit evidence; they are different measurement systems.",
+        "id": "mem_3478b35eb88735eb",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Team selected invoice_matching for automation review (Manager approved for human review) based on highest measured hands-on time among trusted domains.",
+        "id": "mem_66a21205b0fd1e65",
+        "conflicts": 0
+      }
+    ]
+  },
+  "log_path": "logs/trace-3e2eb29691a640cf.jsonl",
+  "execution_time_seconds": 751.429
 }
