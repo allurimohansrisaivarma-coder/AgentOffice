@@ -105,13 +105,14 @@ kbd {
 }
 
 .pill {
-  position: absolute; inset: 0 0 auto 0; height: 44px;
+  /* fills the island in every collapsed state (40px idle, 44px with a status, the whole window on the
+     desktop), so its content is always vertically centred */
+  position: absolute; inset: 0;
   display: flex; align-items: center; gap: 10px;
   padding: 0 16px 0 12px;
   background: none; border: 0; cursor: pointer; text-align: left;
   transition: opacity 200ms ease;
 }
-.island:not([data-state="busy"]):not([data-state="attention"]):not([data-state="done"]):not([data-state="error"]) .pill { height: 40px; }
 .island[data-state="expanded"] .pill { opacity: 0; pointer-events: none; }
 .pill-text {
   flex: 1; min-width: 0; font-size: 13.5px; font-weight: 550;
@@ -318,7 +319,6 @@ body.shell-desktop .island[data-state] {
   top: 0; left: 0; transform: none; width: 100vw; height: 100vh; box-shadow: none; border-radius: 0;
   transition: none;
 }
-body.shell-desktop .pill { height: 100vh; }
 
 @media (max-width: 520px) {
   .island[data-state="expanded"] { top: 0; width: 100vw; height: 100vh; border-radius: 0; }

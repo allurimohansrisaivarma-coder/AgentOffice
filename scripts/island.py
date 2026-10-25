@@ -173,7 +173,9 @@ class Island:
         self.clip()
 
     def show(self, mode: str, frame_css: int, animate: bool = True) -> None:
-        frame = int(frame_css * self.scale)
+        # the page reports outerHeight - innerHeight, which also counts the window's (invisible) top and
+        # bottom borders; only the title bar above the page must be hidden
+        frame = max(0, int(round(frame_css * self.scale)) - self.borders[1] - self.borders[3])
         if mode == self.mode and frame == self.frame:
             return
         self.mode, self.frame = mode, frame
