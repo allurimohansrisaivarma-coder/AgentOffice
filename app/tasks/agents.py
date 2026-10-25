@@ -15,6 +15,7 @@ import json
 import re
 from typing import Any, Optional
 
+from app.adapters.http import AdapterError
 from app.agents.base import OFFLINE_MODEL, Agent, AgentError, extract_code
 from app.approvals import sha256
 from app.automation.sandbox import ALLOWED_IMPORTS, find_secrets, policy_violations, run_batch
@@ -393,7 +394,7 @@ class TaskQA(Agent):
             obj = self.chat_json(self.CASES_SYSTEM, f"{describe(spec)}\n\nInput columns: {json.dumps(columns)}\n"
                                  f"Example row (masked): {json.dumps(example, default=str)}",
                                  action="design_tests", validate=validate)
-        except AgentError as e:
+        except (AgentError, AdapterError) as e:   # optional model call: degrade, never fail the run
             self.log("design_tests", status="error", output_summary=f"model cases unusable, continuing without: "
                                                                      f"{e.message}")
             return self._model_cases
@@ -475,7 +476,7 @@ class TaskQA(Agent):
                                      validate=lambda o: [] if isinstance(o, dict) and isinstance(
                                          o.get("advisories"), list) else ["reply must be {\"advisories\": [...]}"])
                 report["advisories"] = [a for a in obj["advisories"][:4] if isinstance(a, dict)]
-            except AgentError as e:
+            except (AgentError, AdapterError) as e:   # optional model call: degrade, never fail the run
                 self.log("review_code", status="error", output_summary=f"advisory review skipped: {e.message}")
         self.log("critique_output", target_agent="EngineerAgent", status="approved" if passed else "needs_revision",
                  confidence=report["pass_rate"], retry_count=round_no - 1,

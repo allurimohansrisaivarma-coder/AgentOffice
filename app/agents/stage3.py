@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
+from app.adapters.http import AdapterError
 from app.agents.base import OFFLINE_MODEL, Agent, AgentError, extract_code
 from app.agents.stage1 import team_from_query
 from app.automation import oracle
@@ -319,7 +320,7 @@ class QAAgent(Agent):
         try:
             obj = self.chat_json(self.CASES_SYSTEM, f"{describe(spec)}\n\nSpec JSON:\n{json.dumps(spec, indent=1)}",
                                  action="design_tests", validate=lambda o: self._validate_cases(o, spec))
-        except AgentError as e:
+        except (AgentError, AdapterError) as e:   # optional model call: degrade, never fail the run
             self.log("design_tests", status="error", output_summary=f"model cases unusable, continuing without: "
                                                                      f"{e.message}")
             return self._extra_cases
@@ -388,7 +389,7 @@ class QAAgent(Agent):
                                      validate=lambda o: [] if isinstance(o, dict) and isinstance(
                                          o.get("advisories"), list) else ["reply must be {\"advisories\": [...]}"])
                 report["advisories"] = [a for a in obj["advisories"][:5] if isinstance(a, dict)]
-            except AgentError as e:
+            except (AgentError, AdapterError) as e:   # optional model call: degrade, never fail the run
                 self.log("review_code", status="error", output_summary=f"advisory review skipped: {e.message}")
         self.log("critique_output", target_agent="EngineerAgent", status="approved" if passed else "needs_revision",
                  confidence=report["pass_rate"], retry_count=round_no - 1,

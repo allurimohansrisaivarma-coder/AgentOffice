@@ -277,7 +277,7 @@ class InsightCritic(Agent):
                                          o.get("objections"), list) else ["reply must be {\"objections\": [...]}"])
                 objections = [f"claim {o.get('claim')}: {o.get('reason')}" for o in obj["objections"][:5]
                               if isinstance(o, dict)]
-            except AgentError as e:
+            except (AgentError, AdapterError) as e:   # optional model call: degrade, never fail the run
                 self.log("review_wording", status="error", output_summary=f"wording review skipped: {e.message}")
         self.log("critique_claims", target_agent="ReportWriterAgent", retry_count=round_no - 1,
                  status="needs_revision" if objections else "approved",

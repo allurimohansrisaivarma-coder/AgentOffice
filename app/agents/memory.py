@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 
+from app.adapters.http import AdapterError
 from app.agents.base import OFFLINE_MODEL, Agent, AgentError
 from app.engines.hmem import MemoryStoreService
 from app.engines.hmem.mining import approval_memory, direct_capture, to_record, validate_candidates
@@ -83,7 +84,7 @@ class MemoryKeeper(Agent):
                                                              indent=1, default=str),
                                      action="mine_memories", validate=lambda o: validate_candidates(o, domains))
                 candidates = [{**m, "refs": refs} for m in obj["memories"][:5]]
-            except AgentError as e:
+            except (AgentError, AdapterError) as e:   # optional model call: degrade, never fail the run
                 candidates = direct
                 self.log("mine_memories", status="error", output_summary=f"model mining unusable, falling back to "
                                                                          f"direct capture: {e.message}")

@@ -153,6 +153,22 @@ def test_desktop_app_reads_the_page_state_from_the_window_title():
     assert island.parse_title("AgentOffice · whatever") == ("island", 0)
 
 
+def test_a_provider_error_in_an_optional_qa_call_does_not_fail_the_run(tmp_path, make_settings):
+    from app.adapters.http import AdapterError
+    from app.agents.base import RunContext
+    from app.tasks.agents import TaskQA
+    from app.tracing import Tracer
+    ctx = RunContext(run_id="r1", settings=make_settings(), tracer=Tracer("r1", tmp_path, stream=None),
+                     generator=object(), data=None, store=None, pipeline=None, builder=None, sample_mode=False)
+    agent = TaskQA(ctx)
+
+    def outage(*args, **kwargs):
+        raise AdapterError("meterless", "http_error", "404: Function not found", recoverable=True)
+    agent.chat_json = outage
+    assert agent._cases_from_model(DEMO_SPECS["vendor_invoices"], ["Invoice No"], {}) == []
+    assert "404" in (tmp_path / "trace-r1.jsonl").read_text(encoding="utf-8")
+
+
 def test_trace_survives_a_console_that_cannot_print_unicode(tmp_path):
     import io
     from app.tracing import Tracer
