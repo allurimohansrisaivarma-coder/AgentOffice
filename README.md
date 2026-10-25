@@ -245,7 +245,7 @@ Everything in [`output_examples/`](output_examples/) is a **real response with i
 |---|---|---|
 | `leads_and_contacts.xlsx`: split names, match leads to the CRM sheet, fill owner | 4-step plan, code passed **34/34** QA cases on the first try (6 designed by the model); 119 cells filled after approval | 18/18 cases |
 | `expense_claims.xlsx`: team and role from the staff directory in Zetaris, tidy categories, ISO dates, GST, flag > 500, totals by team | TASK_EXPENSE_LIVE | 36/36 cases |
-| `vendor_invoices.csv`: dedupe, fill statuses, mark overdue, sort | TASK_VENDOR_LIVE | 24/24 cases |
+| `vendor_invoices.csv`: dedupe, fill statuses, mark overdue, sort | 6-step plan, code passed **40/40** QA cases on the first try (6 designed by the model); 34 rows in, 30 out after removing the re-typed duplicates | 24/24 cases |
 
 **Analysis questions** ([`input_examples/`](input_examples/)); different questions give different results:
 

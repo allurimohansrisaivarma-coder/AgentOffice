@@ -100,7 +100,8 @@ class Tracer:
         with self.path.open("a", encoding="utf-8") as f:
             f.write(line + "\n")
         if self._stream is not None:
-            print(line, file=self._stream, flush=True)
+            # ASCII-escaped for the console: a Windows code page can't print every character a model writes
+            print(json.dumps(event, ensure_ascii=True, default=str), file=self._stream, flush=True)
         if self._listener is not None:
             self._listener(event)
         return event

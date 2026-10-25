@@ -1,12 +1,12 @@
 {
-  "job_id": "job_a226f1997ec5",
+  "job_id": "job_56ebcb8a6f79",
   "kind": "task",
-  "status": "failed",
-  "trace_id": "2e31a9b48cc849fc",
+  "status": "completed",
+  "trace_id": "5565ab57b12648c4",
   "events": [
     {
       "i": 0,
-      "at": "2026-10-25T10:02:33.644Z",
+      "at": "2026-10-25T10:19:54.766Z",
       "agent": "Orchestrator",
       "action": "run_started",
       "status": "ok",
@@ -16,7 +16,7 @@
     },
     {
       "i": 1,
-      "at": "2026-10-25T10:02:37.019Z",
+      "at": "2026-10-25T10:19:57.533Z",
       "agent": "FrontDeskAgent",
       "action": "route",
       "status": "ok",
@@ -26,17 +26,17 @@
     },
     {
       "i": 2,
-      "at": "2026-10-25T10:02:37.026Z",
+      "at": "2026-10-25T10:19:57.539Z",
       "agent": "Orchestrator",
       "action": "plan_run",
       "status": "ok",
       "target": null,
       "model": null,
-      "summary": "task mode on vendor_invoices.csv (vendor_invoices: 34 rows); model: meterless/meterless/deep; data: zetaris"
+      "summary": "task mode on vendor_invoices.csv (vendor_invoices: 34 rows); model: meterless/deep; data: zetaris"
     },
     {
       "i": 3,
-      "at": "2026-10-25T10:02:39.308Z",
+      "at": "2026-10-25T10:19:59.767Z",
       "agent": "DataProfilerAgent",
       "action": "data_query",
       "status": "ok",
@@ -46,7 +46,7 @@
     },
     {
       "i": 4,
-      "at": "2026-10-25T10:02:39.457Z",
+      "at": "2026-10-25T10:19:59.920Z",
       "agent": "DataProfilerAgent",
       "action": "data_query",
       "status": "ok",
@@ -56,7 +56,7 @@
     },
     {
       "i": 5,
-      "at": "2026-10-25T10:02:39.457Z",
+      "at": "2026-10-25T10:19:59.921Z",
       "agent": "DataProfilerAgent",
       "action": "profile_file",
       "status": "ok",
@@ -66,7 +66,7 @@
     },
     {
       "i": 6,
-      "at": "2026-10-25T10:02:39.464Z",
+      "at": "2026-10-25T10:19:59.928Z",
       "agent": "MemoryKeeperAgent",
       "action": "hmem_retrieve",
       "status": "ok",
@@ -76,7 +76,7 @@
     },
     {
       "i": 7,
-      "at": "2026-10-25T10:04:51.956Z",
+      "at": "2026-10-25T10:20:53.325Z",
       "agent": "PMAgent",
       "action": "plan_task",
       "status": "ok",
@@ -86,7 +86,7 @@
     },
     {
       "i": 8,
-      "at": "2026-10-25T10:04:51.956Z",
+      "at": "2026-10-25T10:20:53.326Z",
       "agent": "SpecCritic",
       "action": "critique_spec",
       "status": "approved",
@@ -96,41 +96,531 @@
     },
     {
       "i": 9,
-      "at": "2026-10-25T10:04:51.957Z",
+      "at": "2026-10-25T10:20:53.327Z",
       "agent": "Orchestrator",
       "action": "handoff",
       "status": "ok",
       "target": "EngineerAgent",
       "model": null,
-      "summary": "spec vendor_invoice_cleanup: 5 steps, references none"
+      "summary": "spec vendor_invoice_cleanup: 6 steps, references none"
     },
     {
       "i": 10,
-      "at": "2026-10-25T10:07:51.999Z",
+      "at": "2026-10-25T10:22:44.592Z",
       "agent": "EngineerAgent",
       "action": "write_code",
-      "status": "error",
-      "target": null,
-      "model": "meterless/meterless/deep",
-      "summary": "ReadTimeout: timed out"
+      "status": "ok",
+      "target": "QAAgent",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "We are to implement the automation spec exactly as described. We'll write a Python module with a top-level function run(rows, reference) that returns a dict with \"rows\" and \"sheets\". We must follow the steps in order, using the provided def"
     },
     {
       "i": 11,
-      "at": "2026-10-25T10:07:52.001Z",
+      "at": "2026-10-25T10:25:19.823Z",
+      "agent": "QAAgent",
+      "action": "design_tests",
+      "status": "ok",
+      "target": null,
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "The user wants me to act as the QA agent and design test cases for the automation `vendor_invoice_cleanup`. I need to produce tricky input rows that a careless implementation might get wrong. I must output JSON with \"cases\" array, each with"
+    },
+    {
+      "i": 12,
+      "at": "2026-10-25T10:28:21.597Z",
+      "agent": "QAAgent",
+      "action": "review_code",
+      "status": "ok",
+      "target": null,
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "The user wants me to act as a QA agent reviewing the provided automation code for `vendor_invoice_cleanup`. I need to list concrete robustness or maintainability concerns for the human approver. I must reply with only JSON in the format: {\""
+    },
+    {
+      "i": 13,
+      "at": "2026-10-25T10:28:21.598Z",
+      "agent": "QAAgent",
+      "action": "critique_output",
+      "status": "approved",
+      "target": "EngineerAgent",
+      "model": null,
+      "summary": "[\"sandbox_policy: ok\", \"no_credentials: ok\", \"runs: ok\", \"matches_spec: ok\", \"whole_file: ok\", \"deterministic: ok\", \"fails_loudly_on_schema_drift: ok\"]"
+    },
+    {
+      "i": 14,
+      "at": "2026-10-25T10:29:23.302Z",
+      "agent": "ManagerAgent",
+      "action": "decide",
+      "status": "ok",
+      "target": null,
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "The user wants me to write a decision memo for a human approver of a spreadsheet automation. I need to output JSON with decision, rationale, risks, and what_you_get. The allowed decision is \"approve_for_human_review\". I must explain from QA"
+    },
+    {
+      "i": 15,
+      "at": "2026-10-25T10:29:23.306Z",
+      "agent": "ManagerAgent",
+      "action": "request_approval",
+      "status": "pending",
+      "target": "Human",
+      "model": null,
+      "summary": "apr_d034a484e2a6 for code 7c0590d3ecbb"
+    },
+    {
+      "i": 16,
+      "at": "2026-10-25T10:29:23.380Z",
+      "agent": "ManagerAgent",
+      "action": "world_model_write",
+      "status": "ok",
+      "target": "WorldModel",
+      "model": null,
+      "summary": "task automation decision: 3 observations, 3 records changed"
+    },
+    {
+      "i": 17,
+      "at": "2026-10-25T10:29:30.031Z",
+      "agent": "MemoryKeeperAgent",
+      "action": "mine_memories",
+      "status": "ok",
+      "target": null,
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "The user wants me to write at most 5 short, durable lessons from the provided events. The events show a single decision: Run chose vendor_invoice_cleanup; Manager approved for human review with high confidence (0.98). Domains: planning, rep"
+    },
+    {
+      "i": 18,
+      "at": "2026-10-25T10:29:30.131Z",
+      "agent": "MemoryKeeperAgent",
+      "action": "hmem_write",
+      "status": "ok",
+      "target": "H-MEM",
+      "model": null,
+      "summary": "[\"created: Run selected vendor_invoice_cleanup for automation review; Manager approved for human revi\", \"created: High manager confidence (0.98) on approval indicates strong alignment on automation candid\"]"
+    },
+    {
+      "i": 19,
+      "at": "2026-10-25T10:29:30.133Z",
       "agent": "Orchestrator",
-      "action": "run_failed",
-      "status": "error",
+      "action": "run_completed",
+      "status": "ok",
       "target": null,
       "model": null,
-      "summary": "ReadTimeout: timed out"
+      "summary": "task task_95e06e213250: awaiting_approval"
     }
   ],
-  "next": 12,
-  "result": null,
-  "error": {
-    "type": "meterless_timeout",
-    "message": "ReadTimeout: timed out",
-    "recoverable": true
+  "next": 20,
+  "result": {
+    "type": "task",
+    "reply": "Got it — I'll remove duplicate invoices, fill any blank statuses with \"Pending\", flag unpaid invoices due before 2026-10-15 as \"Overdue\", and sort everything by due date.",
+    "task": {
+      "task_id": "task_95e06e213250",
+      "task": "Remove duplicate invoices, fill blank statuses with Pending, mark unpaid invoices due before 2026-10-15 as Overdue and sort by due date.",
+      "upload_id": "demo_vendor_invoices",
+      "filename": "vendor_invoices.csv",
+      "format": "csv",
+      "created_at": "2026-10-25T10:29:23.306Z",
+      "run_id": "5565ab57b12648c4",
+      "status": "awaiting_approval",
+      "sample_mode": false,
+      "model": "meterless/deep",
+      "data_source": "zetaris",
+      "understanding": "Remove duplicate invoices by Invoice No, fill blank Status with Pending, flag unpaid invoices due before 2026-10-15 as Overdue, and sort by Due Date.",
+      "assumptions": [
+        "Duplicate invoices are identified by Invoice No after stripping leading/trailing spaces.",
+        "Unpaid means Status is not 'Paid' (i.e., Approved, Pending, or any other non-Paid value).",
+        "Due Date values are in ISO format (YYYY-MM-DD) or parseable as such; string comparison works for date ordering.",
+        "A new column 'Overdue' is added with Yes/No rather than overwriting Status."
+      ],
+      "reused": null,
+      "spec": {
+        "name": "vendor_invoice_cleanup",
+        "summary": "Remove duplicate invoices, fill missing statuses, flag overdue unpaid invoices, and sort by due date.",
+        "input": {
+          "sheet": "vendor_invoices",
+          "columns": [
+            "Invoice No",
+            "Vendor",
+            "Invoice Date",
+            "Due Date",
+            "Amount",
+            "Status"
+          ]
+        },
+        "references": {},
+        "steps": [
+          {
+            "op": "clean_text",
+            "columns": [
+              "Invoice No"
+            ],
+            "case": "none",
+            "collapse_spaces": false
+          },
+          {
+            "op": "dedupe",
+            "columns": [
+              "Invoice No"
+            ],
+            "normalize": [
+              "strip"
+            ],
+            "keep": "first"
+          },
+          {
+            "op": "fill_blank",
+            "column": "Status",
+            "value": "Pending"
+          },
+          {
+            "op": "format_date",
+            "column": "Due Date",
+            "input_formats": [
+              "%Y-%m-%d"
+            ],
+            "output_format": "%Y-%m-%d",
+            "invalid": "keep"
+          },
+          {
+            "op": "flag",
+            "column": "Overdue",
+            "when": [
+              {
+                "column": "Status",
+                "op": "ne",
+                "value": "Paid"
+              },
+              {
+                "column": "Due Date",
+                "op": "lt",
+                "value": "2026-10-15"
+              }
+            ],
+            "match": "all",
+            "then": "Yes",
+            "else": "No"
+          },
+          {
+            "op": "sort",
+            "by": [
+              {
+                "column": "Due Date",
+                "descending": false
+              }
+            ]
+          }
+        ],
+        "output_columns": [
+          "Invoice No",
+          "Vendor",
+          "Invoice Date",
+          "Due Date",
+          "Amount",
+          "Status",
+          "Overdue"
+        ]
+      },
+      "spec_rounds": 0,
+      "critiques": [
+        []
+      ],
+      "advisories": [],
+      "code": "from datetime import datetime\nfrom typing import Any, Dict, List, Tuple\n\n\ndef run(rows: List[Dict[str, Any]], reference: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:\n    # Validate input columns\n    required_columns = [\"Invoice No\", \"Vendor\", \"Invoice Date\", \"Due Date\", \"Amount\", \"Status\"]\n    for i, row in enumerate(rows):\n        for col in required_columns:\n            if col not in row:\n                raise ValueError(f\"Missing column '{col}' in row {i}\")\n\n    # Work on a copy\n    rows = [dict(row) for row in rows]\n\n    # Helper functions\n    def blank(v: Any) -> bool:\n        return v is None or (isinstance(v, str) and v.strip() == \"\")\n\n    def text(v: Any) -> str:\n        if v is None:\n            return \"\"\n        if isinstance(v, float) and v.is_integer():\n            return str(int(v))\n        return str(v)\n\n    def normalize(v: Any, steps: List[str]) -> str:\n        s = text(v)\n        for step in steps:\n            if step == \"strip\":\n                s = s.strip()\n            elif step == \"upper\":\n                s = s.upper()\n            elif step == \"lower\":\n                s = s.lower()\n            elif step == \"collapse_spaces\":\n                s = \" \".join(s.split())\n            elif step == \"digits_only\":\n                s = \"\".join(ch for ch in s if ch.isdigit())\n        return s\n\n    # Step 1: clean_text on Invoice No\n    for row in rows:\n        val = row.get(\"Invoice No\")\n        if isinstance(val, str):\n            s = val.strip()\n            if s == \"\":\n                row[\"Invoice No\"] = None\n            else:\n                row[\"Invoice No\"] = s\n\n    # Step 2: dedupe on Invoice No\n    keys = []\n    for row in rows:\n        key_parts = [normalize(row.get(\"Invoice No\"), [\"strip\"])]\n        keys.append(tuple(key_parts))\n\n    seen: Dict[Tuple[str, ...], int] = {}\n    keep_indices = []\n    for idx, key in enumerate(keys):\n        if all(part == \"\" for part in key):\n            keep_indices.append(idx)\n            continue\n        if key not in seen:\n            seen[key] = idx\n            keep_indices.append(idx)\n\n    rows = [rows[i] for i in keep_indices]\n\n    # Step 3: fill_blank on Status\n    for row in rows:\n        if blank(row.get(\"Status\")):\n            row[\"Status\"] = \"Pending\"\n\n    # Step 4: format_date on Due Date\n    for row in rows:\n        val = row.get(\"Due Date\")\n        if isinstance(val, str) and not blank(val):\n            parsed = None\n            for fmt in [\"%Y-%m-%d\"]:\n                try:\n                    parsed = datetime.strptime(val.strip(), fmt)\n                    break\n                except ValueError:\n                    continue\n            if parsed is not None:\n                row[\"Due Date\"] = parsed.strftime(\"%Y-%m-%d\")\n\n    # Step 5: flag Overdue\n    for row in rows:\n        if \"Overdue\" not in row:\n            row[\"Overdue\"] = None\n\n    def evaluate_condition(row: Dict[str, Any], cond: Dict[str, Any]) -> bool:\n        col = cond[\"column\"]\n        op = cond[\"op\"]\n        value = cond.get(\"value\")\n        row_val = row.get(col)\n\n        if op == \"blank\":\n            return blank(row_val)\n        if op == \"not_blank\":\n            return not blank(row_val)\n\n        if op == \"eq\":\n            if isinstance(row_val, (int, float)) and isinstance(value, (int, float)):\n                return row_val == value\n            return text(row_val).strip().casefold() == text(value).strip().casefold()\n        if op == \"ne\":\n            if isinstance(row_val, (int, float)) and isinstance(value, (int, float)):\n                return row_val != value\n            return text(row_val).strip().casefold() != text(value).strip().casefold()\n        if op == \"in\":\n            if isinstance(row_val, (int, float)):\n                return any(row_val == v for v in value if isinstance(v, (int, float)))\n            row_text = text(row_val).strip().casefold()\n            return any(row_text == text(v).strip().casefold() for v in value)\n        if op in (\"gt\", \"gte\", \"lt\", \"lte\"):\n            if isinstance(row_val, (int, float)) and isinstance(value, (int, float)):\n                if op == \"gt\":\n                    return row_val > value\n                if op == \"gte\":\n                    return row_val >= value\n                if op == \"lt\":\n                    return row_val < value\n                if op == \"lte\":\n                    return row_val <= value\n            if isinstance(row_val, str) and isinstance(value, str) and not blank(row_val) and not blank(value):\n                rv = row_val.strip()\n                vv = value.strip()\n                if op == \"gt\":\n                    return rv > vv\n                if op == \"gte\":\n                    return rv >= vv\n                if op == \"lt\":\n                    return rv < vv\n                if op == \"lte\":\n                    return rv <= vv\n            return False\n        if op == \"contains\":\n            cond_text = text(value).strip().casefold()\n            row_text = text(row_val).casefold()\n            return cond_text in row_text\n        if op == \"starts_with\":\n            cond_text = text(value).strip().casefold()\n            row_text = text(row_val).strip().casefold()\n            return row_text.startswith(cond_text)\n        return False\n\n    conditions = [\n        {\"column\": \"Status\", \"op\": \"ne\", \"value\": \"Paid\"},\n        {\"column\": \"Due Date\", \"op\": \"lt\", \"value\": \"2026-10-15\"},\n    ]\n    for row in rows:\n        match_all = True\n        for cond in conditions:\n            if not evaluate_condition(row, cond):\n                match_all = False\n                break\n        row[\"Overdue\"] = \"Yes\" if match_all else \"No\"\n\n    # Step 6: sort by Due Date ascending\n    sort_keys = [{\"column\": \"Due Date\", \"descending\": False}]\n    for key_spec in reversed(sort_keys):\n        col = key_spec[\"column\"]\n        descending = key_spec[\"descending\"]\n        non_blank_rows = []\n        blank_rows = []\n        for row in rows:\n            if blank(row.get(col)):\n                blank_rows.append(row)\n            else:\n                non_blank_rows.append(row)\n\n        def sort_key(row: Dict[str, Any]) -> Tuple[int, Any, str]:\n            v = row.get(col)\n            if isinstance(v, (int, float)):\n                return (0, v, \"\")\n            return (1, 0, text(v).strip().casefold())\n\n        non_blank_rows.sort(key=sort_key, reverse=descending)\n        rows = non_blank_rows + blank_rows\n\n    # Prepare output rows with exact column order\n    output_columns = [\"Invoice No\", \"Vendor\", \"Invoice Date\", \"Due Date\", \"Amount\", \"Status\", \"Overdue\"]\n    output_rows = []\n    for row in rows:\n        out_row = {col: row.get(col) for col in output_columns}\n        output_rows.append(out_row)\n\n    return {\"rows\": output_rows, \"sheets\": {}}\n",
+      "code_hash": "7c0590d3ecbb18f056b0bbf7056eb7d0237ae721356a10b28f7fa8b32c8385c8",
+      "code_version": 1,
+      "code_origin": "written by meterless/deep",
+      "qa": {
+        "passed": true,
+        "pass_rate": 1.0,
+        "cases": 40,
+        "model_cases": 6,
+        "checks": [
+          {
+            "name": "sandbox_policy",
+            "passed": true,
+            "detail": "only allowed constructs"
+          },
+          {
+            "name": "no_credentials",
+            "passed": true,
+            "detail": "no hardcoded credentials"
+          },
+          {
+            "name": "runs",
+            "passed": true,
+            "detail": "42 calls in 0.084s"
+          },
+          {
+            "name": "matches_spec",
+            "passed": true,
+            "detail": "40/40 cases match the spec's expected output"
+          },
+          {
+            "name": "whole_file",
+            "passed": true,
+            "detail": "all 34 rows of your file match the spec"
+          },
+          {
+            "name": "deterministic",
+            "passed": true,
+            "detail": "same output on a second run"
+          },
+          {
+            "name": "fails_loudly_on_schema_drift",
+            "passed": true,
+            "detail": "renaming 'Invoice No' raised: ValueError: Missing column 'Invoice No' in row 0"
+          }
+        ],
+        "advisories": [
+          {
+            "severity": "warning",
+            "detail": "The clean_text step duplicates logic from the blank/normalize helpers (manual strip and empty-string-to-None). If the definition of blank or normalization changes, this step may become inconsistent. Consider refactoring clean_text to use the shared helpers."
+          },
+          {
+            "severity": "warning",
+            "detail": "The flag step's 'lt' condition on Due Date uses lexicographic string comparison, which only orders dates correctly for zero-padded ISO format (YYYY-MM-DD). The format_date step only normalizes dates matching '%Y-%m-%d'; non-conforming dates (e.g., '2026-1-15' or '2026-10-2') remain unnormalized and can cause incorrect overdue flags."
+          },
+          {
+            "severity": "info",
+            "detail": "The evaluate_condition function is a large monolithic function handling all condition operators. This reduces maintainability and testability. Consider decomposing into smaller functions or a dispatch table."
+          },
+          {
+            "severity": "info",
+            "detail": "The dedupe step normalizes keys with ['strip'] only, while clean_text may have already stripped the column. If clean_text parameters change (e.g., collapse_spaces enabled), the dedupe normalization may not match, leading to unexpected duplicate retention. Consider aligning normalization steps with the cleaning steps for the same column."
+          }
+        ],
+        "output_rows": 30,
+        "preview": {
+          "rows": [
+            {
+              "Invoice No": "INV-2405",
+              "Vendor": "Globex Facilities",
+              "Invoice Date": "2026-09-03",
+              "Due Date": "2026-09-17",
+              "Amount": 1181.17,
+              "Status": "Pending",
+              "Overdue": "Yes"
+            },
+            {
+              "Invoice No": "INV-2424",
+              "Vendor": "Blue Harbor IT",
+              "Invoice Date": "2026-09-03",
+              "Due Date": "2026-09-17",
+              "Amount": 2675.32,
+              "Status": "Paid",
+              "Overdue": "No"
+            },
+            {
+              "Invoice No": "INV-2425",
+              "Vendor": "Globex Facilities",
+              "Invoice Date": "2026-09-03",
+              "Due Date": "2026-09-17",
+              "Amount": 2402.85,
+              "Status": "Pending",
+              "Overdue": "Yes"
+            },
+            {
+              "Invoice No": "INV-2406",
+              "Vendor": "Initech Software",
+              "Invoice Date": "2026-09-06",
+              "Due Date": "2026-09-20",
+              "Amount": 7261.14,
+              "Status": "Pending",
+              "Overdue": "Yes"
+            },
+            {
+              "Invoice No": "INV-2421",
+              "Vendor": "Globex Facilities",
+              "Invoice Date": "2026-09-06",
+              "Due Date": "2026-09-20",
+              "Amount": 2662.2,
+              "Status": "Pending",
+              "Overdue": "Yes"
+            },
+            {
+              "Invoice No": "INV-2417",
+              "Vendor": "Acme  Office Supply",
+              "Invoice Date": "2026-09-07",
+              "Due Date": "2026-09-21",
+              "Amount": 6406.97,
+              "Status": "Pending",
+              "Overdue": "Yes"
+            },
+            {
+              "Invoice No": "INV-2403",
+              "Vendor": "Acme  Office Supply",
+              "Invoice Date": "2026-09-08",
+              "Due Date": "2026-09-22",
+              "Amount": 257.75,
+              "Status": "Approved",
+              "Overdue": "Yes"
+            },
+            {
+              "Invoice No": "INV-2418",
+              "Vendor": "Globex Facilities",
+              "Invoice Date": "2026-09-09",
+              "Due Date": "2026-09-23",
+              "Amount": 6964.45,
+              "Status": "Pending",
+              "Overdue": "Yes"
+            }
+          ],
+          "sheets": {}
+        }
+      },
+      "qa_failures": [],
+      "qa_rounds": [
+        {
+          "round": 1,
+          "code_version": 1,
+          "code_hash": "7c0590d3ecbb18f056b0bbf7056eb7d0237ae721356a10b28f7fa8b32c8385c8",
+          "passed": true,
+          "pass_rate": 1.0,
+          "failed_checks": [],
+          "failure_purposes": []
+        }
+      ],
+      "memo": {
+        "decision": "approve_for_human_review",
+        "rationale": "All QA checks passed (40 test cases, 30 output rows). The automation correctly removes duplicates by Invoice No, fills blank Status with Pending, flags unpaid invoices due before 2026-10-15 as Overdue, and sorts by Due Date. However, advisories highlight two warnings: (1) the overdue flag uses lexicographic string comparison on Due Date, which only works reliably for zero-padded ISO dates (YYYY-MM-DD); non-conforming dates could be mis-flagged. (2) The dedupe step normalizes keys with strip only, while clean_text may apply additional normalization — if cleaning parameters change, duplicate detection could become inconsistent. Two informational notes flag code maintainability concerns (monolithic condition evaluator, duplicated cleaning logic). These do not affect current correctness but should be reviewed before production use.",
+        "risks": [
+          "Overdue flags may be incorrect for dates not in strict YYYY-MM-DD format (e.g., '2026-1-15').",
+          "Duplicate removal may miss matches if clean_text normalization changes (e.g., collapse_spaces enabled).",
+          "Shared cleaning logic is duplicated in clean_text; future changes to blank/normalize helpers could cause drift.",
+          "The evaluate_condition function is a large monolith, making future modifications error-prone."
+        ],
+        "what_you_get": [
+          "Spreadsheet with duplicate invoices removed (by Invoice No after stripping spaces).",
+          "Blank Status values filled with 'Pending'.",
+          "New 'Overdue' column with 'Yes'/'No' indicating unpaid invoices due before 2026-10-15.",
+          "Rows sorted ascending by Due Date.",
+          "30 rows of cleaned, flagged, and sorted data."
+        ],
+        "confidence": 0.98
+      },
+      "approval_id": "apr_d034a484e2a6",
+      "outputs": null,
+      "agents_used": [
+        "DataProfilerAgent",
+        "MemoryKeeperAgent",
+        "PMAgent",
+        "RetrieverAgent",
+        "SpecCritic",
+        "EngineerAgent",
+        "QAAgent",
+        "ManagerAgent"
+      ],
+      "usage": {
+        "model_calls": 6,
+        "data_queries": 2
+      },
+      "reference": {},
+      "profile": [
+        {
+          "sheet": "vendor_invoices",
+          "rows": 34,
+          "columns": 6
+        }
+      ],
+      "input_columns": [
+        "Invoice No",
+        "Vendor",
+        "Invoice Date",
+        "Due Date",
+        "Amount",
+        "Status"
+      ],
+      "approval": {
+        "approval_id": "apr_d034a484e2a6",
+        "run_id": "5565ab57b12648c4",
+        "automation": "vendor_invoice_cleanup",
+        "routine": "vendor_invoice_cleanup",
+        "sample_mode": false,
+        "code_hash": "7c0590d3ecbb18f056b0bbf7056eb7d0237ae721356a10b28f7fa8b32c8385c8",
+        "report_hash": "4b7b4162062310ed14ef4090f8af3237a874a2bbef7d329a0f96ccd62a2eca7a",
+        "memo": {
+          "decision": "approve_for_human_review",
+          "rationale": "All QA checks passed (40 test cases, 30 output rows). The automation correctly removes duplicates by Invoice No, fills blank Status with Pending, flags unpaid invoices due before 2026-10-15 as Overdue, and sorts by Due Date. However, advisories highlight two warnings: (1) the overdue flag uses lexicographic string comparison on Due Date, which only works reliably for zero-padded ISO dates (YYYY-MM-DD); non-conforming dates could be mis-flagged. (2) The dedupe step normalizes keys with strip only, while clean_text may apply additional normalization — if cleaning parameters change, duplicate detection could become inconsistent. Two informational notes flag code maintainability concerns (monolithic condition evaluator, duplicated cleaning logic). These do not affect current correctness but should be reviewed before production use.",
+          "risks": [
+            "Overdue flags may be incorrect for dates not in strict YYYY-MM-DD format (e.g., '2026-1-15').",
+            "Duplicate removal may miss matches if clean_text normalization changes (e.g., collapse_spaces enabled).",
+            "Shared cleaning logic is duplicated in clean_text; future changes to blank/normalize helpers could cause drift.",
+            "The evaluate_condition function is a large monolith, making future modifications error-prone."
+          ],
+          "what_you_get": [
+            "Spreadsheet with duplicate invoices removed (by Invoice No after stripping spaces).",
+            "Blank Status values filled with 'Pending'.",
+            "New 'Overdue' column with 'Yes'/'No' indicating unpaid invoices due before 2026-10-15.",
+            "Rows sorted ascending by Due Date.",
+            "30 rows of cleaned, flagged, and sorted data."
+          ],
+          "confidence": 0.98
+        },
+        "task_id": "task_95e06e213250",
+        "kind": "task",
+        "status": "pending",
+        "requested_at": "2026-10-25T10:29:23.305Z",
+        "code_path": "state/automations/7c0590d3ecbb18f0.py"
+      }
+    }
   },
-  "elapsed_s": 321.9
+  "error": null,
+  "elapsed_s": 577.1,
+  "approval_decision": {
+    "status": "completed",
+    "approval": {
+      "approval_id": "apr_d034a484e2a6",
+      "run_id": "5565ab57b12648c4",
+      "automation": "vendor_invoice_cleanup",
+      "routine": "vendor_invoice_cleanup",
+      "sample_mode": false,
+      "code_hash": "7c0590d3ecbb18f056b0bbf7056eb7d0237ae721356a10b28f7fa8b32c8385c8",
+      "report_hash": "4b7b4162062310ed14ef4090f8af3237a874a2bbef7d329a0f96ccd62a2eca7a",
+      "memo": {
+        "decision": "approve_for_human_review",
+        "rationale": "All QA checks passed (40 test cases, 30 output rows). The automation correctly removes duplicates by Invoice No, fills blank Status with Pending, flags unpaid invoices due before 2026-10-15 as Overdue, and sorts by Due Date. However, advisories highlight two warnings: (1) the overdue flag uses lexicographic string comparison on Due Date, which only works reliably for zero-padded ISO dates (YYYY-MM-DD); non-conforming dates could be mis-flagged. (2) The dedupe step normalizes keys with strip only, while clean_text may apply additional normalization — if cleaning parameters change, duplicate detection could become inconsistent. Two informational notes flag code maintainability concerns (monolithic condition evaluator, duplicated cleaning logic). These do not affect current correctness but should be reviewed before production use.",
+        "risks": [
+          "Overdue flags may be incorrect for dates not in strict YYYY-MM-DD format (e.g., '2026-1-15').",
+          "Duplicate removal may miss matches if clean_text normalization changes (e.g., collapse_spaces enabled).",
+          "Shared cleaning logic is duplicated in clean_text; future changes to blank/normalize helpers could cause drift.",
+          "The evaluate_condition function is a large monolith, making future modifications error-prone."
+        ],
+        "what_you_get": [
+          "Spreadsheet with duplicate invoices removed (by Invoice No after stripping spaces).",
+          "Blank Status values filled with 'Pending'.",
+          "New 'Overdue' column with 'Yes'/'No' indicating unpaid invoices due before 2026-10-15.",
+          "Rows sorted ascending by Due Date.",
+          "30 rows of cleaned, flagged, and sorted data."
+        ],
+        "confidence": 0.98
+      },
+      "task_id": "task_95e06e213250",
+      "kind": "task",
+      "status": "approved",
+      "requested_at": "2026-10-25T10:29:23.305Z",
+      "approver": "Demo approver (scripted)",
+      "note": "scripted demo approval (run_examples.py)",
+      "decided_at": "2026-10-25T10:29:33.887Z",
+      "code_path": "state/automations/7c0590d3ecbb18f0.py"
+    },
+    "outputs": {
+      "files": [
+        {
+          "file_id": "task_95e06e213250_vendor_invoices_filled.xlsx",
+          "format": "xlsx",
+          "rows": 30
+        },
+        {
+          "file_id": "task_95e06e213250_vendor_invoices_filled.csv",
+          "format": "csv",
+          "rows": 30
+        }
+      ],
+      "rows_in": 34,
+      "rows_out": 30,
+      "cells_changed": null,
+      "sheets": []
+    },
+    "memory": {
+      "status": "created",
+      "id": "mem_9b0af9988c69e14e",
+      "superseded": []
+    }
+  }
 }

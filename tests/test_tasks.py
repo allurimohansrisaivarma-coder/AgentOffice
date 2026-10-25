@@ -142,6 +142,15 @@ def test_critic_flags_a_lookup_that_matches_nothing():
     assert any("none of the" in i for i in issues)
 
 
+def test_trace_survives_a_console_that_cannot_print_unicode(tmp_path):
+    import io
+    from app.tracing import Tracer
+    console = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    tracer = Tracer("t1", tmp_path, stream=console)
+    tracer.event("QAAgent", "review_code", output_summary="v1 → v2 passed ✓")
+    assert "→" in (tmp_path / "trace-t1.jsonl").read_text(encoding="utf-8")
+
+
 # ------------------------------------------------------------------ streamed model replies
 
 def test_nightshift_chat_is_streamed_and_reassembled(make_settings):
