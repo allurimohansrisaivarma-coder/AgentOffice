@@ -256,7 +256,10 @@ def notify(message: str, error: bool = False) -> None:
 
 def start_server(url: str) -> subprocess.Popen:
     """run.py in the background: no console window, output in logs/agentoffice-server.log."""
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    # The service needs the project's dependencies, so prefer its .venv: a double-clicked AgentOffice.pyw runs
+    # with whichever Python Windows associates with .pyw. The island itself needs only the standard library.
+    venv = ROOT / ".venv" / "Scripts" / "pythonw.exe"
+    pythonw = venv if venv.exists() else Path(sys.executable).with_name("pythonw.exe")
     exe = str(pythonw if pythonw.exists() else sys.executable)
     (ROOT / "logs").mkdir(exist_ok=True)
     log = (ROOT / "logs" / "agentoffice-server.log").open("ab")
