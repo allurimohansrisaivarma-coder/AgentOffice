@@ -1,0 +1,681 @@
+{
+  "job_id": "job_58dec4872265",
+  "kind": "task",
+  "status": "completed",
+  "trace_id": "883b7864e6f44190",
+  "events": [
+    {
+      "i": 0,
+      "at": "2026-10-25T09:35:41.022Z",
+      "agent": "Orchestrator",
+      "action": "run_started",
+      "status": "ok",
+      "target": null,
+      "model": null,
+      "summary": ""
+    },
+    {
+      "i": 1,
+      "at": "2026-10-25T09:36:34.180Z",
+      "agent": "FrontDeskAgent",
+      "action": "route",
+      "status": "ok",
+      "target": null,
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "The user wants to process a spreadsheet: split full names into first/last, check against CRM Contacts by email, fill in owner, and mark new leads as 'Create contact'. This is clearly a task involving spreadsheet manipulation. So intent is '"
+    },
+    {
+      "i": 2,
+      "at": "2026-10-25T09:36:34.186Z",
+      "agent": "Orchestrator",
+      "action": "plan_run",
+      "status": "ok",
+      "target": null,
+      "model": null,
+      "summary": "task mode on leads_and_contacts.xlsx (Leads: 25 rows, CRM Contacts: 13 rows); model: meterless/meterless/deep; data: zetaris"
+    },
+    {
+      "i": 3,
+      "at": "2026-10-25T09:36:36.471Z",
+      "agent": "DataProfilerAgent",
+      "action": "data_query",
+      "status": "ok",
+      "target": "Zetaris",
+      "model": null,
+      "summary": "9 rows"
+    },
+    {
+      "i": 4,
+      "at": "2026-10-25T09:36:36.653Z",
+      "agent": "DataProfilerAgent",
+      "action": "data_query",
+      "status": "ok",
+      "target": "Zetaris",
+      "model": null,
+      "summary": "27 rows"
+    },
+    {
+      "i": 5,
+      "at": "2026-10-25T09:36:36.654Z",
+      "agent": "DataProfilerAgent",
+      "action": "profile_file",
+      "status": "ok",
+      "target": "PMAgent",
+      "model": null,
+      "summary": "[\"Leads: 25 rows, 5 columns\", \"CRM Contacts: 13 rows, 4 columns\"]"
+    },
+    {
+      "i": 6,
+      "at": "2026-10-25T09:36:36.658Z",
+      "agent": "MemoryKeeperAgent",
+      "action": "hmem_retrieve",
+      "status": "ok",
+      "target": "PMAgent",
+      "model": null,
+      "summary": "{\"approved_automations\": \"none\", \"lessons\": \"none\"}"
+    },
+    {
+      "i": 7,
+      "at": "2026-10-25T09:37:16.755Z",
+      "agent": "PMAgent",
+      "action": "plan_task",
+      "status": "ok",
+      "target": "SpecCritic",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "The user wants to:\n1. Split full names into first and last name\n2. Check each lead against CRM Contacts sheet by email\n3. Fill in the owner from CRM Contacts\n4. Mark new leads as 'Create contact'\n\nLooking at the file profile:\n- Leads sheet "
+    },
+    {
+      "i": 8,
+      "at": "2026-10-25T09:37:16.756Z",
+      "agent": "RetrieverAgent",
+      "action": "read_sheet",
+      "status": "ok",
+      "target": null,
+      "model": null,
+      "summary": "reference crm: 13 rows from sheet 'CRM Contacts'"
+    },
+    {
+      "i": 9,
+      "at": "2026-10-25T09:37:16.756Z",
+      "agent": "SpecCritic",
+      "action": "critique_spec",
+      "status": "approved",
+      "target": "PMAgent",
+      "model": null,
+      "summary": "[\"step 3 (lookup): 12 of 25 'Email' values match the reference; the rest get the not_found status\"]"
+    },
+    {
+      "i": 10,
+      "at": "2026-10-25T09:37:16.757Z",
+      "agent": "Orchestrator",
+      "action": "handoff",
+      "status": "ok",
+      "target": "EngineerAgent",
+      "model": null,
+      "summary": "spec lead_split_and_crm_match: 4 steps, references ['crm']"
+    },
+    {
+      "i": 11,
+      "at": "2026-10-25T09:38:58.760Z",
+      "agent": "EngineerAgent",
+      "action": "write_code",
+      "status": "ok",
+      "target": "QAAgent",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "We are given a specification for an automation called \"lead_split_and_crm_match\". We need to implement a function `run(rows, reference)` that returns a dict with keys \"rows\" and \"sheets\". The steps are defined in the spec. We must follow th"
+    },
+    {
+      "i": 12,
+      "at": "2026-10-25T09:42:35.006Z",
+      "agent": "QAAgent",
+      "action": "design_tests",
+      "status": "ok",
+      "target": null,
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "We are to design test cases for the automation `lead_split_and_crm_match`. We need to produce up to 6 tricky input rows that a careless implementation might get wrong. We must consider the steps: clean_text, split, lookup, flag. We need to "
+    },
+    {
+      "i": 13,
+      "at": "2026-10-25T09:44:14.953Z",
+      "agent": "QAAgent",
+      "action": "review_code",
+      "status": "ok",
+      "target": null,
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "The user wants me to act as a QA agent reviewing the provided automation code. I need to list concrete robustness or maintainability concerns for the human approver. I must reply with only JSON in the format: {\"advisories\": [{\"severity\": \"i"
+    },
+    {
+      "i": 14,
+      "at": "2026-10-25T09:44:14.954Z",
+      "agent": "QAAgent",
+      "action": "critique_output",
+      "status": "approved",
+      "target": "EngineerAgent",
+      "model": null,
+      "summary": "[\"sandbox_policy: ok\", \"no_credentials: ok\", \"runs: ok\", \"matches_spec: ok\", \"deterministic: ok\", \"fails_loudly_on_schema_drift: ok\"]"
+    },
+    {
+      "i": 15,
+      "at": "2026-10-25T09:45:07.290Z",
+      "agent": "ManagerAgent",
+      "action": "decide",
+      "status": "ok",
+      "target": null,
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "The user wants me to write a decision memo as the Manager agent in AgentOffice. I need to output JSON with decision, rationale, risks, and what_you_get. The decision is constrained to \"approve_for_human_review\" as given in allowed_decision."
+    },
+    {
+      "i": 16,
+      "at": "2026-10-25T09:45:07.292Z",
+      "agent": "ManagerAgent",
+      "action": "request_approval",
+      "status": "pending",
+      "target": "Human",
+      "model": null,
+      "summary": "apr_318e2fae38e5 for code 002d17a2c3bc"
+    },
+    {
+      "i": 17,
+      "at": "2026-10-25T09:45:07.305Z",
+      "agent": "ManagerAgent",
+      "action": "world_model_write",
+      "status": "ok",
+      "target": "WorldModel",
+      "model": null,
+      "summary": "task automation decision: 3 observations, 3 records changed"
+    },
+    {
+      "i": 18,
+      "at": "2026-10-25T09:45:19.335Z",
+      "agent": "MemoryKeeperAgent",
+      "action": "mine_memories",
+      "status": "ok",
+      "target": null,
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "summary": "The user wants me to write at most 5 short, durable lessons from the events provided. I need to output JSON with \"memories\" array, each with content (<=300 chars), type (factual|preference|general), domain (one of given domains), tags, conf"
+    },
+    {
+      "i": 19,
+      "at": "2026-10-25T09:45:19.349Z",
+      "agent": "MemoryKeeperAgent",
+      "action": "hmem_write",
+      "status": "ok",
+      "target": "H-MEM",
+      "model": null,
+      "summary": "[\"created: Run selected lead_split_and_crm_match for automation review; Manager approved for human re\", \"created: High manager confidence (0.92) on approval indicates strong alignment on automation candid\"]"
+    },
+    {
+      "i": 20,
+      "at": "2026-10-25T09:45:19.350Z",
+      "agent": "Orchestrator",
+      "action": "run_completed",
+      "status": "ok",
+      "target": null,
+      "model": null,
+      "summary": "task task_f5af1fcd6719: awaiting_approval"
+    }
+  ],
+  "next": 21,
+  "result": {
+    "type": "task",
+    "reply": "Sure thing — I’ll split the names, match them to your CRM contacts by email, pull in the owners, and flag any new leads as “Create contact.”",
+    "task": {
+      "task_id": "task_f5af1fcd6719",
+      "task": "Split the full names into first and last name, check each lead against the CRM Contacts sheet by email, fill in the owner and mark new leads as 'Create contact'.",
+      "upload_id": "demo_leads_and_contacts",
+      "filename": "leads_and_contacts.xlsx",
+      "format": "xlsx",
+      "created_at": "2026-10-25T09:45:07.292Z",
+      "run_id": "883b7864e6f44190",
+      "status": "awaiting_approval",
+      "sample_mode": false,
+      "model": "meterless/meterless/deep",
+      "data_source": "zetaris",
+      "understanding": "Split lead full names into first/last, match leads to CRM Contacts by email, pull in the Owner, and flag unmatched leads as 'Create contact'.",
+      "assumptions": [
+        "Full Name contains exactly two parts (first and last); any extra spaces will be collapsed before splitting.",
+        "Email matching is case-insensitive and ignores leading/trailing spaces on both sides.",
+        "CRM Contacts sheet is the reference for existing contacts; Owner comes from that sheet.",
+        "Leads not found in CRM Contacts get status 'Create contact'; matched leads get 'matched'.",
+        "No Zetaris tables are needed; all reference data is in the uploaded file's CRM Contacts sheet."
+      ],
+      "reused": null,
+      "spec": {
+        "name": "lead_split_and_crm_match",
+        "summary": "Split lead full names, match to CRM Contacts by email, fill Owner, and flag new leads for contact creation.",
+        "input": {
+          "sheet": "Leads",
+          "columns": [
+            "Lead ID",
+            "Full Name",
+            "Email",
+            "Company",
+            "Phone"
+          ]
+        },
+        "references": {
+          "crm": {
+            "source": "sheet",
+            "sheet": "CRM Contacts",
+            "fields": [
+              "Email",
+              "Owner"
+            ]
+          }
+        },
+        "steps": [
+          {
+            "op": "clean_text",
+            "columns": [
+              "Full Name",
+              "Email"
+            ],
+            "case": "none",
+            "collapse_spaces": true
+          },
+          {
+            "op": "split",
+            "column": "Full Name",
+            "separator": " ",
+            "into": [
+              "First Name",
+              "Last Name"
+            ]
+          },
+          {
+            "op": "lookup",
+            "key": "Email",
+            "reference": "crm",
+            "reference_key": "Email",
+            "fields": {
+              "Owner": "Owner"
+            },
+            "normalize": [
+              "strip",
+              "lower"
+            ],
+            "mode": "fill_blanks",
+            "status_column": "CRM Status",
+            "statuses": {
+              "found": "matched",
+              "not_found": "Create contact",
+              "ambiguous": "check manually"
+            }
+          },
+          {
+            "op": "flag",
+            "column": "Action",
+            "when": [
+              {
+                "column": "CRM Status",
+                "op": "eq",
+                "value": "Create contact"
+              }
+            ],
+            "match": "all",
+            "then": "Create contact",
+            "else": "Exists in CRM"
+          }
+        ],
+        "output_columns": [
+          "Lead ID",
+          "Full Name",
+          "First Name",
+          "Last Name",
+          "Email",
+          "Company",
+          "Phone",
+          "Owner",
+          "CRM Status",
+          "Action"
+        ]
+      },
+      "spec_rounds": 0,
+      "critiques": [
+        []
+      ],
+      "advisories": [
+        "step 3 (lookup): 12 of 25 'Email' values match the reference; the rest get the not_found status"
+      ],
+      "code": "from copy import deepcopy\nfrom typing import Any, Dict, List, Optional, Union\n\ndef blank(v: Any) -> bool:\n    return v is None or (isinstance(v, str) and v.strip() == '')\n\ndef text(v: Any) -> str:\n    if v is None:\n        return ''\n    if isinstance(v, float) and v.is_integer():\n        return str(int(v))\n    return str(v)\n\ndef normalize(v: Any, steps: List[str]) -> str:\n    s = text(v)\n    for step in steps:\n        if step == 'strip':\n            s = s.strip()\n        elif step == 'upper':\n            s = s.upper()\n        elif step == 'lower':\n            s = s.lower()\n        elif step == 'collapse_spaces':\n            s = ' '.join(s.split())\n        elif step == 'digits_only':\n            s = ''.join(ch for ch in s if ch.isdigit())\n    return s\n\ndef evaluate_condition(row: Dict[str, Any], cond: Dict[str, Any]) -> bool:\n    col = cond[\"column\"]\n    op = cond[\"op\"]\n    val = row.get(col)\n    value = cond.get(\"value\")\n\n    if op == 'blank':\n        return blank(val)\n    if op == 'not_blank':\n        return not blank(val)\n\n    # For other ops we need a comparison value\n    if op == 'in':\n        # value is a list\n        for item in value:\n            if evaluate_condition(row, {\"column\": col, \"op\": \"eq\", \"value\": item}):\n                return True\n        return False\n\n    # Helper to get comparable forms\n    def to_num(x):\n        if isinstance(x, (int, float)):\n            return x\n        return None\n\n    val_num = to_num(val)\n    value_num = to_num(value)\n\n    if op in ('eq', 'ne', 'gt', 'gte', 'lt', 'lte'):\n        # Numeric comparison if both are numbers\n        if val_num is not None and value_num is not None:\n            if op == 'eq':\n                res = val_num == value_num\n            elif op == 'ne':\n                res = val_num != value_num\n            elif op == 'gt':\n                res = val_num > value_num\n            elif op == 'gte':\n                res = val_num >= value_num\n            elif op == 'lt':\n                res = val_num < value_num\n            elif op == 'lte':\n                res = val_num <= value_num\n            return res\n        # String comparison if both are strings and val not blank\n        if isinstance(val, str) and isinstance(value, str) and not blank(val):\n            sv = val.strip()\n            vv = value.strip()\n            if op == 'eq':\n                return sv.casefold() == vv.casefold()\n            if op == 'ne':\n                return sv.casefold() != vv.casefold()\n            if op == 'gt':\n                return sv > vv\n            if op == 'gte':\n                return sv >= vv\n            if op == 'lt':\n                return sv < vv\n            if op == 'lte':\n                return sv <= vv\n        return False\n\n    if op == 'contains':\n        if isinstance(val, str) and isinstance(value, str):\n            return text(value).strip().casefold() in text(val).casefold()\n        return False\n\n    if op == 'starts_with':\n        if isinstance(val, str) and isinstance(value, str):\n            return text(val).strip().casefold().startswith(text(value).strip().casefold())\n        return False\n\n    return False\n\ndef run(rows: List[Dict[str, Any]], reference: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:\n    # Validate input columns\n    required_input_cols = [\"Lead ID\", \"Full Name\", \"Email\", \"Company\", \"Phone\"]\n    for i, row in enumerate(rows):\n        for col in required_input_cols:\n            if col not in row:\n                raise ValueError(f\"Missing column: {col}\")\n\n    # Validate reference\n    if \"crm\" not in reference:\n        raise ValueError(\"Missing reference: crm\")\n    crm_rows = reference[\"crm\"]\n    for i, r in enumerate(crm_rows):\n        for field in [\"Email\", \"Owner\"]:\n            if field not in r:\n                raise ValueError(f\"Missing field in crm: {field}\")\n\n    # Work on a deep copy\n    rows = deepcopy(rows)\n\n    # Step 1: clean_text\n    for row in rows:\n        for col in [\"Full Name\", \"Email\"]:\n            val = row.get(col)\n            if isinstance(val, str):\n                s = val.strip()\n                s = ' '.join(s.split())  # collapse_spaces\n                # case none -> unchanged\n                row[col] = s if s != '' else None\n\n    # Step 2: split\n    for row in rows:\n        val = row.get(\"Full Name\")\n        if blank(val):\n            row[\"First Name\"] = None\n            row[\"Last Name\"] = None\n        else:\n            s = text(val).strip()\n            parts = s.split(None, 1)  # separator is exactly ' '\n            first = parts[0].strip() if parts else ''\n            last = parts[1].strip() if len(parts) > 1 else ''\n            row[\"First Name\"] = first if first != '' else None\n            row[\"Last Name\"] = last if last != '' else None\n\n    # Step 3: lookup\n    # Build index\n    index: Dict[str, List[Dict[str, Any]]] = {}\n    for ref_row in crm_rows:\n        key = ref_row[\"Email\"]\n        norm_key = normalize(key, [\"strip\", \"lower\"])\n        if norm_key != '':\n            index.setdefault(norm_key, []).append(ref_row)\n\n    for row in rows:\n        # Ensure Owner column exists\n        if \"Owner\" not in row:\n            row[\"Owner\"] = None\n        email = row.get(\"Email\")\n        norm_email = normalize(email, [\"strip\", \"lower\"])\n        if norm_email != '' and norm_email in index:\n            matches = index[norm_email]\n            if len(matches) == 1:\n                match = matches[0]\n                # mode fill_blanks\n                if blank(row[\"Owner\"]):\n                    row[\"Owner\"] = match[\"Owner\"]\n                status = \"matched\"\n            else:\n                status = \"check manually\"\n        else:\n            status = \"Create contact\"\n        row[\"CRM Status\"] = status\n\n    # Step 4: flag\n    for row in rows:\n        if \"Action\" not in row:\n            row[\"Action\"] = None\n        cond = {\"column\": \"CRM Status\", \"op\": \"eq\", \"value\": \"Create contact\"}\n        if evaluate_condition(row, cond):\n            row[\"Action\"] = \"Create contact\"\n        else:\n            row[\"Action\"] = \"Exists in CRM\"\n\n    # Prepare output rows with exact column order\n    output_cols = [\"Lead ID\", \"Full Name\", \"First Name\", \"Last Name\", \"Email\", \"Company\", \"Phone\", \"Owner\", \"CRM Status\", \"Action\"]\n    output_rows = []\n    for row in rows:\n        out_row = {col: row.get(col) for col in output_cols}\n        output_rows.append(out_row)\n\n    return {\"rows\": output_rows, \"sheets\": {}}\n",
+      "code_hash": "002d17a2c3bc257a60f459e069bfb03ff468d720afcfb52b9ce94f99575b4ce7",
+      "code_version": 1,
+      "code_origin": "written by meterless/meterless/deep",
+      "qa": {
+        "passed": true,
+        "pass_rate": 1.0,
+        "cases": 34,
+        "model_cases": 6,
+        "checks": [
+          {
+            "name": "sandbox_policy",
+            "passed": true,
+            "detail": "only allowed constructs"
+          },
+          {
+            "name": "no_credentials",
+            "passed": true,
+            "detail": "no hardcoded credentials"
+          },
+          {
+            "name": "runs",
+            "passed": true,
+            "detail": "36 calls in 0.064s"
+          },
+          {
+            "name": "matches_spec",
+            "passed": true,
+            "detail": "34/34 cases match the spec's expected output"
+          },
+          {
+            "name": "deterministic",
+            "passed": true,
+            "detail": "same output on a second run"
+          },
+          {
+            "name": "fails_loudly_on_schema_drift",
+            "passed": true,
+            "detail": "renaming 'Lead ID' raised: ValueError: Missing column: Lead ID"
+          }
+        ],
+        "advisories": [
+          {
+            "severity": "warning",
+            "detail": "evaluate_condition deviates from spec: for eq/ne it returns False when row value is non-string (e.g., number, None) instead of using text() conversion; contains and starts_with swap the row value and condition value (spec: text(v).strip().casefold() in text(value).casefold(), code does opposite)."
+          },
+          {
+            "severity": "warning",
+            "detail": "split step treats non-string Full Name (e.g., numeric Lead ID) as non-blank and attempts to split, producing unexpected First/Last Name; blank() only returns True for None or empty string."
+          },
+          {
+            "severity": "info",
+            "detail": "flag step is hardcoded to a single condition and does not implement generic 'match': 'all'/'any' logic over a condition list, making future extensions error-prone."
+          },
+          {
+            "severity": "info",
+            "detail": "clean_text step ignores the 'case' parameter (lower/upper/title) defined in the step config; only 'none' is handled, reducing maintainability if the automation is updated."
+          }
+        ],
+        "output_rows": 25,
+        "preview": {
+          "rows": [
+            {
+              "Lead ID": "L-301",
+              "Full Name": "Devon Ashford",
+              "First Name": "Devon",
+              "Last Name": "Ashford",
+              "Email": "devon.ashford1@example.com",
+              "Company": "Fabrikam",
+              "Phone": "+61 481 906 582",
+              "Owner": "Sales - South",
+              "CRM Status": "matched",
+              "Action": "Exists in CRM"
+            },
+            {
+              "Lead ID": "L-302",
+              "Full Name": "Finley Ellery",
+              "First Name": "Finley",
+              "Last Name": "Ellery",
+              "Email": "finley.ellery2@example.com",
+              "Company": "Tailspin Toys",
+              "Phone": "+61 495 337 699",
+              "Owner": null,
+              "CRM Status": "Create contact",
+              "Action": "Create contact"
+            },
+            {
+              "Lead ID": "L-303",
+              "Full Name": "Jordan Garrick",
+              "First Name": "Jordan",
+              "Last Name": "Garrick",
+              "Email": "jordan.garrick3@example.com",
+              "Company": "Fabrikam",
+              "Phone": "+61 417 333 299",
+              "Owner": "Sales - South",
+              "CRM Status": "matched",
+              "Action": "Exists in CRM"
+            },
+            {
+              "Lead ID": "L-304",
+              "Full Name": "Kendall Dunmore",
+              "First Name": "Kendall",
+              "Last Name": "Dunmore",
+              "Email": "KENDALL.DUNMORE4@EXAMPLE.COM",
+              "Company": "Wide World Importers",
+              "Phone": "+61 434 444 476",
+              "Owner": null,
+              "CRM Status": "Create contact",
+              "Action": "Create contact"
+            },
+            {
+              "Lead ID": "L-305",
+              "Full Name": "Sage Holloway",
+              "First Name": "Sage",
+              "Last Name": "Holloway",
+              "Email": "sage.holloway5@example.com",
+              "Company": "Fabrikam",
+              "Phone": "+61 431 248 834",
+              "Owner": "Sales - South",
+              "CRM Status": "matched",
+              "Action": "Exists in CRM"
+            },
+            {
+              "Lead ID": "L-306",
+              "Full Name": "Sage Holloway",
+              "First Name": "Sage",
+              "Last Name": "Holloway",
+              "Email": "sage.holloway6@example.com",
+              "Company": "Proseware",
+              "Phone": "+61 478 709 470",
+              "Owner": null,
+              "CRM Status": "Create contact",
+              "Action": "Create contact"
+            },
+            {
+              "Lead ID": "L-307",
+              "Full Name": "Quinn Ingram",
+              "First Name": "Quinn",
+              "Last Name": "Ingram",
+              "Email": "quinn.ingram7@example.com",
+              "Company": "Litware",
+              "Phone": "+61 475 755 389",
+              "Owner": "Sales - North",
+              "CRM Status": "matched",
+              "Action": "Exists in CRM"
+            },
+            {
+              "Lead ID": "L-308",
+              "Full Name": "Blake Langley",
+              "First Name": "Blake",
+              "Last Name": "Langley",
+              "Email": "Blake.Langley8@Example.Com",
+              "Company": "Tailspin Toys",
+              "Phone": "+61 486 132 183",
+              "Owner": null,
+              "CRM Status": "Create contact",
+              "Action": "Create contact"
+            }
+          ],
+          "sheets": {}
+        }
+      },
+      "qa_failures": [],
+      "qa_rounds": [
+        {
+          "round": 1,
+          "code_version": 1,
+          "code_hash": "002d17a2c3bc257a60f459e069bfb03ff468d720afcfb52b9ce94f99575b4ce7",
+          "passed": true,
+          "pass_rate": 1.0,
+          "failed_checks": [],
+          "failure_purposes": []
+        }
+      ],
+      "memo": {
+        "decision": "approve_for_human_review",
+        "rationale": "The automation correctly splits lead names, matches emails against CRM Contacts (12 of 25 matched), pulls Owner for matched leads, and flags unmatched leads as 'Create contact'. QA passed all 34 test cases (100% pass rate) producing 25 output rows. However, QA advisories reveal non-blocking defects: evaluate_condition deviates from spec for eq/ne and contains/starts_with; split step mishandles non-string Full Name values; flag step is hardcoded; clean_text ignores the case parameter. The critic notes that 13 leads will be flagged for contact creation, which requires human verification. These issues are fixable but warrant human review before production deployment.",
+        "risks": [
+          "evaluate_condition bug: eq/ne returns False for non-string row values instead of applying text() conversion; contains and starts_with swap row value and condition value — could cause incorrect matching",
+          "split step treats non-string Full Name (e.g., numeric Lead ID) as non-blank and attempts to split, producing unexpected First/Last Name values",
+          "flag step hardcoded to a single condition, not generic 'match': 'all'/'any' logic — future extensions error-prone",
+          "clean_text ignores the 'case' parameter (lower/upper/title); only 'none' handled, reducing maintainability",
+          "Only 12 of 25 leads match CRM Contacts; 13 will be flagged 'Create contact' — human must verify these are genuinely new leads",
+          "Assumption that Full Name contains exactly two parts may not hold for all leads (e.g., middle names, suffixes)"
+        ],
+        "what_you_get": [
+          "25 output rows with columns: First Name, Last Name, Email, Owner, Status",
+          "12 rows with Owner populated from CRM Contacts and Status = 'matched'",
+          "13 rows with empty Owner and Status = 'Create contact' for human follow-up",
+          "Name splitting applied to all leads (subject to the split-step caveat above)"
+        ],
+        "confidence": 0.92
+      },
+      "approval_id": "apr_318e2fae38e5",
+      "outputs": null,
+      "agents_used": [
+        "DataProfilerAgent",
+        "MemoryKeeperAgent",
+        "PMAgent",
+        "RetrieverAgent",
+        "SpecCritic",
+        "EngineerAgent",
+        "QAAgent",
+        "ManagerAgent"
+      ],
+      "usage": {
+        "model_calls": 6,
+        "data_queries": 2
+      },
+      "reference": {
+        "crm": {
+          "rows": 13,
+          "sample": [
+            {
+              "Email": "wren.fairley23@example.com",
+              "Owner": "Sales - South"
+            },
+            {
+              "Email": "jordan.garrick3@example.com",
+              "Owner": "Sales - South"
+            },
+            {
+              "Email": "wren.fairley12@example.com",
+              "Owner": "Sales - North"
+            }
+          ]
+        }
+      },
+      "profile": [
+        {
+          "sheet": "Leads",
+          "rows": 25,
+          "columns": 5
+        },
+        {
+          "sheet": "CRM Contacts",
+          "rows": 13,
+          "columns": 4
+        }
+      ],
+      "input_columns": [
+        "Lead ID",
+        "Full Name",
+        "Email",
+        "Company",
+        "Phone"
+      ],
+      "approval": {
+        "approval_id": "apr_318e2fae38e5",
+        "run_id": "883b7864e6f44190",
+        "automation": "lead_split_and_crm_match",
+        "routine": "lead_split_and_crm_match",
+        "sample_mode": false,
+        "code_hash": "002d17a2c3bc257a60f459e069bfb03ff468d720afcfb52b9ce94f99575b4ce7",
+        "report_hash": "a302976a35f2dcab6a0fd807385a5112caa94f78628ec797cd273aed63bde1e1",
+        "memo": {
+          "decision": "approve_for_human_review",
+          "rationale": "The automation correctly splits lead names, matches emails against CRM Contacts (12 of 25 matched), pulls Owner for matched leads, and flags unmatched leads as 'Create contact'. QA passed all 34 test cases (100% pass rate) producing 25 output rows. However, QA advisories reveal non-blocking defects: evaluate_condition deviates from spec for eq/ne and contains/starts_with; split step mishandles non-string Full Name values; flag step is hardcoded; clean_text ignores the case parameter. The critic notes that 13 leads will be flagged for contact creation, which requires human verification. These issues are fixable but warrant human review before production deployment.",
+          "risks": [
+            "evaluate_condition bug: eq/ne returns False for non-string row values instead of applying text() conversion; contains and starts_with swap row value and condition value — could cause incorrect matching",
+            "split step treats non-string Full Name (e.g., numeric Lead ID) as non-blank and attempts to split, producing unexpected First/Last Name values",
+            "flag step hardcoded to a single condition, not generic 'match': 'all'/'any' logic — future extensions error-prone",
+            "clean_text ignores the 'case' parameter (lower/upper/title); only 'none' handled, reducing maintainability",
+            "Only 12 of 25 leads match CRM Contacts; 13 will be flagged 'Create contact' — human must verify these are genuinely new leads",
+            "Assumption that Full Name contains exactly two parts may not hold for all leads (e.g., middle names, suffixes)"
+          ],
+          "what_you_get": [
+            "25 output rows with columns: First Name, Last Name, Email, Owner, Status",
+            "12 rows with Owner populated from CRM Contacts and Status = 'matched'",
+            "13 rows with empty Owner and Status = 'Create contact' for human follow-up",
+            "Name splitting applied to all leads (subject to the split-step caveat above)"
+          ],
+          "confidence": 0.92
+        },
+        "task_id": "task_f5af1fcd6719",
+        "kind": "task",
+        "status": "pending",
+        "requested_at": "2026-10-25T09:45:07.291Z",
+        "code_path": "state/automations/002d17a2c3bc257a.py"
+      }
+    }
+  },
+  "error": null,
+  "elapsed_s": 581.9,
+  "approval_decision": {
+    "status": "completed",
+    "approval": {
+      "approval_id": "apr_318e2fae38e5",
+      "run_id": "883b7864e6f44190",
+      "automation": "lead_split_and_crm_match",
+      "routine": "lead_split_and_crm_match",
+      "sample_mode": false,
+      "code_hash": "002d17a2c3bc257a60f459e069bfb03ff468d720afcfb52b9ce94f99575b4ce7",
+      "report_hash": "a302976a35f2dcab6a0fd807385a5112caa94f78628ec797cd273aed63bde1e1",
+      "memo": {
+        "decision": "approve_for_human_review",
+        "rationale": "The automation correctly splits lead names, matches emails against CRM Contacts (12 of 25 matched), pulls Owner for matched leads, and flags unmatched leads as 'Create contact'. QA passed all 34 test cases (100% pass rate) producing 25 output rows. However, QA advisories reveal non-blocking defects: evaluate_condition deviates from spec for eq/ne and contains/starts_with; split step mishandles non-string Full Name values; flag step is hardcoded; clean_text ignores the case parameter. The critic notes that 13 leads will be flagged for contact creation, which requires human verification. These issues are fixable but warrant human review before production deployment.",
+        "risks": [
+          "evaluate_condition bug: eq/ne returns False for non-string row values instead of applying text() conversion; contains and starts_with swap row value and condition value — could cause incorrect matching",
+          "split step treats non-string Full Name (e.g., numeric Lead ID) as non-blank and attempts to split, producing unexpected First/Last Name values",
+          "flag step hardcoded to a single condition, not generic 'match': 'all'/'any' logic — future extensions error-prone",
+          "clean_text ignores the 'case' parameter (lower/upper/title); only 'none' handled, reducing maintainability",
+          "Only 12 of 25 leads match CRM Contacts; 13 will be flagged 'Create contact' — human must verify these are genuinely new leads",
+          "Assumption that Full Name contains exactly two parts may not hold for all leads (e.g., middle names, suffixes)"
+        ],
+        "what_you_get": [
+          "25 output rows with columns: First Name, Last Name, Email, Owner, Status",
+          "12 rows with Owner populated from CRM Contacts and Status = 'matched'",
+          "13 rows with empty Owner and Status = 'Create contact' for human follow-up",
+          "Name splitting applied to all leads (subject to the split-step caveat above)"
+        ],
+        "confidence": 0.92
+      },
+      "task_id": "task_f5af1fcd6719",
+      "kind": "task",
+      "status": "approved",
+      "requested_at": "2026-10-25T09:45:07.291Z",
+      "approver": "Demo approver (scripted)",
+      "note": "scripted demo approval (run_examples.py)",
+      "decided_at": "2026-10-25T09:45:24.950Z",
+      "code_path": "state/automations/002d17a2c3bc257a.py"
+    },
+    "outputs": {
+      "files": [
+        {
+          "file_id": "task_f5af1fcd6719_leads_and_contacts_filled.xlsx",
+          "format": "xlsx",
+          "rows": 25
+        }
+      ],
+      "rows_in": 25,
+      "rows_out": 25,
+      "cells_changed": 119,
+      "sheets": []
+    },
+    "memory": {
+      "status": "created",
+      "id": "mem_f56530d658b858f0",
+      "superseded": []
+    }
+  }
+}
