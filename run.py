@@ -25,7 +25,7 @@ from typing import Any, Optional
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -111,12 +111,25 @@ def create_app(settings: Settings) -> FastAPI:
 
     # ------------------------------------------------------------------ UI
 
+    @app.middleware("http")
+    async def _no_stale_ui(request: Request, call_next):
+        """The desktop island keeps its own browser profile; never let it run an old cached UI."""
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/ui/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     if UI_DIR.exists():
         app.mount("/ui", StaticFiles(directory=UI_DIR), name="ui")
 
         @app.get("/", include_in_schema=False)
         def index():
-            return FileResponse(UI_DIR / "index.html")
+            # version-stamp the assets, so a browser that cached an older UI fetches the new files
+            html = (UI_DIR / "index.html").read_text(encoding="utf-8")
+            for name in ("style.css", "app.js"):
+                stamp = int((UI_DIR / name).stat().st_mtime)
+                html = html.replace(f"/ui/{name}\"", f"/ui/{name}?v={stamp}\"")
+            return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     # ------------------------------------------------------------------ status
 
