@@ -93,17 +93,28 @@ def catalog(data_dir: Path = DATA_DIR, max_values: int = 20) -> list[dict]:
     return out
 
 
+# Uploaded spreadsheets, one row per cell (app/tasks/files.py), served to Zetaris as a REST table too.
+UPLOAD_CELLS = "upload_cells"
+UPLOAD_CELLS_TYPES = {"upload_id": "TEXT", "sheet_name": "TEXT", "row_no": "INTEGER", "col_name": "TEXT",
+                      "cell_value": "TEXT", "value_type": "TEXT"}
+
+
 class SampleSQLClient:
-    """Sample-mode stand-in for Zetaris over the synthetic CSVs. SELECT/WITH only."""
+    """Sample-mode stand-in for Zetaris over the synthetic CSVs (and upload cells). SELECT/WITH only."""
 
     name = "sample-sqlite"
 
-    def __init__(self, data_dir: Path = DATA_DIR):
+    def __init__(self, data_dir: Path = DATA_DIR, upload_cells: Optional[list[dict]] = None):
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(":memory:", check_same_thread=False)
         self._conn.execute(f"ATTACH DATABASE ':memory:' AS {SCHEMA}")
+        tables = []
         for name in load_manifest(data_dir)["tables"]:
             columns, types, rows = load_table(name, data_dir)
+            tables.append((name, columns, types, rows))
+        if upload_cells is not None:
+            tables.append((UPLOAD_CELLS, list(UPLOAD_CELLS_TYPES), UPLOAD_CELLS_TYPES, upload_cells))
+        for name, columns, types, rows in tables:
             cols_sql = ", ".join(f'"{c}" {types[c]}' for c in columns)
             self._conn.execute(f'CREATE TABLE {SCHEMA}."{name}" ({cols_sql})')
             self._conn.executemany(
@@ -162,7 +173,7 @@ class ZetarisSource:
 
     def __init__(self, client: zetaris.ZetarisClient, tables: Optional[set[str]] = None):
         self._client = client
-        self._tables = tables if tables is not None else set(load_manifest()["tables"])
+        self._tables = tables if tables is not None else set(load_manifest()["tables"]) | {UPLOAD_CELLS}
         self.last_executed: Optional[str] = None
 
     def run_sql(self, sql: str, limit: int = 100) -> list[dict]:
@@ -173,7 +184,9 @@ class ZetarisSource:
         self._client.close()
 
 
-def build_data_source(settings: Settings, sample_mode: bool, transport: Optional[Any] = None) -> DataSource:
+def build_data_source(settings: Settings, sample_mode: bool, transport: Optional[Any] = None,
+                      upload_cells: Optional[list[dict]] = None) -> DataSource:
+    """In sample mode `upload_cells` fills the sample upload_cells table; Zetaris reads the live endpoint."""
     if sample_mode:
-        return SampleSQLClient()
+        return SampleSQLClient(upload_cells=upload_cells)
     return ZetarisSource(zetaris.from_settings(settings, transport=transport))

@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 ALLOWED_IMPORTS = frozenset({"math", "re", "decimal", "datetime", "collections", "itertools", "functools",
-                             "string", "unicodedata", "json", "statistics", "typing", "dataclasses"})
+                             "string", "unicodedata", "json", "statistics", "typing", "dataclasses", "copy"})
 FORBIDDEN_CALLS = frozenset({"eval", "exec", "compile", "open", "__import__", "input", "globals", "locals",
                              "vars", "getattr", "setattr", "delattr", "breakpoint", "exit", "quit", "help",
                              "memoryview", "classmethod", "staticmethod", "super"})
@@ -38,11 +38,16 @@ try:
     spec = importlib.util.spec_from_file_location("automation", payload["path"])
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    output = module.run(payload["left"], payload["right"])
-    result = {{"ok": True, "output": json.loads(json.dumps(output))}}
 except BaseException as e:
-    result = {{"ok": False, "error": type(e).__name__ + ": " + str(e)[:300]}}
-sys.stdout.write("\\n{_MARKER}" + json.dumps(result) + "\\n")
+    sys.stdout.write("\\n{_MARKER}" + json.dumps({{"ok": False, "error": type(e).__name__ + ": " + str(e)[:300]}}))
+    sys.exit(0)
+results = []
+for args in payload["calls"]:
+    try:
+        results.append({{"ok": True, "output": json.loads(json.dumps(module.run(*args)))}})
+    except BaseException as e:
+        results.append({{"ok": False, "error": type(e).__name__ + ": " + str(e)[:300]}})
+sys.stdout.write("\\n{_MARKER}" + json.dumps({{"ok": True, "results": results}}) + "\\n")
 '''
 
 
@@ -88,8 +93,10 @@ def _limits():  # pragma: no cover - POSIX only
     resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
 
 
-def run_in_sandbox(code: str, left: list[dict], right: list[dict], *, timeout_s: float = 5.0) -> dict[str, Any]:
-    """{"ok", "output" | "error", "timed_out", "elapsed_s"}. Callers must run policy_violations first."""
+def run_batch(code: str, calls: list[list], *, timeout_s: float = 10.0) -> dict[str, Any]:
+    """Call run(*args) once per entry of `calls`, all in one sandboxed process.
+    {"ok", "results": [{"ok", "output" | "error"}] | "error", "timed_out", "elapsed_s"}; "ok" is False only
+    when the module itself failed (import error, timeout, crash). Callers must run policy_violations first."""
     env = {"SYSTEMROOT": os.environ["SYSTEMROOT"]} if os.name == "nt" and "SYSTEMROOT" in os.environ else {}
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="agentoffice-sandbox-") as tmp:
@@ -97,10 +104,10 @@ def run_in_sandbox(code: str, left: list[dict], right: list[dict], *, timeout_s:
         runner = Path(tmp) / "runner.py"
         module.write_text(code, encoding="utf-8")
         runner.write_text(_RUNNER, encoding="utf-8")
-        payload = json.dumps({"path": str(module), "left": left, "right": right})
+        payload = json.dumps({"path": str(module), "calls": calls})
         try:
             proc = subprocess.run([sys.executable, "-I", str(runner)], input=payload, capture_output=True,
-                                  text=True, timeout=timeout_s, cwd=tmp, env=env,
+                                  text=True, encoding="utf-8", timeout=timeout_s, cwd=tmp, env=env,
                                   preexec_fn=_limits if os.name == "posix" else None)
         except subprocess.TimeoutExpired:
             return {"ok": False, "error": f"timed out after {timeout_s:g}s", "timed_out": True,
@@ -112,3 +119,11 @@ def run_in_sandbox(code: str, left: list[dict], right: list[dict], *, timeout_s:
     tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-1:] or ["no output"]
     return {"ok": False, "error": f"process exited {proc.returncode}: {tail[0][:300]}", "timed_out": False,
             "elapsed_s": elapsed}
+
+
+def run_in_sandbox(code: str, left: list[dict], right: list[dict], *, timeout_s: float = 5.0) -> dict[str, Any]:
+    """One call of run(left, right): {"ok", "output" | "error", "timed_out", "elapsed_s"}."""
+    batch = run_batch(code, [[left, right]], timeout_s=timeout_s)
+    if not batch["ok"]:
+        return batch
+    return {**batch.pop("results")[0], "timed_out": False, "elapsed_s": batch["elapsed_s"]}
