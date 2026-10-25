@@ -1,0 +1,430 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>AgentOffice — Open Agent Hackathon 2026</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400..700&display=swap"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&display=swap"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"><style>
+@page { size: 1920px 1080px; margin: 0; }
+* { box-sizing: border-box; margin: 0; }
+html, body { background: #0e1116; }
+section { width: 1920px; height: 1080px; position: relative; overflow: hidden; page-break-after: always;
+          break-after: page; margin: 0 auto 24px; }
+aside { display: none; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 14px 18px; text-align: left; }
+x-shape { display: block; flex: none; }
+x-shape[kind="circle"] { border-radius: 50%; }
+x-shape[kind="arrow-right"] { clip-path: polygon(0 30%, 60% 30%, 60% 0, 100% 50%, 60% 100%, 60% 70%, 0 70%); }
+@media print { section { margin: 0; } }
+</style></head><body><section id="cover" data-transition="fade" style="background:#15202B;color:#F6F4EE;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;letter-spacing:4px;text-transform:uppercase;color:#E07A2E">Open Agent Hackathon 2026 · Track 3 · Reasoning Architecture</p>
+<div style="display:flex;flex-direction:column;gap:40px">
+<h1 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:160px;font-weight:700;line-height:1;letter-spacing:-4px;color:#F6F4EE">AgentOffice</h1>
+<p style="font-size:44px;line-height:1.3;color:#C9D3DC;width:1320px">An AI office team you just tell what to do. It plans the spreadsheet work, writes the automation, tests it on your data, and asks before anything runs.</p>
+</div>
+<p style="font-size:24px;color:#C9D3DC">Team Automaters · Built on Zetaris, Meterless Nightshift and NVIDIA Nemotron</p>
+<aside>AgentOffice is an office team made of agents that you can simply tell what to do. Attach a spreadsheet and describe the repetitive work, and it plans the steps, writes the automation, tests it on your real data and asks you to approve the exact code before handing back the filled file. You can also ask it where your team's time goes, and it answers with evidence and proposes what to automate first.</aside>
+</section>
+<section id="problem" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:64px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Office teams lose hours to work nobody has time to fix</h2>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;letter-spacing:2px;text-transform:uppercase;color:#B85A16">Who</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:600;line-height:1.2">Small office teams</h3>
+<p style="font-size:32px;line-height:1.4;color:#3D4A56">Ops, finance and admin teams with no automation engineer on staff.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;letter-spacing:2px;text-transform:uppercase;color:#B85A16">Where it hurts</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:600;line-height:1.2">Repeated manual steps</h3>
+<p style="font-size:32px;line-height:1.4;color:#3D4A56">Email, PDF, spreadsheet, ERP: the same steps many times a day, across tools nobody connected.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;letter-spacing:2px;text-transform:uppercase;color:#B85A16">What’s missing</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:600;line-height:1.2">Someone to fix it safely</h3>
+<p style="font-size:32px;line-height:1.4;color:#3D4A56">Find the routine, prove it’s worth it, build and test it, and get sign-off.</p>
+</div>
+</div>
+<aside>Our user is a small office team: operations, finance or admin, with nobody whose job is automation. Their time goes into the same handful of manual steps, many times a day, spread across email, PDFs, spreadsheets and an ERP. Plenty of tools can automate a task once you know which task. What these teams lack is someone to find the routine, prove it is worth automating, build it, test it, and get it approved safely.</aside>
+</section>
+<section id="numbers" data-transition="fade" style="background:#ECE7DB;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:48px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;letter-spacing:2px;text-transform:uppercase;color:#B85A16">Synthetic dataset · invoice matching · hours per week</p>
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Three systems, three answers</h2>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:12px">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:160px;font-weight:700;line-height:1;color:#15202B">71.5</p>
+<p style="font-size:32px;font-weight:600">Timesheets</p>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">What people reported</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:160px;font-weight:700;line-height:1;color:#2459B8">32.9</p>
+<p style="font-size:32px;font-weight:600;color:#2459B8">Activity log</p>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Measured hands-on time: the one we size automations against</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:160px;font-weight:700;line-height:1;color:#15202B">19.5</p>
+<p style="font-size:32px;font-weight:600">Ticket system</p>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">What people chose to log</p>
+</div>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#3D4A56">The World Model keeps all three, flags the conflict on the record, and the Conflict Critic explains which source to trust for what.</p>
+<aside>Here is why this is hard. In our synthetic dataset, three systems describe the same work, invoice matching, and give three different answers: timesheets say 71.5 hours a week, the ticket system says 19.5, and the activity log measures 32.9 hours of hands-on time. AgentOffice does not pick one silently. The World Model stores all three with their provenance and flags the disagreement as a conflict. The Conflict Critic then explains which source to trust: the activity log for sizing an automation. The data is synthetic and clearly labelled.</aside>
+</section>
+<section id="task" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Tell it the task. Approve the code. Get the file.</h2>
+<div style="display:flex;gap:64px;align-items:stretch">
+<div style="width:640px;display:flex;flex-direction:column;gap:20px;background:#0B0C0F;border-radius:40px;padding:28px 32px">
+<div style="display:flex;align-items:center;gap:16px;background:#16181D;border-radius:999px;padding:14px 22px;align-self:center">
+<x-shape kind="circle" style="background:#7C9CFF;width:24px;height:24px"></x-shape>
+<p style="font-size:24px;font-weight:600;color:#F2F4F8">Engineer · wrote the automation</p>
+</div>
+<p style="font-size:24px;line-height:1.4;color:#0B0C0F;background:#7C9CFF;border-radius:24px;padding:18px 22px;align-self:flex-end;width:480px">Fill in each employee’s team and role from the staff directory, fix the dates, flag claims over 500, totals by team. <b>expense_claims.xlsx</b></p>
+<div style="display:flex;flex-direction:column;gap:12px;background:#16181D;border-radius:24px;padding:22px 24px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:20px;color:#9AA1AE">QA · every case passed · whole file matches the plan</p>
+<p style="font-size:24px;line-height:1.4;color:#F2F4F8">Preview: Team, Role, Amount incl GST, Needs Approval filled in; new sheet <b>Totals by Team</b></p>
+<p style="font-size:24px;font-weight:600;color:#0B0C0F;background:#7C9CFF;border-radius:14px;padding:10px 18px;align-self:flex-start">Approve &amp; run</p>
+</div>
+<p style="font-size:20px;color:#9AA1AE;text-align:center">Ctrl+Shift+Space opens it over any app</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:26px">
+<div style="display:flex;gap:24px;align-items:baseline"><p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:36px;font-weight:700;color:#B85A16;width:40px">1</p><p style="flex:1;font-size:28px;line-height:1.4"><b>Say it, attach it.</b> Plain words plus a CSV or Excel file, from a floating island like Copilot.</p></div>
+<div style="display:flex;gap:24px;align-items:baseline"><p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:36px;font-weight:700;color:#B85A16;width:40px">2</p><p style="flex:1;font-size:28px;line-height:1.4"><b>Plan on real data.</b> The file is profiled through Zetaris; the PM writes a step plan; a critic checks every column, lookup and date format against it.</p></div>
+<div style="display:flex;gap:24px;align-items:baseline"><p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:36px;font-weight:700;color:#B85A16;width:40px">3</p><p style="flex:1;font-size:28px;line-height:1.4"><b>Build and test.</b> Nemotron writes the Python; QA checks it against an independent reference of the plan on your rows and edge cases, and sends failures back.</p></div>
+<div style="display:flex;gap:24px;align-items:baseline"><p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:36px;font-weight:700;color:#B85A16;width:40px">4</p><p style="flex:1;font-size:28px;line-height:1.4"><b>You approve the exact code.</b> Only then does it run: a filled workbook with an audit sheet.</p></div>
+<div style="display:flex;gap:24px;align-items:baseline"><p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:36px;font-weight:700;color:#B85A16;width:40px">5</p><p style="flex:1;font-size:28px;line-height:1.4"><b>It remembers.</b> Next week’s file: same approved code, re-tested, runs without asking.</p></div>
+</div>
+</div>
+<aside>This is the everyday use. Press Control Shift Space anywhere and the AgentOffice island opens over your current app, like Copilot. Type what you want done to a spreadsheet and attach it. The data profiler reads the file through Zetaris, because every upload becomes a Zetaris table. The PM turns your sentence into a precise step plan, and a critic checks it against the real file: the columns exist, the staff lookup in Zetaris actually matches your emails, every date format is covered. Nemotron writes the Python, and QA tests it against an independent reference implementation of the plan, on your rows and on edge cases. You see a preview and approve the exact code, and only then does it run and hand back the filled workbook with an audit sheet. Next week, H-MEM remembers your approval, so the same automation runs straight away.</aside>
+</section>
+<section id="product" data-transition="fade" style="background:#15202B;color:#F6F4EE;font-family:'IBM Plex Sans', Arial, sans-serif;padding:96px 128px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:48px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:64px;font-weight:700;line-height:1.1;color:#F6F4EE">What it looks like</h2>
+<img src="../images/ui-island.png" alt="The collapsed island reading: Your file is ready, done" style="width:492px;height:75px;object-fit:contain;border-radius:38px">
+</div>
+<div style="display:flex;gap:48px;justify-content:center">
+<div style="display:flex;flex-direction:column;gap:16px;align-items:center">
+<img src="../images/ui-team-at-work.png" alt="Team at work: each agent step streams into the chat as it happens" style="width:364px;height:602px;object-fit:contain;border-radius:28px">
+<p style="font-size:24px;line-height:1.35;color:#C9D3DC;width:376px;text-align:center">Every agent step streams in live</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:16px;align-items:center">
+<img src="../images/ui-plan-and-qa.png" alt="The plan in plain steps, QA results and checks" style="width:364px;height:602px;object-fit:contain;border-radius:28px">
+<p style="font-size:24px;line-height:1.35;color:#C9D3DC;width:376px;text-align:center">The plan, QA checks and a preview before approval</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:16px;align-items:center">
+<img src="../images/ui-done.png" alt="Done: filled spreadsheet and automation downloads" style="width:364px;height:602px;object-fit:contain;border-radius:28px">
+<p style="font-size:24px;line-height:1.35;color:#C9D3DC;width:376px;text-align:center">Approved code runs; download the filled file</p>
+</div>
+</div>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:20px;color:#9AA1AE;text-align:center">Screens from the expense-claims demo in sample mode; live runs show the Nemotron route in the header.</p>
+<aside>This is the real interface. The island sits at the top of the screen and reports progress even when it's folded away; here it says the file is ready. Open it and you see each agent's step as it happens: the profiler querying Zetaris, the PM's plan, the spec critic, the engineer, QA and the manager. Before anything runs you get the plan in plain steps, QA's checks, a preview of your file after the change and the new totals sheet. Approve, and the approved code runs and hands you the filled spreadsheet and the automation itself. These screens are from the demo file in sample mode; a live run looks the same, with Nemotron through Nightshift named in the header.</aside>
+</section>
+<section id="solution" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:48px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Ask where the time goes: three stages, one shared memory</h2>
+<div style="display:flex;gap:24px;align-items:stretch">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">1 · Discover · Track 1</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:600;line-height:1.2">Where does the time go?</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Source Mapper · Reconciler · Conflict Critic</p>
+</div>
+<x-shape kind="arrow-right" style="background:#B85A16;width:64px;height:32px;align-self:center"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">2 · Explain · Track 2</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:600;line-height:1.2">Why is this the bottleneck?</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Research Planner · Retriever · Report Writer · Insight Critic</p>
+</div>
+<x-shape kind="arrow-right" style="background:#B85A16;width:64px;height:32px;align-self:center"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15202B;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#E07A2E">3 · Build · Track 3, primary</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:600;line-height:1.2;color:#F6F4EE">What should we do about it?</h3>
+<p style="font-size:24px;line-height:1.4;color:#C9D3DC">PM · Priority Critic · Engineer · QA · Manager · Memory Keeper</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#ECE7DB;padding:32px 40px;border-radius:16px">
+<p style="font-size:32px;line-height:1.4;color:#15202B"><b>Shared World Model:</b> every agent reads its context from it and writes what it learns back. <b>H-MEM</b> carries lessons and human decisions from one run to the next.</p>
+</div>
+<aside>The product is one pipeline with three stages, and each stage answers one of the three track challenges. Discover finds where the time goes across fragmented sources. Explain says why, with every number cited. Decide and Build, our primary track, picks what to automate, builds it, tests it and asks a human to approve. Thirteen agents share one World Model: every agent reads its context from it and writes back what it learns. H-MEM, a second engine, carries lessons and human decisions between runs.</aside>
+</section>
+<section id="loop" data-transition="fade" style="background:#15202B;color:#F6F4EE;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#F6F4EE">The build loop argues first</h2>
+<div style="position:absolute;left:128px;top:250px;width:240px;height:130px;background:#22303F;border:2px solid #E07A2E;border-radius:16px;padding:24px;display:flex;flex-direction:column;justify-content:center">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2;color:#F6F4EE">Priority Critic</h3>
+</div>
+<p style="position:absolute;left:400px;top:276px;width:880px;font-size:24px;line-height:1.4;color:#C9D3DC">Sends back any claim above the hands-on time the activity log measures · max 2 rounds</p>
+<div style="position:absolute;left:128px;top:440px;width:240px;height:200px;background:#F6F4EE;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2;color:#15202B">PM</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Ranks routines, writes the spec</p>
+</div>
+<div style="position:absolute;left:464px;top:440px;width:240px;height:200px;background:#F6F4EE;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2;color:#15202B">Engineer</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Writes code from the spec</p>
+</div>
+<div style="position:absolute;left:800px;top:440px;width:240px;height:200px;background:#F6F4EE;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2;color:#15202B">QA</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Tests the code against the spec</p>
+</div>
+<div style="position:absolute;left:1136px;top:440px;width:240px;height:200px;background:#F6F4EE;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2;color:#15202B">Manager</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Decides behind a rule gate</p>
+</div>
+<div style="position:absolute;left:1472px;top:440px;width:240px;height:200px;background:#E07A2E;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2;color:#15202B">Human</h3>
+<p style="font-size:24px;line-height:1.4;color:#15202B">Approves the exact code hash</p>
+</div>
+<x-connector x1="248" y1="388" x2="248" y2="432" head="both" style="color:#E07A2E;border-width:4px"></x-connector>
+<x-connector x1="376" y1="540" x2="456" y2="540" head="end" style="color:#E07A2E;border-width:4px"></x-connector>
+<x-connector x1="712" y1="540" x2="792" y2="540" head="end" style="color:#E07A2E;border-width:4px"></x-connector>
+<x-connector x1="1048" y1="540" x2="1128" y2="540" head="end" style="color:#E07A2E;border-width:4px"></x-connector>
+<x-connector x1="1384" y1="540" x2="1464" y2="540" head="end" style="color:#E07A2E;border-width:4px"></x-connector>
+<x-connector x1="920" y1="648" x2="920" y2="704" head="none" style="color:#7FA8F0;border-width:4px"></x-connector>
+<x-connector x1="920" y1="704" x2="584" y2="704" head="none" style="color:#7FA8F0;border-width:4px"></x-connector>
+<x-connector x1="584" y1="704" x2="584" y2="648" head="end" style="color:#7FA8F0;border-width:4px"></x-connector>
+<p style="position:absolute;left:464px;top:724px;width:880px;font-size:24px;line-height:1.4;color:#C9D3DC">QA’s failing cases go back to the Engineer · max 3 revisions</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#C9D3DC">Every arrow is a traced handoff in logs/trace-&lt;run_id&gt;.jsonl, hash-chained so edits are detectable.</p>
+<aside>This is the deepest loop, and the heart of Track 3. The PM ranks the routines the data revealed and writes a structured spec. Before that plan goes anywhere, a Priority Critic checks every claim against what the activity log measured and sends over-claims back. The Engineer writes code from the spec. QA tests it, and every failing case goes back to the Engineer, up to three revisions. The Manager decides behind a rule gate: it cannot approve code that failed QA. Finally a human approves the exact code, bound to its hash. Every arrow on this slide is a logged handoff.</aside>
+</section>
+<section id="qa" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">QA tests the spec, never the code</h2>
+<div style="display:flex;gap:64px">
+<div style="flex:1;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#F6F4EE;background:#2459B8;width:64px;height:64px;border-radius:50%;text-align:center;line-height:2">1</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">The PM writes a spec, not prose</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">A small rule language: a key, ordered checks, and the statuses they lead to.</p>
+</div>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#F6F4EE;background:#2459B8;width:64px;height:64px;border-radius:50%;text-align:center;line-height:2">2</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">QA derives the expected results</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">From the spec alone: every branch, tolerance edges, case and spacing, ambiguous keys, and a renamed column that must fail loudly.</p>
+</div>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#F6F4EE;background:#2459B8;width:64px;height:64px;border-radius:50%;text-align:center;line-height:2">3</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">The code runs in a sandbox</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Allowed imports only, no eval or file access, an empty environment and a hard timeout.</p>
+</div>
+</div>
+</div>
+<div style="width:720px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:12px;background:#15202B;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#E07A2E">invoice_po_matcher</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#F6F4EE">key: po_number (strip, upper)</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#F6F4EE">check: vendor equals_ci → vendor_mismatch</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#F6F4EE">check: amount within 1% → amount_mismatch</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#F6F4EE">statuses: no_po · ambiguous_po · matched</p>
+</div>
+<div style="display:flex;flex-direction:column;background:#ECE7DB;padding:32px 40px;border-radius:16px;border-left:8px solid #E07A2E">
+<p style="font-size:32px;line-height:1.4;color:#15202B">Halve the tolerance in the code, and QA catches it. That case is in the test suite.</p>
+</div>
+</div>
+</div>
+<aside>The key design decision. The PM does not hand the Engineer a paragraph; it writes a spec in a small rule language, a key plus ordered checks and statuses. Because the spec has exact meaning, QA computes the expected result for every test case from the spec alone, without looking at the code: every branch, values just inside and just outside a tolerance, case and spacing variants, ambiguous keys, and a renamed column that correct code must reject loudly. So QA cannot simply agree with buggy code. The code runs in a sandbox with an import whitelist, no eval or file access, an empty environment and a timeout. If you halve the tolerance in the code, QA catches it, and that case is in our test suite.</aside>
+</section>
+<section id="memory" data-transition="fade" style="background:#ECE7DB;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:48px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Memory changes what the team does next</h2>
+<div style="display:flex;gap:24px;align-items:stretch">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Session 1</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:600;line-height:1.2">Learns</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">The team proposes the invoice matcher. The finance manager rejects it: “ERP writes need my sign-off first.”</p>
+</div>
+<x-shape kind="arrow-right" style="background:#B85A16;width:64px;height:32px;align-self:center"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Session 2</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:600;line-height:1.2">Recalls</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">The Memory Keeper retrieves that decision. The PM proposes order-status replies instead.</p>
+</div>
+<x-shape kind="arrow-right" style="background:#B85A16;width:64px;height:32px;align-self:center"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Session 3</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:600;line-height:1.2">Acts on it</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">With that approved, it moves on to CRM dedupe. A Finance-only question escalates instead of asking again.</p>
+</div>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#3D4A56">H-MEM, built to the Meterless reference: 8-signal retrieval with reasons, an approval boundary for new memories, conflicts resolved on the record, a hash-chained trust ledger. Tested end to end.</p>
+<aside>Agents that forget repeat their mistakes, so we built the Meterless H-MEM engine as the team’s long memory. In session one the team proposes the invoice matcher and the finance manager rejects it, with a reason. In session two the Memory Keeper retrieves that decision and the PM proposes order-status replies instead. In session three, with that one approved, the team moves on to CRM dedupe. And when the only option is the code a human already rejected, the Manager escalates instead of asking again. This three-session behaviour is an automated test.</aside>
+</section>
+<section id="zetaris" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Zetaris is the data layer, end to end</h2>
+<div style="display:flex;gap:64px">
+<div style="flex:1;display:flex;flex-direction:column;gap:36px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Your upload is a Zetaris table</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Our API serves the workforce tables and every uploaded sheet (one row per cell) as JSON; seven statements, run one at a time after a dry run, register them as Lightning REST tables.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Agents write plain SQL</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">The profiler reads your file with SQL, the PM’s lookups pull the staff directory with SQL, and the analysts ground every finding in SQL rows. No views; the trace keeps both versions of the SQL.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Verified on a live install</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">All 15 pipeline queries ran on local Zetaris 2.4.3, with findings identical to the sample run.</p>
+</div>
+</div>
+<div style="width:620px;display:flex;flex-direction:column;gap:20px">
+<table style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:28px;color:#15202B">
+<tr style="background:#15202B"><th style="width:65%;color:#F6F4EE">REST table</th><th style="width:35%;color:#F6F4EE;text-align:right">Rows</th></tr>
+<tr><td>people</td><td style="text-align:right">12</td></tr>
+<tr style="background:#ECE7DB"><td>timesheets</td><td style="text-align:right">827</td></tr>
+<tr><td>tickets</td><td style="text-align:right">223</td></tr>
+<tr style="background:#ECE7DB"><td>email_events</td><td style="text-align:right">2,672</td></tr>
+<tr><td>task_events</td><td style="text-align:right">8,266</td></tr>
+<tr style="background:#ECE7DB"><td>upload_cells</td><td style="text-align:right">live</td></tr>
+</table>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Workforce counts match the generator’s manifest; upload_cells is re-read at query time, so a file is queryable the moment it’s uploaded.</p>
+</div>
+</div>
+<aside>Zetaris is our data layer, end to end, including the spreadsheet you upload: it becomes a Zetaris REST table, one row per cell, so the data profiler reads it with SQL and the PM joins it with the staff directory that also lives in Zetaris. Zetaris cannot read files on a laptop, so our API serves each table as JSON and we register it as a Lightning REST table: seven statements, sent one at a time after a dry run. Every row count matches the data generator’s manifest. The agents keep writing plain SQL against workforce dot table, and the adapter reads the matching REST table with a lateral view, so we needed no views and no extra database objects. Both the agent’s SQL and the SQL that actually ran are in the trace. We ran all fifteen of the pipeline’s queries on a live local Zetaris, and the findings were identical to sample mode.</aside>
+</section>
+<section id="meterless" data-transition="fade" style="background:#ECE7DB;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:48px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Meterless: provider and two engines</h2>
+<div style="display:flex;gap:32px;align-items:stretch">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15202B;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#E07A2E">Power rule</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:36px;font-weight:600;line-height:1.2;color:#F6F4EE">Nightshift, primary provider</h3>
+<p style="font-size:24px;line-height:1.4;color:#C9D3DC">The full provider contract: status from GET /v1/models, auto-detect, connect links, a 180 s timeout. Every call logs the model that answered.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Build rule · engine 1</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:36px;font-weight:600;line-height:1.2">World Model</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Content-hash IDs, an append-only log with row provenance, a 10-step idempotent ingest. Stage 1’s source conflicts are its conflict records.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Build rule · engine 2</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:36px;font-weight:600;line-height:1.2">H-MEM</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Tiered memory behind an approval boundary, 8-signal retrieval with reasons, a hash-chained trust ledger. Approved automations run again without asking.</p>
+</div>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#15202B"><b>NVIDIA:</b> Nemotron models run through Nightshift lanes, hosted, with no local GPU. Route used: meterless/deep → nvidia/nemotron-3-ultra-550b-a55b, recorded in every trace.</p>
+<aside>Meterless appears three times. First, the power rule: Nightshift is our primary model provider, and we implemented its published provider contract: the URL normalization, the status check from the models endpoint, auto-detect, connect links and the long timeout for model loads. Every model call records which model actually answered. Second, the build rule: we implemented two engines from scratch. The World Model is the shared spine every stage reads and writes, and the conflicts our Conflict Critic judges are its own conflict records. H-MEM is the team’s memory, and it changes later decisions: an automation you approved runs again without asking, and one you rejected is not proposed again. NVIDIA Nemotron runs through the Nightshift route meterless deep, which answers with Nemotron 3 Ultra; every trace records it.</aside>
+</section>
+<section id="evidence" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Every step leaves evidence</h2>
+<div style="display:flex;gap:64px">
+<div style="width:960px;display:flex;flex-direction:column;gap:20px">
+<table style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#15202B">
+<tr style="background:#15202B"><th style="width:33%;color:#F6F4EE">Agent</th><th style="width:31%;color:#F6F4EE">Action</th><th style="width:36%;color:#F6F4EE">Status</th></tr>
+<tr><td>SourceMapperAgent</td><td>zetaris_query</td><td>skipped (sample)</td></tr>
+<tr style="background:#ECE7DB"><td>ConflictCriticAgent</td><td>critique_sources</td><td>needs_attention</td></tr>
+<tr><td>InsightCriticAgent</td><td>critique_claims</td><td>approved</td></tr>
+<tr style="background:#ECE7DB"><td>PriorityCritic</td><td>critique_priority</td><td>approved</td></tr>
+<tr><td>QAAgent</td><td>critique_output</td><td>approved</td></tr>
+<tr style="background:#ECE7DB"><td>ManagerAgent</td><td>request_approval</td><td>pending</td></tr>
+</table>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Real events from a sample-mode run: output_examples/sample_mode/example_1.trace.jsonl (59 events).</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Hash-chained</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Edit or delete a line and verification fails.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Bound to code</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">An approval covers one code hash, nothing else.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Runs without keys</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Sample mode runs the real agent logic on synthetic data.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">158 tests</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Also passing inside the Docker image on Python 3.11.</p>
+</div>
+</div>
+</div>
+<aside>Judges need to see how the team got to its answer, so every step is evidence. Each run writes a JSONL trace: which agent acted, on what, which model or data source answered, and the outcome. These rows are real events from one of our saved sample runs: a Zetaris call skipped and logged in sample mode, the Conflict Critic flagging sources, the critics approving, and a pending approval request. The trace is hash-chained, so editing or deleting a line is detected. An approval covers one exact code hash. Sample mode runs the real agent logic with no keys. And the whole test suite passes, including inside the Docker image on Python 3.11.</aside>
+</section>
+<section id="results" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Live results: Nemotron + Zetaris, 25 Oct</h2>
+<table style="font-size:26px;color:#15202B">
+<tr style="background:#15202B"><th style="width:38%;color:#F6F4EE">Spreadsheet task</th><th style="width:16%;color:#F6F4EE;text-align:right">Plan steps</th><th style="width:20%;color:#F6F4EE;text-align:right">QA rounds</th><th style="width:26%;color:#F6F4EE;text-align:right">Final QA · after approval</th></tr>
+<tr><td>Expense claims: staff lookup in Zetaris, dates, GST, flags, totals</td><td style="text-align:right">7</td><td style="text-align:right">3 (policy, then blanks)</td><td style="text-align:right">49 / 49 · 275 cells</td></tr>
+<tr style="background:#ECE7DB"><td>Leads vs CRM sheet: split names, owner, status</td><td style="text-align:right">4</td><td style="text-align:right">1</td><td style="text-align:right">34 / 34 · 119 cells</td></tr>
+<tr><td>Vendor invoices: dedupe, fill, overdue, sort</td><td style="text-align:right">6</td><td style="text-align:right">1</td><td style="text-align:right">40 / 40 · 34 → 30 rows</td></tr>
+</table>
+<table style="font-size:26px;color:#15202B">
+<tr style="background:#15202B"><th style="width:44%;color:#F6F4EE">Analysis question</th><th style="width:30%;color:#F6F4EE">Automate first</th><th style="width:14%;color:#F6F4EE;text-align:right">Saved / wk</th><th style="width:12%;color:#F6F4EE;text-align:right">QA</th></tr>
+<tr><td>Finance: where are we losing time?</td><td>invoice matching (high risk)</td><td style="text-align:right">≈ 24.4 h</td><td style="text-align:right">28 / 28</td></tr>
+<tr style="background:#ECE7DB"><td>Operations: what is eating the week?</td><td>order status updates</td><td style="text-align:right">≈ 7.9 h</td><td style="text-align:right">25 / 25</td></tr>
+<tr><td>Sales: is CRM data entry worth it?</td><td>CRM data entry</td><td style="text-align:right">≈ 7.1 h</td><td style="text-align:right">28 / 28</td></tr>
+</table>
+<aside>These are live runs with Nemotron through Meterless Nightshift and data from Zetaris, saved with their traces in the repository. In task mode, Nemotron wrote every plan and every line of code. The expense task shows the loop working: the first draft was rejected by the sandbox policy, the second mishandled blank and text-typed amounts, which QA caught with mutation cases and cases the model designed itself, and the third passed all 49 cases, and only after approval did it run and fill 275 cells. The analysis questions each pick a different automation, with savings capped at measured hands-on time on our labelled synthetic data.</aside>
+</section>
+<section id="stack" data-transition="fade" style="background:#ECE7DB;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">What it’s built with</h2>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px">
+<div style="display:flex;flex-direction:column;gap:12px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Runtime</p>
+<p style="font-size:32px;line-height:1.4">Python 3.11, FastAPI, httpx, openpyxl; a plain-JS chat island</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">State</p>
+<p style="font-size:32px;line-height:1.4">SQLite for the World Model and H-MEM; JSONL traces</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Data</p>
+<p style="font-size:32px;line-height:1.4">Zetaris 2.4.3 in local Docker, Lightning REST tables</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Models</p>
+<p style="font-size:32px;line-height:1.4">Meterless Nightshift, NVIDIA Nemotron lanes</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Packaging</p>
+<p style="font-size:32px;line-height:1.4">Docker on python:3.11-slim; sample mode needs no keys</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#15202B;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#E07A2E">Built with</p>
+<p style="font-size:32px;line-height:1.4;color:#F6F4EE">Claude Code; every line reviewed and tested</p>
+</div>
+</div>
+<aside>The stack is deliberately small. Python 3.11 with FastAPI and httpx; no agent framework, the agents are plain Python we wrote. The World Model and H-MEM persist in SQLite, and traces are JSONL. Zetaris runs locally in Docker and holds the data as Lightning REST tables. Models come through Meterless Nightshift, routed to NVIDIA Nemotron. The app ships as a Docker image, and sample mode runs without any keys. We built it with Claude Code, and the team reviewed and tested all of it.</aside>
+</section>
+<section id="next" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">What comes next</h2>
+<div style="display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;gap:32px;align-items:baseline">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:700;color:#B85A16;width:56px">1</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Real exports in</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Register a team’s ERP and CRM exports in Zetaris; the agents’ SQL stays the same.</p>
+</div>
+</div>
+<div style="display:flex;gap:32px;align-items:baseline">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:700;color:#B85A16;width:56px">2</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Dry run, run and undo</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Show the changes an approved automation would make, then apply them reversibly.</p>
+</div>
+</div>
+<div style="display:flex;gap:32px;align-items:baseline">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:700;color:#B85A16;width:56px">3</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Scheduled runs and more step types</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Run approved automations on each new file automatically; add steps for emails, PDFs and pivots.</p>
+</div>
+</div>
+<div style="display:flex;gap:32px;align-items:baseline">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:700;color:#B85A16;width:56px">4</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Memory that consolidates</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">H-MEM dreaming and sleep: merge related lessons, archive stale ones.</p>
+</div>
+</div>
+<div style="display:flex;gap:32px;align-items:baseline">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:40px;font-weight:700;color:#B85A16;width:56px">5</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Priorities learned from approvals</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Weight the PM’s ranking by what humans approved and rejected before.</p>
+</div>
+</div>
+</div>
+<aside>Next steps. First, real data: register a team’s own ERP and CRM exports in Zetaris; the agents’ SQL does not change. Second, a safe way to go live: show what an approved automation would change, then apply it reversibly. Third, scheduled runs, so an approved automation processes each new file on its own, and more step types for emails, PDFs and pivots. Fourth, the rest of the H-MEM engine, dreaming and sleep, to merge and archive lessons. Fifth, use past approvals and rejections to tune how the PM ranks work.</aside>
+</section>
+<section id="close" data-transition="fade" style="background:#E07A2E;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:center;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:96px;font-weight:700;line-height:1.1;color:#15202B">A team that argues, tests and remembers, and asks before it acts.</h2>
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:32px;color:#15202B">github.com/allurimohansrisaivarma-coder/AutoStack_Gen-AI</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#15202B">docker run -p 8000:8000 -e SAMPLE_MODE=true oah-submission</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#15202B">Team Automaters · Track 3, Reasoning Architecture · Open Agent Hackathon 2026</p>
+<aside>That is AgentOffice: a small office team of agents that argue with each other, test against the spec, remember what humans decided, and always ask before anything goes live. The code is public on GitHub, and you can run it without any keys in sample mode with one Docker command. Thank you.</aside>
+</section>
+</body></html>

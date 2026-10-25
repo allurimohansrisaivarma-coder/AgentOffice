@@ -12,6 +12,14 @@ This is our Open Agent Hackathon 2026 submission. The primary track is **Track 3
 - **Desktop island (Windows):** `python scripts/island.py` puts the same island on top of every app, like Copilot: **Ctrl+Shift+Space** from anywhere opens it, Esc or clicking away folds it back. It uses Edge (or Chrome) in app mode with its own profile and only standard-library `ctypes`; no extra install.
 - **API:** everything the UI does is plain HTTP (see [API](#api)).
 
+| The team at work | Plan, QA and preview | Approved and done |
+|---|---|---|
+| ![Each agent step streams into the chat](docs/images/ui-team-at-work.png) | ![The plan in plain steps with QA checks](docs/images/ui-plan-and-qa.png) | ![Filled spreadsheet ready to download](docs/images/ui-done.png) |
+
+*Screens from the expense-claims demo in sample mode.*
+
+**Submission materials:** the slide deck ([PDF](docs/AgentOffice-deck.pdf), [HTML source](docs/deck/), rebuilt with `python scripts/build_deck.py --pdf`), the [sponsor technology explanation](docs/SPONSOR_TECH.md) with the tests that prove each engine, the [demo script](docs/DEMO_SCRIPT.md), and [`metadata.json`](metadata.json). Team: **Automaters**.
+
 ## Task mode: "do this to my spreadsheet"
 
 ```mermaid
@@ -295,7 +303,9 @@ app/approvals.py    hash-chained human approval ledger
 app/pipeline.py     the three-stage analysis run
 run.py              FastAPI on 0.0.0.0:$PORT: UI + API
 scripts/            island (desktop), check_connections, load_zetaris, generate_workforce_data,
-                    generate_task_samples, run_examples
+                    generate_task_samples, run_examples, build_deck
+docs/               deck/ (slide source) + AgentOffice-deck.pdf, SPONSOR_TECH.md, DEMO_SCRIPT.md, images/
+metadata.json       project, team and sponsor usage for the submission form
 ```
 
 ## Done vs not yet

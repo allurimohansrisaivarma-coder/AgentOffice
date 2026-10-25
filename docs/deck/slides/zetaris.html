@@ -1,0 +1,32 @@
+<section id="zetaris" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Zetaris is the data layer, end to end</h2>
+<div style="display:flex;gap:64px">
+<div style="flex:1;display:flex;flex-direction:column;gap:36px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Your upload is a Zetaris table</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Our API serves the workforce tables and every uploaded sheet (one row per cell) as JSON; seven statements, run one at a time after a dry run, register them as Lightning REST tables.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Agents write plain SQL</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">The profiler reads your file with SQL, the PM’s lookups pull the staff directory with SQL, and the analysts ground every finding in SQL rows. No views; the trace keeps both versions of the SQL.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Verified on a live install</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">All 15 pipeline queries ran on local Zetaris 2.4.3, with findings identical to the sample run.</p>
+</div>
+</div>
+<div style="width:620px;display:flex;flex-direction:column;gap:20px">
+<table style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:28px;color:#15202B">
+<tr style="background:#15202B"><th style="width:65%;color:#F6F4EE">REST table</th><th style="width:35%;color:#F6F4EE;text-align:right">Rows</th></tr>
+<tr><td>people</td><td style="text-align:right">12</td></tr>
+<tr style="background:#ECE7DB"><td>timesheets</td><td style="text-align:right">827</td></tr>
+<tr><td>tickets</td><td style="text-align:right">223</td></tr>
+<tr style="background:#ECE7DB"><td>email_events</td><td style="text-align:right">2,672</td></tr>
+<tr><td>task_events</td><td style="text-align:right">8,266</td></tr>
+<tr style="background:#ECE7DB"><td>upload_cells</td><td style="text-align:right">live</td></tr>
+</table>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Workforce counts match the generator’s manifest; upload_cells is re-read at query time, so a file is queryable the moment it’s uploaded.</p>
+</div>
+</div>
+<aside>Zetaris is our data layer, end to end, including the spreadsheet you upload: it becomes a Zetaris REST table, one row per cell, so the data profiler reads it with SQL and the PM joins it with the staff directory that also lives in Zetaris. Zetaris cannot read files on a laptop, so our API serves each table as JSON and we register it as a Lightning REST table: seven statements, sent one at a time after a dry run. Every row count matches the data generator’s manifest. The agents keep writing plain SQL against workforce dot table, and the adapter reads the matching REST table with a lateral view, so we needed no views and no extra database objects. Both the agent’s SQL and the SQL that actually ran are in the trace. We ran all fifteen of the pipeline’s queries on a live local Zetaris, and the findings were identical to sample mode.</aside>
+</section>

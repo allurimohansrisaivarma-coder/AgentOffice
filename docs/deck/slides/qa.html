@@ -1,0 +1,41 @@
+<section id="qa" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">QA tests the spec, never the code</h2>
+<div style="display:flex;gap:64px">
+<div style="flex:1;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#F6F4EE;background:#2459B8;width:64px;height:64px;border-radius:50%;text-align:center;line-height:2">1</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">The PM writes a spec, not prose</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">A small rule language: a key, ordered checks, and the statuses they lead to.</p>
+</div>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#F6F4EE;background:#2459B8;width:64px;height:64px;border-radius:50%;text-align:center;line-height:2">2</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">QA derives the expected results</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">From the spec alone: every branch, tolerance edges, case and spacing, ambiguous keys, and a renamed column that must fail loudly.</p>
+</div>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#F6F4EE;background:#2459B8;width:64px;height:64px;border-radius:50%;text-align:center;line-height:2">3</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">The code runs in a sandbox</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Allowed imports only, no eval or file access, an empty environment and a hard timeout.</p>
+</div>
+</div>
+</div>
+<div style="width:720px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:12px;background:#15202B;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#E07A2E">invoice_po_matcher</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#F6F4EE">key: po_number (strip, upper)</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#F6F4EE">check: vendor equals_ci → vendor_mismatch</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#F6F4EE">check: amount within 1% → amount_mismatch</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#F6F4EE">statuses: no_po · ambiguous_po · matched</p>
+</div>
+<div style="display:flex;flex-direction:column;background:#ECE7DB;padding:32px 40px;border-radius:16px;border-left:8px solid #E07A2E">
+<p style="font-size:32px;line-height:1.4;color:#15202B">Halve the tolerance in the code, and QA catches it. That case is in the test suite.</p>
+</div>
+</div>
+</div>
+<aside>The key design decision. The PM does not hand the Engineer a paragraph; it writes a spec in a small rule language, a key plus ordered checks and statuses. Because the spec has exact meaning, QA computes the expected result for every test case from the spec alone, without looking at the code: every branch, values just inside and just outside a tolerance, case and spacing variants, ambiguous keys, and a renamed column that correct code must reject loudly. So QA cannot simply agree with buggy code. The code runs in a sandbox with an import whitelist, no eval or file access, an empty environment and a timeout. If you halve the tolerance in the code, QA catches it, and that case is in our test suite.</aside>
+</section>

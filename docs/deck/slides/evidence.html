@@ -1,0 +1,36 @@
+<section id="evidence" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Every step leaves evidence</h2>
+<div style="display:flex;gap:64px">
+<div style="width:960px;display:flex;flex-direction:column;gap:20px">
+<table style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#15202B">
+<tr style="background:#15202B"><th style="width:33%;color:#F6F4EE">Agent</th><th style="width:31%;color:#F6F4EE">Action</th><th style="width:36%;color:#F6F4EE">Status</th></tr>
+<tr><td>SourceMapperAgent</td><td>zetaris_query</td><td>skipped (sample)</td></tr>
+<tr style="background:#ECE7DB"><td>ConflictCriticAgent</td><td>critique_sources</td><td>needs_attention</td></tr>
+<tr><td>InsightCriticAgent</td><td>critique_claims</td><td>approved</td></tr>
+<tr style="background:#ECE7DB"><td>PriorityCritic</td><td>critique_priority</td><td>approved</td></tr>
+<tr><td>QAAgent</td><td>critique_output</td><td>approved</td></tr>
+<tr style="background:#ECE7DB"><td>ManagerAgent</td><td>request_approval</td><td>pending</td></tr>
+</table>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Real events from a sample-mode run: output_examples/sample_mode/example_1.trace.jsonl (59 events).</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Hash-chained</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Edit or delete a line and verification fails.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Bound to code</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">An approval covers one code hash, nothing else.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">Runs without keys</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Sample mode runs the real agent logic on synthetic data.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">158 tests</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Also passing inside the Docker image on Python 3.11.</p>
+</div>
+</div>
+</div>
+<aside>Judges need to see how the team got to its answer, so every step is evidence. Each run writes a JSONL trace: which agent acted, on what, which model or data source answered, and the outcome. These rows are real events from one of our saved sample runs: a Zetaris call skipped and logged in sample mode, the Conflict Critic flagging sources, the critics approving, and a pending approval request. The trace is hash-chained, so editing or deleting a line is detected. An approval covers one exact code hash. Sample mode runs the real agent logic with no keys. And the whole test suite passes, including inside the Docker image on Python 3.11.</aside>
+</section>

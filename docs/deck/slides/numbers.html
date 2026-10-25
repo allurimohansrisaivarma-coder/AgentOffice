@@ -1,0 +1,23 @@
+<section id="numbers" data-transition="fade" style="background:#ECE7DB;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:48px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;letter-spacing:2px;text-transform:uppercase;color:#B85A16">Synthetic dataset · invoice matching · hours per week</p>
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Three systems, three answers</h2>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:12px">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:160px;font-weight:700;line-height:1;color:#15202B">71.5</p>
+<p style="font-size:32px;font-weight:600">Timesheets</p>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">What people reported</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:160px;font-weight:700;line-height:1;color:#2459B8">32.9</p>
+<p style="font-size:32px;font-weight:600;color:#2459B8">Activity log</p>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Measured hands-on time: the one we size automations against</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:160px;font-weight:700;line-height:1;color:#15202B">19.5</p>
+<p style="font-size:32px;font-weight:600">Ticket system</p>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">What people chose to log</p>
+</div>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#3D4A56">The World Model keeps all three, flags the conflict on the record, and the Conflict Critic explains which source to trust for what.</p>
+<aside>Here is why this is hard. In our synthetic dataset, three systems describe the same work, invoice matching, and give three different answers: timesheets say 71.5 hours a week, the ticket system says 19.5, and the activity log measures 32.9 hours of hands-on time. AgentOffice does not pick one silently. The World Model stores all three with their provenance and flags the disagreement as a conflict. The Conflict Critic then explains which source to trust: the activity log for sizing an automation. The data is synthetic and clearly labelled.</aside>
+</section>

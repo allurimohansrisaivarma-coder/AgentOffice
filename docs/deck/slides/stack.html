@@ -1,0 +1,30 @@
+<section id="stack" data-transition="fade" style="background:#ECE7DB;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">What it’s built with</h2>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px">
+<div style="display:flex;flex-direction:column;gap:12px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Runtime</p>
+<p style="font-size:32px;line-height:1.4">Python 3.11, FastAPI, httpx, openpyxl; a plain-JS chat island</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">State</p>
+<p style="font-size:32px;line-height:1.4">SQLite for the World Model and H-MEM; JSONL traces</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Data</p>
+<p style="font-size:32px;line-height:1.4">Zetaris 2.4.3 in local Docker, Lightning REST tables</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Models</p>
+<p style="font-size:32px;line-height:1.4">Meterless Nightshift, NVIDIA Nemotron lanes</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Packaging</p>
+<p style="font-size:32px;line-height:1.4">Docker on python:3.11-slim; sample mode needs no keys</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#15202B;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#E07A2E">Built with</p>
+<p style="font-size:32px;line-height:1.4;color:#F6F4EE">Claude Code; every line reviewed and tested</p>
+</div>
+</div>
+<aside>The stack is deliberately small. Python 3.11 with FastAPI and httpx; no agent framework, the agents are plain Python we wrote. The World Model and H-MEM persist in SQLite, and traces are JSONL. Zetaris runs locally in Docker and holds the data as Lightning REST tables. Models come through Meterless Nightshift, routed to NVIDIA Nemotron. The app ships as a Docker image, and sample mode runs without any keys. We built it with Claude Code, and the team reviewed and tested all of it.</aside>
+</section>

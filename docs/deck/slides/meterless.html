@@ -1,0 +1,22 @@
+<section id="meterless" data-transition="fade" style="background:#ECE7DB;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:48px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Meterless: provider and two engines</h2>
+<div style="display:flex;gap:32px;align-items:stretch">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#15202B;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#E07A2E">Power rule</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:36px;font-weight:600;line-height:1.2;color:#F6F4EE">Nightshift, primary provider</h3>
+<p style="font-size:24px;line-height:1.4;color:#C9D3DC">The full provider contract: status from GET /v1/models, auto-detect, connect links, a 180 s timeout. Every call logs the model that answered.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Build rule · engine 1</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:36px;font-weight:600;line-height:1.2">World Model</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Content-hash IDs, an append-only log with row provenance, a 10-step idempotent ingest. Stage 1’s source conflicts are its conflict records.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FBFAF6;padding:40px;border:1px solid #E2DCCF;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#B85A16">Build rule · engine 2</p>
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:36px;font-weight:600;line-height:1.2">H-MEM</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Tiered memory behind an approval boundary, 8-signal retrieval with reasons, a hash-chained trust ledger. Approved automations run again without asking.</p>
+</div>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#15202B"><b>NVIDIA:</b> Nemotron models run through Nightshift lanes, hosted, with no local GPU. Route used: meterless/deep → nvidia/nemotron-3-ultra-550b-a55b, recorded in every trace.</p>
+<aside>Meterless appears three times. First, the power rule: Nightshift is our primary model provider, and we implemented its published provider contract: the URL normalization, the status check from the models endpoint, auto-detect, connect links and the long timeout for model loads. Every model call records which model actually answered. Second, the build rule: we implemented two engines from scratch. The World Model is the shared spine every stage reads and writes, and the conflicts our Conflict Critic judges are its own conflict records. H-MEM is the team’s memory, and it changes later decisions: an automation you approved runs again without asking, and one you rejected is not proposed again. NVIDIA Nemotron runs through the Nightshift route meterless deep, which answers with Nemotron 3 Ultra; every trace records it.</aside>
+</section>

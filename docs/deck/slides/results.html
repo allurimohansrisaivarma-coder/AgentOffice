@@ -1,0 +1,16 @@
+<section id="results" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">Live results: Nemotron + Zetaris, 25 Oct</h2>
+<table style="font-size:26px;color:#15202B">
+<tr style="background:#15202B"><th style="width:38%;color:#F6F4EE">Spreadsheet task</th><th style="width:16%;color:#F6F4EE;text-align:right">Plan steps</th><th style="width:20%;color:#F6F4EE;text-align:right">QA rounds</th><th style="width:26%;color:#F6F4EE;text-align:right">Final QA · after approval</th></tr>
+<tr><td>Expense claims: staff lookup in Zetaris, dates, GST, flags, totals</td><td style="text-align:right">7</td><td style="text-align:right">3 (policy, then blanks)</td><td style="text-align:right">49 / 49 · 275 cells</td></tr>
+<tr style="background:#ECE7DB"><td>Leads vs CRM sheet: split names, owner, status</td><td style="text-align:right">4</td><td style="text-align:right">1</td><td style="text-align:right">34 / 34 · 119 cells</td></tr>
+<tr><td>Vendor invoices: dedupe, fill, overdue, sort</td><td style="text-align:right">6</td><td style="text-align:right">1</td><td style="text-align:right">40 / 40 · 34 → 30 rows</td></tr>
+</table>
+<table style="font-size:26px;color:#15202B">
+<tr style="background:#15202B"><th style="width:44%;color:#F6F4EE">Analysis question</th><th style="width:30%;color:#F6F4EE">Automate first</th><th style="width:14%;color:#F6F4EE;text-align:right">Saved / wk</th><th style="width:12%;color:#F6F4EE;text-align:right">QA</th></tr>
+<tr><td>Finance: where are we losing time?</td><td>invoice matching (high risk)</td><td style="text-align:right">≈ 24.4 h</td><td style="text-align:right">28 / 28</td></tr>
+<tr style="background:#ECE7DB"><td>Operations: what is eating the week?</td><td>order status updates</td><td style="text-align:right">≈ 7.9 h</td><td style="text-align:right">25 / 25</td></tr>
+<tr><td>Sales: is CRM data entry worth it?</td><td>CRM data entry</td><td style="text-align:right">≈ 7.1 h</td><td style="text-align:right">28 / 28</td></tr>
+</table>
+<aside>These are live runs with Nemotron through Meterless Nightshift and data from Zetaris, saved with their traces in the repository. In task mode, Nemotron wrote every plan and every line of code. The expense task shows the loop working: the first draft was rejected by the sandbox policy, the second mishandled blank and text-typed amounts, which QA caught with mutation cases and cases the model designed itself, and the third passed all 49 cases, and only after approval did it run and fill 275 cells. The analysis questions each pick a different automation, with savings capped at measured hands-on time on our labelled synthetic data.</aside>
+</section>

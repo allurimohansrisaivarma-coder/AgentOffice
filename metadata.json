@@ -1,0 +1,52 @@
+{
+  "project_name": "AgentOffice",
+  "team": "Automaters",
+  "hackathon": "Open Agent Hackathon 2026",
+  "primary_track": "Track 3 - Reasoning Architecture",
+  "also_addresses": ["Track 1 - Fragmented Intelligence", "Track 2 - Explain Why"],
+  "description": "An AI office team you tell what to do: attach a spreadsheet and describe the repetitive work, and the agents plan it, write the automation, test it on your data and ask you to approve the exact code before handing back the filled file. It also analyses where a team's time goes and proposes what to automate first.",
+  "repository": "https://github.com/allurimohansrisaivarma-coder/AutoStack_Gen-AI",
+  "run": {
+    "sample_mode": "docker run --rm -p 8000:8000 -e SAMPLE_MODE=true oah-submission, then open http://localhost:8000",
+    "default_mode": "python run.py with Zetaris and Meterless Nightshift configured in .env (see README)",
+    "api_contract": "POST /run (analysis), POST /chat + GET /jobs/{id} (chat), POST /tasks/{id}/decision (approval)"
+  },
+  "sponsor_usage": {
+    "zetaris": {
+      "role": "Data layer for everything the agents read in default mode.",
+      "integration": "Lightning REST tables in a local Zetaris 2.4.3: five synthetic workforce tables and upload_cells (every uploaded spreadsheet, one row per cell). Agents write SQL against workforce.<table>, rewritten to read the REST table; the Data Profiler profiles uploads and the Retriever runs lookup SQL on Zetaris.",
+      "code": ["app/adapters/zetaris.py", "app/data.py", "scripts/load_zetaris.py", "app/tasks/agents.py"],
+      "evidence": ["scripts/load_zetaris.py --verify", "output_examples/*.trace.jsonl (data_query events)"]
+    },
+    "meterless": {
+      "power_rule": {
+        "provider": "Meterless Nightshift as the primary model provider for every agent",
+        "route": "meterless/deep",
+        "code": ["app/adapters/meterless.py", "app/llm.py"],
+        "evidence": ["GET /providers/meterless", "scripts/check_connections.py", "output_examples/*.trace.jsonl (model field)"]
+      },
+      "engines_implemented": [
+        {
+          "engine": "World Model",
+          "code": "app/engines/world_model/",
+          "role": "Shared state every stage reads and writes; its conflict records are the Conflict Critic's evidence; task mode records spreadsheets and automations.",
+          "tests": "tests/test_world_model.py (18 tests)"
+        },
+        {
+          "engine": "H-MEM",
+          "code": "app/engines/hmem/",
+          "role": "Cross-run memory: human approval decisions and QA lessons; an approved automation runs again without asking, a rejected one is not re-proposed.",
+          "tests": "tests/test_hmem.py (16 tests, including test_three_sessions_learn_retrieve_and_behave_differently) and tests/test_tasks.py::test_chat_task_needs_approval_before_any_file_is_written"
+        }
+      ]
+    },
+    "nvidia": {
+      "models": ["nvidia/nemotron-3-ultra-550b-a55b"],
+      "how": "Served through Meterless Nightshift (route meterless/deep), hosted, no local GPU; powers routing, planning, SQL, code writing and revision, test design, review, critique and decision memos."
+    }
+  },
+  "ai_coding_tool": "Claude Code (Anthropic)",
+  "pre_existing_components": "none",
+  "data": "Synthetic only (scripts/generate_workforce_data.py, scripts/generate_task_samples.py); example.com / example.org emails.",
+  "tests": 178
+}

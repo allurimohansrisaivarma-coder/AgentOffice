@@ -42,6 +42,18 @@ The code was built with **Claude Code**.
 
   **In the product:** a human's approval decision becomes a long-term memory. In task mode the Memory Keeper hands the PM the automations a human approved; the PM can reuse one, QA re-tests it on the new file, and because the code hash matches an approval on record the Operator runs it without asking again. In analysis mode the PM won't re-propose a routine a human already decided on while alternatives exist, and the Manager escalates rather than re-submit rejected code. QA lessons feed the Engineer's prompt.
 
+### Tests and demos that show it working
+
+| What | Test or demo | Result |
+|---|---|---|
+| **World Model engine** | `pytest tests/test_world_model.py`: content-hash IDs, provenance required, `test_reingesting_the_same_data_yields_an_empty_diff`, `test_interrupted_batch_resumes`, `test_concurrent_writers_lose_nothing_and_match_a_serial_run`, conflicts, context builder | 18 passed |
+| **H-MEM engine** | `pytest tests/test_hmem.py`: approval boundary, reinforcement, conflict resolution, 8-signal retrieval, hash-chained ledger, and `test_three_sessions_learn_retrieve_and_behave_differently` (a human's rejection changes the next run's proposal) | 16 passed |
+| **H-MEM in task mode** | `pytest tests/test_tasks.py -k chat_task_needs_approval`: approve once, then the same request on the same file reuses the approved automation and runs without asking (`already_approved`) | passed |
+| **Engines in live runs** | `output_examples/*.trace.jsonl`: `world_model_write`, `hmem_retrieve` and `hmem_write` events in every default-mode run; in `task_vendor_invoices.trace.jsonl` the Memory Keeper hands the PM the automations approved earlier | live, 25 Oct 2026 |
+| **Zetaris** | `python scripts/load_zetaris.py --verify` (row counts for all 7 REST tables); the `data_query` events in every default-mode trace carry the agent SQL and the executed `workforce_api` SQL | 12 / 827 / 223 / 2,672 / 8,266 rows; uploads live |
+| **Nightshift + Nemotron** | `python scripts/check_connections.py` and `GET /providers/meterless`; the `model` field of every model-call event in `output_examples/*.trace.jsonl` | `nvidia/nemotron-3-ultra-550b-a55b` via `meterless/deep` |
+| **Whole product** | the chat UI at http://localhost:8000 (or `docker run -p 8000:8000 -e SAMPLE_MODE=true oah-submission`), and `docs/DEMO_SCRIPT.md` | sample mode needs no keys |
+
 ### NVIDIA
 - **Nemotron** (`nvidia/nemotron-3-ultra-550b-a55b`) is served through the Nightshift route `meterless/deep`, hosted, with no local GPU. It powers every agent's reasoning: routing, planning specs, SQL, code writing and revision, test design, code review, critique and the decision memo.
 

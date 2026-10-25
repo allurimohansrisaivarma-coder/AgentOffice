@@ -1,0 +1,20 @@
+{
+  "v": 4,
+  "createdOnFiles": {"v": 1, "at": "2026-10-24T09:00:00Z"},
+  "lists": "css",
+  "title": "AgentOffice — Open Agent Hackathon 2026",
+  "order": ["cover", "problem", "numbers", "task", "product", "solution", "loop", "qa", "memory", "zetaris", "meterless", "evidence", "results", "stack", "next", "close"],
+  "sections": {
+    "s1": {"description": "The problem: office time disappears into repeated manual work, and the data about it disagrees.", "start": "cover"},
+    "s2": {"description": "The solution: tell it the task, approve the code, get the file; and ask where the time goes.", "start": "task"},
+    "s3": {"description": "Trust: tests derived from the spec, memory that changes behaviour, evidence for every step.", "start": "qa"},
+    "s4": {"description": "Sponsor technology: Zetaris as the data layer, Meterless as provider and engines.", "start": "zetaris"},
+    "s5": {"description": "Results, stack and what comes next.", "start": "results"}
+  },
+  "faces": {
+    "space-grotesk": {"family": "Space Grotesk", "href": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400..700&display=swap"},
+    "ibm-plex-sans": {"family": "IBM Plex Sans", "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&display=swap"},
+    "jetbrains-mono": {"family": "JetBrains Mono", "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"}
+  },
+  "designSystems": []
+}
