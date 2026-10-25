@@ -17,8 +17,8 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 import re
-import threading
 import uuid
 from datetime import date, datetime, time
 from pathlib import Path
@@ -164,7 +164,6 @@ class UploadStore:
     def __init__(self, state_dir: Path):
         self.dir = Path(state_dir) / "uploads"
         self.out_dir = Path(state_dir) / "outputs"
-        self._lock = threading.Lock()
 
     def save(self, filename: str, data: bytes, *, upload_id: Optional[str] = None) -> dict:
         name = Path(filename).name or "upload.csv"
@@ -187,6 +186,12 @@ class UploadStore:
     def parsed(self, upload_id: str) -> Optional[dict]:
         path = self.dir / Path(upload_id).name / "parsed.json"
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+    def touch(self, upload_id: str) -> None:
+        """Mark an upload as recently used, so it stays among the uploads Zetaris serves."""
+        path = self.dir / Path(upload_id).name / "meta.json"
+        if path.exists():
+            os.utime(path)
 
     def ensure_demos(self) -> list[dict]:
         """The bundled demo files, stored once under fixed ids (demo_<stem>)."""

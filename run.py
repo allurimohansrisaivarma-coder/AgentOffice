@@ -1,20 +1,32 @@
-"""Entry point: FastAPI on 0.0.0.0:$PORT with POST /run and GET /health.
+"""Entry point: FastAPI on 0.0.0.0:$PORT, the chat UI at /, and the agent APIs.
 
-Every /run gets a trace file, and every failure comes back as a structured
+    GET  /                      the chat UI (floating island; Ctrl+Shift+Space or Ctrl+K opens it)
+    POST /chat                  one chat message (+ optional upload_id) -> background job
+    GET  /jobs/{id}?after=n     the job's live agent events and, when done, its result
+    POST /uploads?filename=     upload a CSV/XLSX (raw body) ; GET /uploads/{id} ; GET /samples
+    GET  /tasks/{id}            a spreadsheet task: plan, code, QA, decision ; GET /tasks/{id}/code
+    POST /tasks/{id}/decision   human approve/reject (bound to the code hash); approve runs the code
+    GET  /files/{file_id}       a filled spreadsheet
+    POST /run                   the workforce-analysis pipeline, synchronous (AGENTS.md section 9 contract)
+    GET  /approvals[/{id}] ; POST /approvals/{id}
+    GET  /health ; GET /config ; GET /providers/meterless
+    GET  /data/workforce/{table} ; GET /data/uploads/cells      (what Zetaris pulls as REST tables)
+
+Every run gets a trace file, and every failure comes back as a structured
 error (AGENTS.md section 9), never a stack trace.
 """
 
 from __future__ import annotations
 
 import time
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app import data
@@ -22,19 +34,37 @@ from app.adapters import meterless
 from app.adapters.http import AdapterError
 from app.agents.base import AgentError
 from app.agents.memory import record_approval
-from app.approvals import ApprovalLedger
+from app.chat import error_view, public_task, start_chat
 from app.config import ROOT, Settings, load_settings
-from app.engines.hmem import open_memory
-from app.engines.world_model import open_world
 from app.llm import build_generator
 from app.pipeline import STAGES, run_pipeline
+from app.services import Services
+from app.tasks import files
+from app.tasks.pipeline import execute_task
 from app.tracing import Tracer, new_run_id
+
+UI_DIR = ROOT / "app" / "ui"
+DEMO_PROMPTS = {
+    "demo_expense_claims": "Fill in each employee's team and role from our staff directory, tidy the category "
+                           "names, convert the dates to YYYY-MM-DD, add the amount including 10% GST, flag claims "
+                           "over 500 for approval and give me totals by team on a separate sheet.",
+    "demo_vendor_invoices": "Remove duplicate invoices, fill blank statuses with Pending, mark unpaid invoices due "
+                            "before 2026-10-15 as Overdue and sort by due date.",
+    "demo_leads_and_contacts": "Split the full names into first and last name, check each lead against the CRM "
+                               "Contacts sheet by email, fill in the owner and mark new leads as 'Create contact'.",
+}
 
 
 class RunRequest(BaseModel):
     request_id: str = Field(min_length=1, max_length=200)
     user_query: str = Field(min_length=1, max_length=4000)
     context: dict[str, Any] = Field(default_factory=dict)
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    upload_id: Optional[str] = Field(default=None, max_length=60)
     options: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -68,13 +98,27 @@ def _error(status_code: int, type: str, message: str, recoverable: bool, *,
 
 
 def create_app(settings: Settings) -> FastAPI:
-    app = FastAPI(title="AgentOffice", version="0.1.0")
+    app = FastAPI(title="AgentOffice", version="0.2.0")
+    services = Services(settings)
+    services.uploads.ensure_demos()
+    approvals = services.approvals
 
     @app.exception_handler(RequestValidationError)
     async def _invalid_request(_: Request, exc: RequestValidationError) -> JSONResponse:
         problems = "; ".join(f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
                              for e in exc.errors())
         return _error(422, "invalid_request", problems, recoverable=True)
+
+    # ------------------------------------------------------------------ UI
+
+    if UI_DIR.exists():
+        app.mount("/ui", StaticFiles(directory=UI_DIR), name="ui")
+
+        @app.get("/", include_in_schema=False)
+        def index():
+            return FileResponse(UI_DIR / "index.html")
+
+    # ------------------------------------------------------------------ status
 
     @app.get("/health")
     def health() -> dict:
@@ -89,16 +133,15 @@ def create_app(settings: Settings) -> FastAPI:
                           "meterless": settings.meterless_base_url or None},
         }
 
-    tables = {t["table"] for t in data.catalog()}
-
-    @app.get("/data/workforce/{table}")
-    def workforce_table(table: str):
-        """Serves the synthetic tables for Zetaris to register as REST tables."""
-        if table not in tables:
-            return _error(404, "not_found", f"no table {table!r}; available: {', '.join(sorted(tables))}", False)
-        _, _, rows = data.load_table(table)
-        return {"table": table, "synthetic": True, "generator": "scripts/generate_workforce_data.py",
-                "rows": rows}
+    @app.get("/config")
+    def ui_config() -> dict:
+        """What the UI shows in its badges. No secrets."""
+        ready = not settings.missing_for_default_mode()
+        return {"sample_mode": settings.sample_mode or not ready, "default_mode_ready": ready,
+                "forced_sample_mode": settings.sample_mode, "model": settings.meterless_model
+                if settings.llm_provider == "meterless" else settings.llm_provider,
+                "data_source": "Zetaris" if ready and not settings.sample_mode else "sample data",
+                "hotkeys": ["Ctrl+Shift+Space", "Ctrl+K"]}
 
     @app.get("/providers/meterless")
     def meterless_status() -> dict:
@@ -117,23 +160,156 @@ def create_app(settings: Settings) -> FastAPI:
         routes = [m for m in status["models"] if m.startswith("meterless/")]
         return {**info, "status": status["status"], "detail": status["detail"], "routes": routes}
 
-    approvals = ApprovalLedger(settings.world_db_path.parent)
-    worlds: dict[bool, tuple] = {}
-    memories: dict[bool, tuple] = {}
+    # ------------------------------------------------------------------ data Zetaris pulls
 
-    def memory(sample_mode: bool) -> tuple:
-        """One H-MEM store per mode, kept apart like the World Models."""
-        if sample_mode not in memories:
-            memories[sample_mode] = open_memory(settings, sample_mode)
-        return memories[sample_mode]
+    tables = {t["table"] for t in data.catalog()}
 
-    def world(sample_mode: bool) -> tuple:
-        """One shared World Model per mode, so sample runs never mix with real Zetaris facts."""
-        if sample_mode not in worlds:
-            path = settings.world_db_path
-            worlds[sample_mode] = open_world(replace(settings, world_db_path=path.with_name(
-                path.stem + "-sample" + path.suffix)) if sample_mode else settings)
-        return worlds[sample_mode]
+    @app.get("/data/workforce/{table}")
+    def workforce_table(table: str):
+        """Serves the synthetic tables for Zetaris to register as REST tables."""
+        if table not in tables:
+            return _error(404, "not_found", f"no table {table!r}; available: {', '.join(sorted(tables))}", False)
+        _, _, rows = data.load_table(table)
+        return {"table": table, "synthetic": True, "generator": "scripts/generate_workforce_data.py",
+                "rows": rows}
+
+    @app.get("/data/uploads/cells")
+    def upload_cells():
+        """Recent uploads (and the demo files) as long-format cells: the Zetaris REST table upload_cells."""
+        return {"table": data.UPLOAD_CELLS, "rows": services.uploads.all_cells()}
+
+    # ------------------------------------------------------------------ uploads
+
+    @app.post("/uploads")
+    async def upload(request: Request, filename: str):
+        body = await request.body()
+        try:
+            meta = services.uploads.save(filename, body)
+        except files.FileError as e:
+            return _error(422, "bad_file", str(e), True)
+        return _upload_view(meta["upload_id"])
+
+    def _upload_view(upload_id: str) -> Optional[dict]:
+        meta = services.uploads.meta(upload_id)
+        parsed = services.uploads.parsed(upload_id)
+        if meta is None or parsed is None:
+            return None
+        return {**meta, "preview": {s["name"]: s["rows"][:6] for s in parsed["sheets"]},
+                "suggested_prompt": DEMO_PROMPTS.get(upload_id)}
+
+    @app.get("/uploads/{upload_id}")
+    def get_upload(upload_id: str):
+        view = _upload_view(upload_id)
+        return view or _error(404, "not_found", f"no upload {upload_id!r}", False)
+
+    @app.get("/samples")
+    def samples() -> dict:
+        return {"samples": [{**m, "suggested_prompt": DEMO_PROMPTS.get(m["upload_id"])}
+                            for m in services.uploads.ensure_demos()]}
+
+    # ------------------------------------------------------------------ chat + jobs
+
+    @app.post("/chat")
+    def chat(req: ChatRequest):
+        sample_mode = settings.sample_mode or bool(req.options.get("sample_mode"))  # may switch on, never off
+        if req.upload_id:
+            if services.uploads.meta(req.upload_id) is None:
+                return _error(404, "not_found", f"no upload {req.upload_id!r}", False)
+            services.uploads.touch(req.upload_id)    # keep it among the uploads Zetaris serves
+        job = start_chat(services, req.message, upload_id=req.upload_id, sample_mode=sample_mode)
+        return {"job_id": job.id, "status": job.status, "sample_mode": sample_mode}
+
+    @app.get("/jobs/{job_id}")
+    def job_status(job_id: str, after: int = 0):
+        view = services.jobs.view(job_id, max(0, after))
+        return view or _error(404, "not_found", f"no job {job_id!r}", False)
+
+    # ------------------------------------------------------------------ tasks
+
+    @app.get("/tasks/{task_id}")
+    def get_task(task_id: str):
+        record = services.tasks.get(task_id)
+        return public_task(record, approvals) if record else _error(404, "not_found", f"no task {task_id!r}", False)
+
+    @app.get("/tasks/{task_id}/code")
+    def task_code(task_id: str):
+        record = services.tasks.get(task_id)
+        if record is None:
+            return _error(404, "not_found", f"no task {task_id!r}", False)
+        return PlainTextResponse(record["code"], media_type="text/x-python", headers={
+            "Content-Disposition": f'attachment; filename="{record["spec"]["name"]}.py"'})
+
+    def _run_approved(record: dict, approval: dict) -> dict:
+        run_id = new_run_id()
+        tracer = Tracer(run_id, settings.log_dir, settings.secret_values())
+        sample_mode = bool(record["sample_mode"])
+        store, pipeline, builder = services.world(sample_mode)
+        tracer.event("Orchestrator", "run_started", input_summary=f"run approved task {record['task_id']}",
+                     approval_id=approval["approval_id"])
+        return execute_task(record, approval, settings=settings, tracer=tracer, sample_mode=sample_mode,
+                            store=store, pipeline=pipeline, builder=builder, approvals=approvals,
+                            uploads=services.uploads, tasks=services.tasks)
+
+    @app.post("/tasks/{task_id}/decision")
+    def decide_task(task_id: str, body: ApprovalDecision):
+        record = services.tasks.get(task_id)
+        if record is None or not record.get("approval_id"):
+            return _error(404, "not_found", f"no task awaiting approval: {task_id!r}", False)
+        decided = _decide(record["approval_id"], body)
+        if isinstance(decided, JSONResponse):
+            return decided
+        record["status"] = "approved" if decided["status"] == "approved" else "rejected"
+        services.tasks.save(record)
+        if decided["status"] == "approved":
+            try:
+                record = _run_approved(record, decided)
+            except (AgentError, AdapterError) as e:
+                view = error_view(e)
+                return _error(502, view["type"], view["message"], view["recoverable"])
+        return {**public_task(record, approvals), "memory": decided.get("memory")}
+
+    @app.post("/tasks/{task_id}/run")
+    def rerun_task(task_id: str):
+        record = services.tasks.get(task_id)
+        approval = approvals.get(record["approval_id"]) if record and record.get("approval_id") else None
+        if approval is None or approval["status"] != "approved":
+            return _error(409, "not_approved", "only an approved task can run", False)
+        try:
+            return public_task(_run_approved(record, approval), approvals)
+        except (AgentError, AdapterError) as e:
+            view = error_view(e)
+            return _error(502, view["type"], view["message"], view["recoverable"])
+
+    @app.get("/files/{file_id}")
+    def download(file_id: str):
+        path = services.uploads.output_path(file_id)
+        if path is None:
+            return _error(404, "not_found", f"no file {file_id!r}", False)
+        media = ("text/csv" if path.suffix == ".csv"
+                 else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        return FileResponse(path, media_type=media, filename=path.name)
+
+    # ------------------------------------------------------------------ approvals
+
+    def _decide(approval_id: str, body: ApprovalDecision):
+        try:
+            decided = approvals.decide(approval_id, decision=body.decision, approver=body.approver, note=body.note,
+                                       code_hash=body.code_hash)
+        except KeyError:
+            return _error(404, "not_found", f"no approval {approval_id!r}", False)
+        except ValueError as e:
+            return _error(409, "conflict", str(e), False)
+        # The human's decision becomes a long-term H-MEM preference that later runs must respect.
+        store, _ = services.memory(bool(decided.get("sample_mode")))
+        outcome = record_approval(store, decided)
+        return {**decided, "memory": {"status": outcome["status"], "id": outcome["memory"]["id"]
+                                      if outcome["memory"] else None, "superseded": [
+                                          c["loser"] for c in outcome["conflicts"] if c["decision_confidence"] >= 0.7]}}
+
+    @app.get("/approvals")
+    def list_approvals(status: Optional[str] = None) -> dict:
+        items = [a for a in approvals.all() if status is None or a["status"] == status]
+        return {"approvals": items[::-1][:100]}
 
     @app.get("/approvals/{approval_id}")
     def get_approval(approval_id: str):
@@ -144,19 +320,9 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.post("/approvals/{approval_id}")
     def decide_approval(approval_id: str, body: ApprovalDecision):
-        try:
-            decided = approvals.decide(approval_id, decision=body.decision, approver=body.approver, note=body.note,
-                                       code_hash=body.code_hash)
-        except KeyError:
-            return _error(404, "not_found", f"no approval {approval_id!r}", False)
-        except ValueError as e:
-            return _error(409, "conflict", str(e), False)
-        # The human's decision becomes a long-term H-MEM preference that later runs must respect.
-        store, _ = memory(bool(decided.get("sample_mode")))
-        outcome = record_approval(store, decided)
-        return {**decided, "memory": {"status": outcome["status"], "id": outcome["memory"]["id"]
-                                      if outcome["memory"] else None, "superseded": [
-                                          c["loser"] for c in outcome["conflicts"] if c["decision_confidence"] >= 0.7]}}
+        return _decide(approval_id, body)
+
+    # ------------------------------------------------------------------ the analysis pipeline (sync)
 
     @app.post("/run")
     def run(req: RunRequest):
@@ -184,8 +350,8 @@ def create_app(settings: Settings) -> FastAPI:
 
         try:
             generator = None if sample_mode else build_generator(settings)
-            store, pipeline, builder = world(sample_mode)
-            mem_store, recall = memory(sample_mode)
+            store, pipeline, builder = services.world(sample_mode)
+            mem_store, recall = services.memory(sample_mode)
             stages = req.options.get("stages", list(STAGES))
             if not isinstance(stages, list) or not stages or not set(stages) <= set(STAGES):
                 return fail(422, "invalid_request", f"options.stages must be a list drawn from {list(STAGES)}", True)

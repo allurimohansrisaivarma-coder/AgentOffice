@@ -83,10 +83,12 @@ def test_zetaris_load_plan_is_one_statement_each():
     plan = statements("http://host.docker.internal:8000")
     assert plan[0][1].startswith("CREATE LIGHTNING DATABASE workforce_api")
     rest = [sql for purpose, sql in plan if purpose.startswith("register")]
-    assert len(rest) == 5 and len(plan) == 6
+    assert len(rest) == 6 and len(plan) == 7
     assert 'endpoint "http://host.docker.internal:8000/data/workforce/people"' in rest[0]
+    assert 'endpoint "http://host.docker.internal:8000/data/uploads/cells"' in rest[-1]
     assert all(not sql.rstrip().endswith(";") for _, sql in plan)
-    assert len(verification_queries()) == 5
+    checks = verification_queries()
+    assert len(checks) == 6 and checks[-1][0] == "upload_cells" and checks[-1][2] is None
 
 
 TABLES = {"people", "timesheets", "tickets", "email_events", "task_events"}

@@ -13,7 +13,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Optional, TextIO
+from typing import Any, Callable, Iterable, Optional, TextIO
 
 SUMMARY_LIMIT = 500
 GENESIS_HASH = "0" * 64
@@ -42,13 +42,14 @@ def _event_hash(event: dict) -> str:
 
 class Tracer:
     def __init__(self, run_id: str, log_dir: Path, secrets: Iterable[str] = (),
-                 stream: Optional[TextIO] = sys.stdout):
+                 stream: Optional[TextIO] = sys.stdout, listener: Optional[Callable[[dict], None]] = None):
         self.run_id = run_id
         self.path = Path(log_dir) / f"trace-{run_id}.jsonl"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # Longest first, so a secret that contains another is masked whole.
         self._secrets = sorted({s for s in secrets if s}, key=len, reverse=True)
         self._stream = stream
+        self._listener = listener      # e.g. a UI job following the run live; gets the masked event
         self._prev_hash = GENESIS_HASH
 
     def mask(self, text: str) -> str:
@@ -100,6 +101,8 @@ class Tracer:
             f.write(line + "\n")
         if self._stream is not None:
             print(line, file=self._stream, flush=True)
+        if self._listener is not None:
+            self._listener(event)
         return event
 
 
