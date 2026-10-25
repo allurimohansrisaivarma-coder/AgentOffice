@@ -1,7 +1,8 @@
 """AgentOffice on the Windows desktop: a floating island on top of every app, Ctrl+Shift+Space opens it.
 
     python scripts/island.py                 # the API must be running (python run.py)
-    python scripts/island.py --serve         # start the API too, if it is not running
+    python scripts/island.py --serve         # start the API too (hidden), if it is not running
+    AgentOffice.pyw                          # the desktop app: --serve with no console at all
     python scripts/island.py --url http://localhost:8000
 
 How it works (standard library only, through ctypes):
@@ -12,7 +13,8 @@ How it works (standard library only, through ctypes):
   * A global hotkey (Ctrl+Shift+Space) focuses the window, which opens the panel; pressing it again, Esc, or
     clicking elsewhere folds it back. The page reports its state in the window title ("... · island" or
     "... · panel"), and this script resizes the window to match.
-Close it with Ctrl+C here, or by closing the window (Alt+F4 while it is focused).
+Quit with the power button in the panel (the page titles itself "... · quit"), Ctrl+C here, or Alt+F4;
+quitting also stops a service this script started. A second launch only opens the running island.
 """
 
 from __future__ import annotations
@@ -41,7 +43,8 @@ WS_EX_TOOLWINDOW, WS_EX_APPWINDOW = 0x00000080, 0x00040000
 HWND_TOPMOST = -1
 SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_FRAMECHANGED, SWP_SHOWWINDOW = 0x0001, 0x0002, 0x0010, 0x0020, 0x0040
 MOD_CONTROL, MOD_SHIFT, MOD_NOREPEAT = 0x0002, 0x0004, 0x4000
-VK_SPACE, WM_HOTKEY, PM_REMOVE = 0x20, 0x0312, 0x0001
+VK_SPACE, WM_HOTKEY, WM_CLOSE, PM_REMOVE = 0x20, 0x0312, 0x0010, 0x0001
+CREATE_NO_WINDOW = 0x08000000
 DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED = 2, 1
 DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND = 33, 1
 DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE = 34, 0xFFFFFFFE
@@ -65,6 +68,7 @@ def _bind() -> None:
     u.SetWindowLongW.argtypes = [H, ctypes.c_int, wintypes.LONG]
     u.GetWindowThreadProcessId.argtypes = [H, ctypes.c_void_p]
     u.GetDpiForWindow.argtypes = [H]
+    u.PostMessageW.argtypes = [H, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     u.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
     u.GetWindowRect.argtypes = [H, ctypes.POINTER(wintypes.RECT)]
     u.GetClientRect.argtypes = [H, ctypes.POINTER(wintypes.RECT)]
@@ -211,7 +215,7 @@ class Island:
 def parse_title(title: str) -> tuple[str, int]:
     """"AgentOffice · panel · 33" -> ("panel", 33): the page's state and the browser title-bar height."""
     parts = [p.strip() for p in title.split("·")]
-    mode = "panel" if len(parts) > 1 and parts[1] == "panel" else "island"
+    mode = parts[1] if len(parts) > 1 and parts[1] in ("panel", "quit") else "island"
     frame = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
     return mode, min(frame, 120)
 
@@ -240,6 +244,29 @@ def find_window(timeout_s: float = 20.0) -> int | None:
     return None
 
 
+def notify(message: str, error: bool = False) -> None:
+    """Print in a terminal; show a message box when started without one (AgentOffice.pyw, a shortcut)."""
+    if sys.stdout is not None and sys.stdout.isatty():
+        print(message, flush=True)
+    elif error:
+        ctypes.windll.user32.MessageBoxW(None, message, "AgentOffice", 0x10)
+
+
+def start_server(url: str) -> subprocess.Popen:
+    """run.py in the background: no console window, output in logs/agentoffice-server.log."""
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    exe = str(pythonw if pythonw.exists() else sys.executable)
+    (ROOT / "logs").mkdir(exist_ok=True)
+    log = (ROOT / "logs" / "agentoffice-server.log").open("ab")
+    server = subprocess.Popen([exe, str(ROOT / "run.py")], cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
+                              stdin=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
+    for _ in range(90):
+        if healthy(url) or server.poll() is not None:
+            break
+        time.sleep(0.5)
+    return server
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="AgentOffice desktop island (Windows).")
     parser.add_argument("--url", default=f"http://localhost:{os.environ.get('PORT', '8000')}")
@@ -255,24 +282,29 @@ def main(argv=None) -> int:
     except (AttributeError, OSError):
         pass
 
+    running = find_window(timeout_s=0.5)
+    if running is not None:   # one island only: a second launch just opens the first one
+        Island(running).toggle_focus()
+        return 0
+
     server = None
     if not healthy(args.url):
         if not args.serve:
-            print(f"The AgentOffice API is not running at {args.url}. Start it with `python run.py`, or pass --serve.")
+            notify(f"The AgentOffice API is not running at {args.url}. Start it with `python run.py`, "
+                   "or pass --serve.", error=True)
             return 1
-        server = subprocess.Popen([sys.executable, str(ROOT / "run.py")], cwd=ROOT)
-        for _ in range(60):
-            if healthy(args.url):
-                break
-            time.sleep(0.5)
-        else:
-            print("The API did not start; see its output above.")
+        server = start_server(args.url)
+        if not healthy(args.url):
+            notify("AgentOffice could not start its background service. See logs/agentoffice-server.log.",
+                   error=True)
             server.terminate()
             return 1
 
     exe = browser_path(args.browser)
     if exe is None:
-        print("Microsoft Edge or Google Chrome is needed for the desktop island. Open", args.url, "in a browser.")
+        notify("Microsoft Edge or Google Chrome is needed for the AgentOffice island.", error=True)
+        if server is not None:
+            server.terminate()
         return 1
     profile = ROOT / "state" / "island-browser"
     profile.mkdir(parents=True, exist_ok=True)
@@ -281,8 +313,10 @@ def main(argv=None) -> int:
                                 f"--window-size={ISLAND[0]},{ISLAND[1]}"])
     hwnd = find_window()
     if hwnd is None:
-        print("Could not find the AgentOffice window.")
+        notify("Could not find the AgentOffice window.", error=True)
         browser.terminate()
+        if server is not None:
+            server.terminate()
         return 1
 
     island = Island(hwnd)
@@ -290,10 +324,10 @@ def main(argv=None) -> int:
     island.show(*parse_title(island.title()), animate=False)
     user32 = ctypes.windll.user32
     hotkey = bool(user32.RegisterHotKey(None, 1, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_SPACE))
-    print("AgentOffice island is running at the top of your screen.",
-          "Press Ctrl+Shift+Space to open it." if hotkey else
-          "Ctrl+Shift+Space is taken by another app; click the island to open it.", "Ctrl+C here to quit.",
-          flush=True)
+    notify("AgentOffice island is running at the top of your screen. "
+           + ("Press Ctrl+Shift+Space to open it. " if hotkey else
+              "Ctrl+Shift+Space is taken by another app; click the island to open it. ")
+           + "Quit from the power button in the panel, or Ctrl+C here.")
     msg = wintypes.MSG()
     tick = 0
     try:
@@ -303,7 +337,10 @@ def main(argv=None) -> int:
                     island.toggle_focus()
             title = island.title()
             if title.startswith(TITLE_PREFIX):
-                island.show(*parse_title(title))
+                mode, frame = parse_title(title)
+                if mode == "quit":
+                    break
+                island.show(mode, frame)
             tick += 1
             if tick % 12 == 0:
                 island.ensure_clipped()
@@ -313,6 +350,8 @@ def main(argv=None) -> int:
     finally:
         if hotkey:
             user32.UnregisterHotKey(None, 1)
+        if user32.IsWindow(hwnd):
+            user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
         if browser.poll() is None:
             browser.terminate()
         if server is not None:

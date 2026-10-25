@@ -58,7 +58,7 @@ The code was built with **Claude Code**.
 - **Nemotron** (`nvidia/nemotron-3-ultra-550b-a55b`) is served through the Nightshift route `meterless/deep`, hosted, with no local GPU. It powers every agent's reasoning: routing, planning specs, SQL, code writing and revision, test design, code review, critique and the decision memo.
 
 ### AI coding tool
-- **We built the whole codebase with Claude Code (Anthropic)**, from an empty repository on 23 Oct 2026: scaffolding, adapters, both engines, the agents, the task mode, the chat UI and desktop island, tests and the Docker setup. The team reviewed and tested all generated code (178 tests).
+- **We built the whole codebase with Claude Code (Anthropic)**, from an empty repository on 23 Oct 2026: scaffolding, adapters, both engines, the agents, the task mode, the chat UI and desktop island, tests and the Docker setup. The team reviewed and tested all generated code (179 tests).
 - **No Meterless or NVIDIA credentials** were ever given to the coding tool.
 - **If the form asks how Cursor was used:** we didn't use Cursor; Claude Code was our coding tool.
 

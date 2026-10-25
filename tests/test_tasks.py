@@ -142,6 +142,17 @@ def test_critic_flags_a_lookup_that_matches_nothing():
     assert any("none of the" in i for i in issues)
 
 
+@pytest.mark.skipif(__import__("os").name != "nt", reason="the desktop island is Windows-only")
+def test_desktop_app_reads_the_page_state_from_the_window_title():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import island
+    assert island.parse_title("AgentOffice · panel · 36") == ("panel", 36)
+    assert island.parse_title("AgentOffice · quit · 36") == ("quit", 36)
+    assert island.parse_title("AgentOffice · whatever") == ("island", 0)
+
+
 def test_trace_survives_a_console_that_cannot_print_unicode(tmp_path):
     import io
     from app.tracing import Tracer

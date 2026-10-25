@@ -8,8 +8,9 @@ This is our Open Agent Hackathon 2026 submission. The primary track is **Track 3
 
 ## Use it
 
-- **Chat UI:** start the API (`python run.py`) and open http://localhost:8000. A dark "dynamic island" pill sits at the top; click it or press **Ctrl+Shift+Space** (or **Ctrl+K**) and it opens into a chat panel. Drop a CSV/Excel file on it or pick a demo file, type what you want, and watch the team work live.
-- **Desktop island (Windows):** `python scripts/island.py` puts the same island on top of every app, like Copilot: **Ctrl+Shift+Space** from anywhere opens it, Esc or clicking away folds it back. It uses Edge (or Chrome) in app mode with its own profile and only standard-library `ctypes`; no extra install.
+- **Desktop app (Windows, recommended):** run `powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1` once to get an **AgentOffice** shortcut on the Desktop and in the Start menu (`-Startup` also starts it with Windows), or double-click `AgentOffice.pyw`. No terminal and no browser tab: the background service starts hidden (log in `logs/agentoffice-server.log`), the island appears at the top of the screen, **Ctrl+Shift+Space** opens it from any app, and the power button in the panel quits everything. Starting it twice just opens the island. The first launch may show a Windows Firewall prompt for `pythonw.exe`; allow it on private networks, because Zetaris (in Docker) reads your uploads from the service.
+- **Chat UI in a browser:** start the API (`python run.py`) and open http://localhost:8000. A dark "dynamic island" pill sits at the top; click it or press **Ctrl+Shift+Space** (or **Ctrl+K**) and it opens into a chat panel. Drop a CSV/Excel file on it or pick a demo file, type what you want, and watch the team work live.
+- **Desktop island from a terminal:** `python scripts/island.py` (add `--serve` to start the service too) is what the desktop app runs: the island on top of every app, like Copilot; Esc or clicking away folds it back. It uses Edge (or Chrome) in app mode with its own profile and only standard-library `ctypes`; no extra install.
 - **API:** everything the UI does is plain HTTP (see [API](#api)).
 
 | The team at work | Plan, QA and preview | Approved and done |
@@ -319,7 +320,7 @@ metadata.json       project, team and sponsor usage for the submission form
 | World Model and H-MEM engines, wired into both modes | |
 | Meterless provider contract, connection check, auto-detect, streamed chat with a long read timeout | |
 | Zetaris: 7 REST tables registered and verified; uploads queryable immediately; analysis queries match sample mode | |
-| Sample mode from an empty `.env`; 178 tests | |
+| Sample mode from an empty `.env`; 179 tests | |
 | Sandbox, QA oracles, approvals, hash-chained traces | |
 
 ## Known limitations

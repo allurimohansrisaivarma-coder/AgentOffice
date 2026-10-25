@@ -9,7 +9,7 @@ const attachmentEl = $("attachment"), drop = $("drop"), sendBtn = $("send");
 
 const desktop = new URLSearchParams(location.search).get("shell") === "desktop";
 const state = { expanded: false, run: "idle", config: null, samples: [], attachment: null, busy: false,
-                pickingFile: false };
+                pickingFile: false, quitting: false };
 
 const AGENTS = {
   Orchestrator: "Orchestrator", FrontDeskAgent: "Front desk", DataProfilerAgent: "Data profiler", PMAgent: "PM",
@@ -75,8 +75,9 @@ function render() {
   island.dataset.state = state.expanded ? "expanded" : state.run;
   pill.setAttribute("aria-expanded", String(state.expanded));
   // Desktop shell: scripts/island.py reads the state and the browser's own title-bar height from the title.
+  const mode = state.quitting ? "quit" : state.expanded ? "panel" : "island";
   document.title = desktop
-    ? `AgentOffice · ${state.expanded ? "panel" : "island"} · ${Math.max(0, window.outerHeight - window.innerHeight)}`
+    ? `AgentOffice · ${mode} · ${Math.max(0, window.outerHeight - window.innerHeight)}`
     : "AgentOffice";
 }
 function setRun(run, text, badge) {
@@ -117,6 +118,13 @@ if (desktop) {
   // scripts/island.py focuses the window on the global hotkey; focus opens, losing focus folds it back.
   window.addEventListener("focus", () => { state.pickingFile = false; expand(); });
   window.addEventListener("blur", () => { if (!state.pickingFile) collapse(); });
+  // the desktop app closes itself (window and background service) when the page asks to quit
+  $("quit").hidden = false;
+  $("quit").addEventListener("click", () => {
+    if (state.busy && !confirm("The team is still working. Quit anyway?")) return;
+    state.quitting = true;
+    render();
+  });
 }
 
 // ------------------------------------------------------------------ attachments
