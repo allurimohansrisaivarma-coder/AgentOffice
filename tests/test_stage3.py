@@ -121,6 +121,13 @@ def test_model_path_critique_revision_and_rule_gate(tmp_path, make_settings):
     assert automation_entity["attributes"]["qa_passed"] is True
 
 
+def test_reasoning_with_only_a_closing_tag_is_dropped():
+    from app.agents.base import extract_json, strip_reasoning
+    assert strip_reasoning('The user wants JSON. {"a": 0}</think>{"a": 1}') == '{"a": 1}'
+    assert extract_json('thinking about {"x": 2} first</think>```json\n{"a": 1}\n```') == {"a": 1}
+    assert strip_reasoning("<think>hidden</think>visible") == "visible"
+
+
 def test_qa_failure_after_the_cap_is_rejected(tmp_path, make_settings):
     spec = _spec()
     buggy = compile_spec(spec).replace("<= 1.0 / 100", "< 1.0 / 200")

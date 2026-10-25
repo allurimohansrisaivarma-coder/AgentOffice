@@ -59,7 +59,12 @@ class RunContext:
 
 
 def strip_reasoning(text: str) -> str:
-    return re.sub(r"<think>.*?</think>", "", text or "", flags=re.S).strip()
+    """Drop a reasoning model's thinking. Nemotron via Nightshift may send the thinking
+    with only a closing </think>, so keep whatever follows the last one."""
+    text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.S)
+    if "</think>" in text:
+        text = text.rsplit("</think>", 1)[1]
+    return text.strip()
 
 
 def extract_json(text: str) -> Any:
