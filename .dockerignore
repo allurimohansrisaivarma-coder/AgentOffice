@@ -46,10 +46,6 @@ tmp/
 temp/
 *.tmp
 ~$*
-/run1.json
-/run2.json
-/q2.json
-/reject.json
 scripts/auto_push.ps1
 .DS_Store
 Thumbs.db

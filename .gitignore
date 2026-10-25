@@ -80,17 +80,16 @@ CLAUDE.md
 AGENTS.md
 .claude/
 docs/PROJECT_PLAN.md
+docs/DEMO_SCRIPT.md
 scripts/auto_push.ps1
 
-# Scratch files from the demo script and local tools
-/run1.json
-/run2.json
-/q2.json
-/reject.json
+# Built by scripts/build_deck.py from docs/deck/slides/ (the PDF is committed)
+docs/deck/deck.html
+
+# Scratch files from local tools
 scratch/
 *.tmp
 ~$*
-.claude/settings.local.json
 
 # OS / Editor files
 .DS_Store
