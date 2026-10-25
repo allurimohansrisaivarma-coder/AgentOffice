@@ -1,0 +1,266 @@
+# How AgentOffice works
+
+- [The pieces](#the-pieces)
+- [Task mode: "do this to my spreadsheet"](#task-mode-do-this-to-my-spreadsheet)
+- [Analysis mode: "where is our time going?"](#analysis-mode-where-is-our-time-going)
+- [Why QA can't simply agree with the code](#why-qa-cant-simply-agree-with-the-code)
+- [Sponsor technology inside](#sponsor-technology-inside)
+- [Sample mode and fallbacks](#sample-mode-and-fallbacks)
+- [Data and privacy](#data-and-privacy)
+- [Design boundaries](#design-boundaries)
+- [Repository map](#repository-map)
+
+## The pieces
+
+```mermaid
+flowchart LR
+  D[Desktop island<br/>AgentOffice.pyw] --> UI[Chat UI<br/>app/ui]
+  B[Any browser] --> UI
+  UI --> API[Local service<br/>run.py]
+  S[Scripts and curl] --> API
+  API --> FD{Front desk}
+  FD --> TM[Task mode<br/>app/tasks]
+  FD --> AM[Analysis mode<br/>app/pipeline.py]
+  TM & AM --> ZT[(Zetaris<br/>data layer)]
+  TM & AM --> NS[Meterless Nightshift<br/>NVIDIA Nemotron]
+  TM & AM --> WM[(World Model)]
+  TM & AM --> HM[(H-MEM)]
+  TM & AM --> SB[Sandbox<br/>QA runs code here]
+```
+
+- **The local service** ([`run.py`](../run.py)) is a FastAPI app on `0.0.0.0:$PORT`. It serves the chat UI and the [HTTP API](API.md). Each chat message becomes a background job ([`app/jobs.py`](../app/jobs.py)) whose agent events the UI streams live.
+- **The front desk** ([`app/chat.py`](../app/chat.py)) routes each message to task mode, the analysis pipeline or a plain reply.
+- **The desktop island** ([`scripts/island.py`](../scripts/island.py), started by [`AgentOffice.pyw`](../AgentOffice.pyw)) opens the same UI in Microsoft Edge or Google Chrome app mode, with its own profile under `state/island-browser`. It removes the window's frame and taskbar button, keeps it on top, and clips it to a pill or a rounded panel at the top of the screen. A global hotkey (Ctrl+Shift+Space) focuses it. It uses only Python's standard `ctypes`.
+- **Adapters** ([`app/adapters/`](../app/adapters/)) wrap every external call with a timeout, bounded retries and a structured error.
+
+## Task mode: "do this to my spreadsheet"
+
+```mermaid
+flowchart LR
+  U[You: task + CSV/XLSX] --> FD[Front desk]
+  FD --> DP[Data profiler] -->|SQL on upload_cells| ZT[(Zetaris)]
+  DP --> PM[PM] <-->|checked on real data| SC[Spec critic]
+  PM -->|lookup SQL| RT[Retriever] --> ZT
+  PM -->|step spec| EN[Engineer] -->|code| QA[QA] -->|failing cases| EN
+  QA --> MG[Manager] --> HA{{You approve this code hash}}
+  HA --> OP[Operator] --> F[Filled .xlsx/.csv + audit sheet]
+  MK[Memory keeper] -->|approved automations, lessons| PM
+  HA -->|decision| HM[(H-MEM)] --> MK
+```
+
+1. **Upload.** The file is parsed (CSV or XLSX, up to 5 MB or 20,000 rows; Excel dates become ISO text) and served to Zetaris as the REST table `upload_cells`, one row per cell.
+2. **Profile.** The Data Profiler queries the upload *through Zetaris*: blanks, numbers and distinct values per column, the exact values of small columns, and value shapes. Personal-looking values (names, emails, phones) are masked before any prompt.
+3. **Plan.** The PM turns the sentence into a **step spec** from a fixed vocabulary ([`app/tasks/spec.py`](../app/tasks/spec.py)): `clean_text`, `fill_blank`, `map_values`, `lookup` (from a Zetaris table via SQL, or from another sheet), `compute`, `concat`, `split`, `format_date`, `flag`, `filter`, `dedupe`, `sort` and `summarize` (a new sheet). The Spec Critic checks the spec against the real file and data: every column exists at that step, the lookup SQL runs on Zetaris and its keys actually match the file, and every date matches an input format. Rejections go back to the PM (2 rounds).
+4. **Build and test.** The Engineer writes a standalone Python module from the spec. QA computes the expected output with an **independent reference runtime** ([`app/tasks/runtime.py`](../app/tasks/runtime.py)) and runs the code in the sandbox on:
+   - real rows from your file, and your whole file
+   - single-cell mutations of every input column (blank, spaces, case, numbers typed as text)
+   - edge cases for each step: lookup misses and duplicate keys, date formats, thresholds, duplicate rows typed differently, blanks in sorts and groups
+   - model-designed cases, and a determinism re-run
+   - a **renamed column, which must raise**
+
+   Failing cases go back to the Engineer (3 revisions).
+5. **Decide.** The Manager writes the memo behind a rule gate and requests approval bound to the code hash. The approval card shows the plan, the QA results and a preview of your file after the change.
+6. **Run.** Approving runs exactly that code on your file. It writes an `.xlsx` (plus a `.csv` for CSV uploads) with the result sheet, any summary sheets and an **AgentOffice** sheet recording the approver, approval ID and code hash. Nothing is written before approval.
+7. **Remember.** The approval becomes an H-MEM memory. Next time the PM can reuse that automation; QA re-tests it on the new file, and because the code hash matches an approval on record, it runs without asking again.
+
+## Analysis mode: "where is our time going?"
+
+You ask a question such as *"Where is the finance team losing time, and what should we automate first?"*. Thirteen agents with distinct roles then work in three stages. They all read from and write to one shared **World Model**, and they carry lessons and human decisions from one run to the next in **H-MEM**.
+
+```mermaid
+flowchart LR
+  Q[Question] --> SM[Source Mapper]
+  subgraph S1[1 Discover - Track 1]
+    SM --> RC[Reconciler] --> WM[(World Model)]
+    WM --> CC[Conflict Critic]
+  end
+  subgraph S2[2 Explain - Track 2]
+    RP[Research Planner] --> RT[Retriever] -->|SQL| ZT[(Zetaris)]
+    RT --> RW[Report Writer] <-->|objections| IC[Insight Critic]
+  end
+  subgraph S3[3 Decide and Build - Track 3]
+    MK[Memory Keeper] -->|recall| PM
+    PM[PM] <-->|critique| PC[Priority Critic]
+    PM -->|spec| EN[Engineer] -->|code| QA[QA] -->|failing cases| EN
+    QA --> MG[Manager] --> HA{{Human approval}}
+  end
+  CC --> RP
+  IC --> PM
+  HM[(H-MEM)] --> MK
+  HA -->|decision| HM
+  MG -.->|run events mined| HM
+```
+
+| Stage | Agent | What it does | Model call? |
+|---|---|---|---|
+| 1 Discover | **Source Mapper** | Picks tables and join keys from the catalog, then probes each table | yes |
+| | **Reconciler** | Links the same task across timesheets, tickets and activity routines, and writes people (by ID only), teams, tasks, tools and their links | yes |
+| | **Conflict Critic** | Reads the conflicts the World Model surfaces (sources that disagree about the same fact) and judges which source to trust for what | yes |
+| 2 Explain | **Research Planner** | Splits the question into 2–4 sub-questions | yes |
+| | **Retriever** | Writes one guarded, read-only SQL query per sub-question. SQL errors go back to the model to fix (a bounded tool-use loop) | yes |
+| | **Report Writer** | Drafts claims and must cite the exact result cell behind every number | yes |
+| | **Insight Critic** | Checks every citation against the returned rows, plus a model wording review. Objections go back for revision, and unsupported claims are dropped | yes + rules |
+| 3 Build | **PM** | Ranks the mined routines by hours saved versus risk and writes a structured automation **spec** | yes |
+| | **Priority Critic** | Rejects claims above the hands-on time the activity log measures, and risk ratings below the evidence | rules |
+| | **Engineer** | Writes Python from the spec, and revises using QA's failing cases | yes |
+| | **QA** | Tests the code in a sandbox against expectations **computed from the spec, never from the code**, plus model-designed cases and an advisory code review | yes + rules |
+| | **Manager** | Writes the decision memo behind a rule gate, then requests human approval bound to the exact code hash. It never re-submits code a human already rejected; it escalates instead | yes + rules |
+| memory | **Memory Keeper** | Recalls memories for each candidate routine at the start of the build stage, passes the human decisions on record to the PM and Manager, and mines the run's events (QA verdicts, critiques, trust decisions, outcome) into H-MEM | yes |
+
+The loops are real and capped:
+
+- Priority Critic → PM: 2 rounds
+- QA → Engineer: 3 revisions
+- Insight Critic → Report Writer: 2 rounds
+- Retriever SQL fix: 3 attempts
+- model calls: at most 40 per run
+
+Every step is written to `logs/trace-<run_id>.jsonl`, a hash-chained log in which any edited or deleted line breaks the chain.
+
+## Why QA can't simply agree with the code
+
+The PM writes the automation as a spec in a small DSL, not as free text: a record matcher with key normalisation, ordered checks and statuses ([`app/automation/spec.py`](../app/automation/spec.py)). The spec has exact semantics, so QA builds its expected outputs from the spec alone ([`oracle.py`](../app/automation/oracle.py)):
+
+- every status branch, plus check precedence
+- key-normalisation variants (case and whitespace)
+- empty and ambiguous keys
+- values just inside and just outside numeric tolerances
+- seeded random mixes
+- a **renamed column**, which correct code must reject loudly
+
+It then runs the code in a sandbox ([`sandbox.py`](../app/automation/sandbox.py)):
+
+- An AST policy allows only whitelisted standard-library imports, with no `eval`, `open`, reflection or dunder access.
+- The code runs in a `python -I` subprocess with an **empty environment** and a timeout.
+
+Task mode works the same way, with the step runtime as its reference.
+
+## Sponsor technology inside
+
+The submission-form version, with the tests that prove each part, is in [SPONSOR_TECH.md](SPONSOR_TECH.md).
+
+### Zetaris (data layer)
+
+All agent SQL goes through [`app/adapters/zetaris.py`](../app/adapters/zetaris.py). It follows the REST contract (`/sql-editor/sqls/run`, a Bearer key, `X-Org-ID` and a fresh UUID `X-Request-ID`), sends one statement per call, and retries only read-only statements, with timeouts and structured errors.
+
+Zetaris can't read local files, so the service serves each synthetic table as JSON (`GET /data/workforce/<table>`) and every recent upload as long-format cells (`GET /data/uploads/cells`). [`scripts/load_zetaris.py`](../scripts/load_zetaris.py) registers those endpoints as **Lightning REST tables**.
+
+The agents write `workforce.<table>`. The data adapter ([`app/data.py`](../app/data.py)) rewrites each reference to read its REST table, `(SELECT r.* FROM workforce_api.<table> LATERAL VIEW explode(rows) AS r)`, so no views or other extra objects are needed. The trace records the SQL that actually ran.
+
+Verified on a local Zetaris 2.4.3 install:
+
+- All 7 statements succeed, and every workforce row count matches the generator's manifest.
+- A file is queryable through Zetaris the moment it's uploaded (Zetaris re-reads `upload_cells` at query time).
+- The analysis pipeline's 15 queries run on Zetaris, and the findings are identical to sample mode.
+
+### Meterless Nightshift (Power rule)
+
+Nightshift is the **primary model provider** ([`app/adapters/meterless.py`](../app/adapters/meterless.py)). Every agent calls the model through one injected generator ([`app/llm.py`](../app/llm.py)). The adapter follows the provider contract:
+
+- provider `meterless` / "Meterless Runtime"
+- pasted URLs normalised to `<host>/v1`, and the `rt-local` placeholder rejected
+- a `meterless-app` header on every request, and `meterless-scope: user` on chat
+- status from `GET /v1/models` (online, unauthorized or offline)
+- auto-detect across ports 8088, 8090, 8787 and 11434
+- connect links (`/connect#k=`)
+- a 180-second timeout
+
+Test the connection with `GET /providers/meterless` or `scripts/check_connections.py --detect`.
+
+### World Model engine (Build rule)
+
+[`app/engines/world_model/`](../app/engines/world_model/), written from scratch in Python following the Meterless reference design:
+
+- content-hash stable IDs (`ent_` + sha256 of `type:normalized name`)
+- an append-only observation log, with provenance back to source rows required
+- a 10-step idempotent ingest: reconcile → cluster → persist → score → infer → edges → views → patch source items → aggregates → mark stale
+- canonical reconstruction (latest, union, longest text, most confident, provenance-weighted)
+- merge proposals that are never applied automatically
+- a structured, budgeted context builder
+
+Every analysis stage reads its context from it and writes what it learns back. Stage 1's source conflicts *are* the World Model's conflict records. Task mode records each spreadsheet, automation and their link. 18 tests cover the engine, including: re-ingest yields an empty diff, resume after a crash, and 10 concurrent writers match a serial run.
+
+### H-MEM engine
+
+[`app/engines/hmem/`](../app/engines/hmem/), written from scratch following the Meterless H-MEM reference contract:
+
+- **Records:** the reference fields, the four types (personal, factual, preference, general) and the three layers (short_term, working, long_term). A record with no source is rejected by construction.
+- **Approval boundary:** a programmable `ApprovalPolicy` decides which proposals become durable memory.
+- **Reinforcement:** proposing the same memory again raises its confidence by 0.05 and promotes it one layer.
+- **Conflicts:** detected by opposing phrases, conflicting numbers or divergent claims about the same entity. They're auto-resolved only at decision confidence ≥ 0.70; the loser gets `supersededBy` and is never deleted. Anything less certain is tagged for human review.
+- **Retrieval:** the reference's 8-signal formula, `clamp01(0.35 semantic + 0.20 keyword + 0.10 tag + 0.10 domain + 0.15 entity + 0.05 layer + 0.05 recency − 0.20 superseded) × confidence`, with a 0.35 threshold and the top 5, each returned with a `retrievalReason`.
+- **Audit:** an append-only, hash-chained trust ledger in `logs/hmem-ledger*.jsonl`.
+
+What it changes: when a human rejects an automation, the next run proposes a different routine. If there's no alternative, the Manager escalates the identical rejected code instead of asking again. The Engineer's prompt carries QA lessons from earlier runs. 16 tests cover the engine, including this three-session behaviour: learned → retrieved → behaved differently.
+
+### NVIDIA
+
+Nemotron runs through Nightshift lanes; no local GPU is used. The live runs pinned `METERLESS_MODEL=meterless/deep`, which Nightshift routes to **`nvidia/nemotron-3-ultra-550b-a55b`**, and every model call's trace records the model that actually answered. Nemotron reasons before it answers, so replies are stripped of their reasoning and get an 8,000-token budget. A reply cut off at the length limit is detected (`finish_reason: length`) and retried with a request for compact JSON.
+
+## Sample mode and fallbacks
+
+`SAMPLE_MODE=true` (or `options.sample_mode`) loads the committed synthetic CSVs into SQLite under the same `workforce` schema name, so the agents' SQL runs unchanged. In this mode:
+
+- Every Zetaris call is logged as `zetaris: skipped (sample mode)`.
+- No model is called. Each agent uses its own deterministic, data-driven fallback, logged as `model: offline-fallback`:
+  - The PM ranks by measured hours and uses a built-in spec template. In task mode it uses the built-in spec of a demo file, and refuses any other file with `agent_no_offline_plan`.
+  - The Engineer compiles the spec. In task mode it embeds the reference runtime, so QA passes by construction; the trace says `compiled from the spec (offline)`.
+  - The writer cites cells from fixed queries, and the front desk routes by keywords.
+- QA, the rule checks of the Priority and Insight Critics, the sandbox and the World Model run exactly as in default mode.
+
+Sample mode returns no saved answers.
+
+## Data and privacy
+
+All the bundled data is **synthetic** and generated by committed, deterministic scripts; see [data/README.md](../data/README.md). The people and events are invented, and emails use `example.com` and `example.org`.
+
+- In analysis mode, agents refer to people by `person_id` only, and a test checks that no name reaches any prompt.
+- In task mode the file is yours: values in personal-looking columns (names, emails, phones) are masked to their shape before any prompt, and the model only ever sees the profile, a masked example row and the spec.
+
+## Design boundaries
+
+- **Task mode covers spreadsheet work the step vocabulary can express** (fill, look up, tidy, map, compute, split and join, dates, flag, filter, dedupe, sort, group totals). If a request needs more, the PM does the closest useful part and lists what it left out under *assumptions*. It doesn't write formulas into cells or keep the original file's formatting; the output is a clean workbook.
+- **Live runs take minutes.** Nemotron Ultra spends minutes reasoning on a large spec, so a task takes about 5 to 10 minutes end to end; the UI shows each step as it happens. Nightshift may hold a reply until it's complete, so model calls wait up to 600 s.
+- **Uploads are kept** under `state/uploads/` (git-ignored) so Zetaris can read them. Delete that folder to remove them.
+- **The sandbox on Windows** has no memory limit (no `rlimit`), so the timeout and the static AST policy are the guards there. POSIX and Docker add CPU and memory limits.
+- **The Priority Critic** treats the hands-on time measured in the activity log as the ceiling on hours saved. That's conservative, and it's an assumption.
+- **Confidence** comes from a stated heuristic formula (shown in each response), not from calibrated probabilities.
+- **Token budgets** use the `ceil(chars / 4)` heuristic.
+- **The Insight Critic** accepts a number only if it equals a cited value, or a ratio or percentage of two cited values. Integers up to 10 always pass. Other derived numbers must be computed in SQL.
+- **World Model aliases** apply to mentions made after they're registered. Similar names become merge proposals and are never merged automatically.
+- **Agent SQL** must stay within a portable subset (documented in `app/data.py`) so it runs on both Zetaris and SQLite.
+- **H-MEM's semantic signal** is the cosine of hashed bag-of-words and bigram vectors, not a neural embedding, so no embedding model is needed. Paraphrases with no shared words score low.
+- **Mined lessons** start as `short_term` at confidence 0.6 to 0.8, so they usually fall below the 0.35 retrieval threshold until they're reinforced across runs. Human decisions are `long_term` and are always applied, by exact lookup rather than by ranking.
+- **Not built yet:** the desktop island on macOS and Linux (the browser UI works there), scheduled runs of approved automations on new files, and H-MEM dreaming and sleep consolidation (layers are promoted only by reinforcement).
+
+## Repository map
+
+```
+run.py              the local service: FastAPI on 0.0.0.0:$PORT, the chat UI and the API
+AgentOffice.pyw     the Windows desktop app (hidden service + island)
+setup.ps1           one-time setup on Windows
+app/adapters/       zetaris.py, meterless.py, http.py (timeouts, bounded retries, structured errors)
+app/engines/world_model/   Meterless World Model engine (store, 10-step ingest, context builder)
+app/engines/hmem/   Meterless H-MEM engine (store, approval policy, conflicts, retrieval, mining, trust ledger)
+app/agents/         base.py (traced model and data calls), stage1.py, stage2.py, stage3.py, memory.py
+app/automation/     analysis-mode spec DSL, QA oracle, offline compiler; sandbox.py (shared)
+app/tasks/          task mode: spec.py (step vocabulary), runtime.py (reference semantics = QA oracle),
+                    qa.py (cases, comparison, offline compiler), files.py (CSV/XLSX in and out, upload store),
+                    agents.py (front desk, profiler, PM, critic, retriever, engineer, QA, manager, operator),
+                    pipeline.py (plan -> build -> test -> approve -> run)
+app/ui/             the chat island (index.html, style.css, app.js; no build step)
+app/chat.py         one chat message -> one background job, routed to task, analysis or reply
+app/jobs.py         background jobs with live trace events for the UI
+app/services.py     stores shared by the API and the jobs
+app/analysis/       routine mining from the activity log
+app/data.py         data-layer seam (Zetaris or sample SQLite), including upload_cells
+app/approvals.py    hash-chained human approval ledger
+app/pipeline.py     the three-stage analysis run
+scripts/            island (desktop), install_shortcut, check_connections, load_zetaris,
+                    generate_workforce_data, generate_task_samples, run_examples, build_deck
+data/sample/        synthetic workforce tables and demo spreadsheets
+input_examples/     analysis questions for POST /run
+output_examples/    real responses and traces saved from runs (never read by the app)
+docs/               SETUP, API, ARCHITECTURE, SPONSOR_TECH, INSPIRATION, the deck and images
+tests/              pytest suite
+```

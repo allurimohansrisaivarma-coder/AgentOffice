@@ -7,7 +7,8 @@
   "description": "An AI office team you tell what to do: attach a spreadsheet and describe the repetitive work, and the agents plan it, write the automation, test it on your data and ask you to approve the exact code before handing back the filled file. It also analyses where a team's time goes and proposes what to automate first.",
   "repository": "https://github.com/allurimohansrisaivarma-coder/AgentOffice",
   "run": {
-    "desktop_app": "Windows: scripts/install_shortcut.ps1 creates an AgentOffice shortcut (AgentOffice.pyw): no terminal, no browser tab, Ctrl+Shift+Space opens the island",
+    "setup": "Windows: powershell -ExecutionPolicy Bypass -File setup.ps1 (virtual environment, dependencies, .env, shortcut); other platforms and default mode: docs/SETUP.md",
+    "desktop_app": "Windows: the AgentOffice shortcut that setup.ps1 creates (AgentOffice.pyw): no terminal, no browser tab, Ctrl+Shift+Space opens the island",
     "sample_mode": "docker run --rm -p 8000:8000 -e SAMPLE_MODE=true oah-submission, then open http://localhost:8000",
     "default_mode": "python run.py with Zetaris and Meterless Nightshift configured in .env (see README)",
     "api_contract": "POST /run (analysis), POST /chat + GET /jobs/{id} (chat), POST /tasks/{id}/decision (approval)"
@@ -49,5 +50,5 @@
   "ai_coding_tool": "Claude Code (Anthropic)",
   "pre_existing_components": "none",
   "data": "Synthetic only (scripts/generate_workforce_data.py, scripts/generate_task_samples.py); example.com / example.org emails.",
-  "tests": 179
+  "tests": 180
 }

@@ -4,7 +4,7 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -Startup   # also start with Windows
 #   powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -Remove    # remove all of them
 #
-# Needs the project's virtual environment (.venv) set up as in the README.
+# Needs the project's virtual environment (.venv); setup.ps1 creates it and runs this script.
 param([switch]$Startup, [switch]$Remove)
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -22,7 +22,7 @@ if ($Remove) {
     }
     return
 }
-if (-not (Test-Path $pythonw)) { Write-Error "No virtual environment at $pythonw. Set it up first (see README)."; exit 1 }
+if (-not (Test-Path $pythonw)) { Write-Error "No virtual environment at $pythonw. Run setup.ps1 first."; exit 1 }
 
 $shell = New-Object -ComObject WScript.Shell
 foreach ($dir in $places) {
