@@ -1,12 +1,12 @@
 {
   "request_id": "example-001",
-  "trace_id": "4be477bebfa34f81",
+  "trace_id": "43c9c248a6c347ea",
   "status": "error",
   "error": {
-    "type": "agent_invalid_model_output",
-    "message": "ReconcilerAgent: no JSON object found in the reply",
-    "recoverable": true
+    "type": "zetaris_bad_request",
+    "message": "HTTP 400: {\"msg\":\"REST API call failed: Connection refused\\n  URL: GET http://host.docker.internal:8000/data/workforce/people\\n  Content-Type: application/x-www-form-urlencoded\\n  Headers: Map()\\n  Request body: Map()\\n  Response body: \\n  Equivalent curl (sensitive values masked, replace before running):\\ncu",
+    "recoverable": false
   },
-  "log_path": "logs/trace-4be477bebfa34f81.jsonl",
-  "execution_time_seconds": 83.964
+  "log_path": "logs/trace-43c9c248a6c347ea.jsonl",
+  "execution_time_seconds": 15.694
 }

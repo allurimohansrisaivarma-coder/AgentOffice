@@ -1,0 +1,12 @@
+{
+  "request_id": "example-003",
+  "trace_id": "52ab6ef5a1d84a6a",
+  "status": "error",
+  "error": {
+    "type": "zetaris_bad_request",
+    "message": "HTTP 400: {\"msg\":\"REST API call failed: Connection refused\\n  URL: GET http://host.docker.internal:8000/data/workforce/people\\n  Content-Type: application/x-www-form-urlencoded\\n  Headers: Map()\\n  Request body: Map()\\n  Response body: \\n  Equivalent curl (sensitive values masked, replace before running):\\ncu",
+    "recoverable": false
+  },
+  "log_path": "logs/trace-52ab6ef5a1d84a6a.jsonl",
+  "execution_time_seconds": 9.513
+}
