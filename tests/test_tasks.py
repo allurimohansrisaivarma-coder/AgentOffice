@@ -142,6 +142,29 @@ def test_critic_flags_a_lookup_that_matches_nothing():
     assert any("none of the" in i for i in issues)
 
 
+# ------------------------------------------------------------------ streamed model replies
+
+def test_nightshift_chat_is_streamed_and_reassembled(make_settings):
+    import httpx
+    from app.adapters.meterless import meterless_client
+
+    seen = {}
+
+    def handler(request):
+        seen["body"] = request.read()
+        events = [{"id": "c1", "model": "nvidia/nemotron", "choices": [{"delta": {"content": "thinking</think>{\"a\""}}]},
+                  {"choices": [{"delta": {"content": ": 1}"}, "finish_reason": "stop"}]},
+                  {"choices": [], "usage": {"total_tokens": 42}}]
+        text = "".join(f"data: {__import__('json').dumps(e)}\n\n" for e in events) + "data: [DONE]\n\n"
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=text.encode())
+
+    client = meterless_client(make_settings(), transport=httpx.MockTransport(handler))
+    result = client.chat([{"role": "user", "content": "hi"}])
+    assert b'"stream": true' in seen["body"] or b'"stream":true' in seen["body"]
+    assert result.content == 'thinking</think>{"a": 1}' and result.finish_reason == "stop"
+    assert result.model == "nvidia/nemotron" and result.usage == {"total_tokens": 42}
+
+
 # ------------------------------------------------------------------ API flow (sample mode)
 
 def _wait(client, job_id, timeout=60):

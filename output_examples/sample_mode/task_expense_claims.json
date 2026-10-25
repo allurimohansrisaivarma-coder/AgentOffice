@@ -1,0 +1,723 @@
+{
+  "job_id": "job_32e83c30dff2",
+  "kind": "task",
+  "status": "completed",
+  "trace_id": "28501c5a70064ceb",
+  "events": [
+    {
+      "i": 0,
+      "at": "2026-10-25T09:58:26.160Z",
+      "agent": "Orchestrator",
+      "action": "run_started",
+      "status": "ok",
+      "target": null,
+      "model": null,
+      "summary": ""
+    },
+    {
+      "i": 1,
+      "at": "2026-10-25T09:58:26.164Z",
+      "agent": "FrontDeskAgent",
+      "action": "route",
+      "status": "ok",
+      "target": null,
+      "model": "offline-fallback",
+      "summary": "{\"intent\": \"task\"}"
+    },
+    {
+      "i": 2,
+      "at": "2026-10-25T09:58:26.207Z",
+      "agent": "Orchestrator",
+      "action": "plan_run",
+      "status": "ok",
+      "target": null,
+      "model": null,
+      "summary": "task mode on expense_claims.xlsx (Claims: 40 rows); model: offline-fallback; data: sample-sqlite"
+    },
+    {
+      "i": 3,
+      "at": "2026-10-25T09:58:26.207Z",
+      "agent": "DataProfilerAgent",
+      "action": "zetaris_query",
+      "status": "skipped",
+      "target": "Zetaris",
+      "model": null,
+      "summary": "zetaris: skipped (sample mode); running the same SQL on the sample data"
+    },
+    {
+      "i": 4,
+      "at": "2026-10-25T09:58:26.208Z",
+      "agent": "DataProfilerAgent",
+      "action": "data_query",
+      "status": "ok",
+      "target": "SampleSQL",
+      "model": null,
+      "summary": "8 rows"
+    },
+    {
+      "i": 5,
+      "at": "2026-10-25T09:58:26.208Z",
+      "agent": "DataProfilerAgent",
+      "action": "zetaris_query",
+      "status": "skipped",
+      "target": "Zetaris",
+      "model": null,
+      "summary": "zetaris: skipped (sample mode); running the same SQL on the sample data"
+    },
+    {
+      "i": 6,
+      "at": "2026-10-25T09:58:26.209Z",
+      "agent": "DataProfilerAgent",
+      "action": "data_query",
+      "status": "ok",
+      "target": "SampleSQL",
+      "model": null,
+      "summary": "16 rows"
+    },
+    {
+      "i": 7,
+      "at": "2026-10-25T09:58:26.209Z",
+      "agent": "DataProfilerAgent",
+      "action": "profile_file",
+      "status": "ok",
+      "target": "PMAgent",
+      "model": null,
+      "summary": "[\"Claims: 40 rows, 8 columns\"]"
+    },
+    {
+      "i": 8,
+      "at": "2026-10-25T09:58:26.214Z",
+      "agent": "MemoryKeeperAgent",
+      "action": "hmem_retrieve",
+      "status": "ok",
+      "target": "PMAgent",
+      "model": null,
+      "summary": "{\"approved_automations\": [\"lead_crm_checker: Demo Approver approved the lead_crm_checker automation for lead_crm_checker (code 7f656c31014b)\"], \"lessons\": \"none\"}"
+    },
+    {
+      "i": 9,
+      "at": "2026-10-25T09:58:26.242Z",
+      "agent": "PMAgent",
+      "action": "plan_task",
+      "status": "ok",
+      "target": "SpecCritic",
+      "model": "offline-fallback",
+      "summary": "{\"spec\": \"expense_claims_filler\", \"steps\": 6}"
+    },
+    {
+      "i": 10,
+      "at": "2026-10-25T09:58:26.242Z",
+      "agent": "RetrieverAgent",
+      "action": "zetaris_query",
+      "status": "skipped",
+      "target": "Zetaris",
+      "model": null,
+      "summary": "zetaris: skipped (sample mode); running the same SQL on the sample data"
+    },
+    {
+      "i": 11,
+      "at": "2026-10-25T09:58:26.243Z",
+      "agent": "RetrieverAgent",
+      "action": "data_query",
+      "status": "ok",
+      "target": "SampleSQL",
+      "model": null,
+      "summary": "12 rows"
+    },
+    {
+      "i": 12,
+      "at": "2026-10-25T09:58:26.245Z",
+      "agent": "SpecCritic",
+      "action": "critique_spec",
+      "status": "approved",
+      "target": "PMAgent",
+      "model": null,
+      "summary": "[\"step 2 (lookup): 38 of 40 'Employee Email' values match the reference; the rest get the not_found status\"]"
+    },
+    {
+      "i": 13,
+      "at": "2026-10-25T09:58:26.251Z",
+      "agent": "Orchestrator",
+      "action": "handoff",
+      "status": "ok",
+      "target": "EngineerAgent",
+      "model": null,
+      "summary": "spec expense_claims_filler: 6 steps, references ['staff']"
+    },
+    {
+      "i": 14,
+      "at": "2026-10-25T09:58:26.251Z",
+      "agent": "EngineerAgent",
+      "action": "write_code",
+      "status": "ok",
+      "target": "QAAgent",
+      "model": "offline-fallback",
+      "summary": "v1 74af58f21ae9, 16789 chars"
+    },
+    {
+      "i": 15,
+      "at": "2026-10-25T09:58:26.256Z",
+      "agent": "QAAgent",
+      "action": "design_tests",
+      "status": "ok",
+      "target": null,
+      "model": "offline-fallback",
+      "summary": "spec-derived and real-row cases only"
+    },
+    {
+      "i": 16,
+      "at": "2026-10-25T09:58:26.356Z",
+      "agent": "QAAgent",
+      "action": "critique_output",
+      "status": "approved",
+      "target": "EngineerAgent",
+      "model": null,
+      "summary": "[\"sandbox_policy: ok\", \"no_credentials: ok\", \"runs: ok\", \"matches_spec: ok\", \"whole_file: ok\", \"deterministic: ok\", \"fails_loudly_on_schema_drift: ok\"]"
+    },
+    {
+      "i": 17,
+      "at": "2026-10-25T09:58:26.360Z",
+      "agent": "ManagerAgent",
+      "action": "decide",
+      "status": "ok",
+      "target": null,
+      "model": "offline-fallback",
+      "summary": "{\"decision\": \"approve_for_human_review\", \"rationale\": \"The automation passed all 36 QA cases, including your whole file.\", \"risks\": [\"step 2 (lookup): 38 of 40 'Employee Email' values match the reference; the rest get the not_found status\"]"
+    },
+    {
+      "i": 18,
+      "at": "2026-10-25T09:58:26.362Z",
+      "agent": "ManagerAgent",
+      "action": "request_approval",
+      "status": "pending",
+      "target": "Human",
+      "model": null,
+      "summary": "apr_8132239ba933 for code 74af58f21ae9"
+    },
+    {
+      "i": 19,
+      "at": "2026-10-25T09:58:26.369Z",
+      "agent": "ManagerAgent",
+      "action": "world_model_write",
+      "status": "ok",
+      "target": "WorldModel",
+      "model": null,
+      "summary": "task automation decision: 3 observations, 3 records changed"
+    },
+    {
+      "i": 20,
+      "at": "2026-10-25T09:58:26.369Z",
+      "agent": "MemoryKeeperAgent",
+      "action": "mine_memories",
+      "status": "ok",
+      "target": null,
+      "model": "offline-fallback",
+      "summary": "1 direct-capture proposals"
+    },
+    {
+      "i": 21,
+      "at": "2026-10-25T09:58:26.382Z",
+      "agent": "MemoryKeeperAgent",
+      "action": "hmem_write",
+      "status": "ok",
+      "target": "H-MEM",
+      "model": null,
+      "summary": "[\"created: Run 28501c5a70064ceb chose expense_claims_filler; Manager decision approve_for_human_revie\"]"
+    },
+    {
+      "i": 22,
+      "at": "2026-10-25T09:58:26.383Z",
+      "agent": "Orchestrator",
+      "action": "run_completed",
+      "status": "ok",
+      "target": null,
+      "model": null,
+      "summary": "task task_b98403e6e3e2: awaiting_approval"
+    }
+  ],
+  "next": 23,
+  "result": {
+    "type": "task",
+    "reply": "On it: the team will plan, build and test this automation on your file, then ask you to approve it.",
+    "task": {
+      "task_id": "task_b98403e6e3e2",
+      "task": "Fill in each employee's team and role from our staff directory, tidy the category names, convert the dates to YYYY-MM-DD, add the amount including 10% GST, flag claims over 500 for approval and give me totals by team on a separate sheet.",
+      "upload_id": "demo_expense_claims",
+      "filename": "expense_claims.xlsx",
+      "format": "xlsx",
+      "created_at": "2026-10-25T09:58:26.362Z",
+      "run_id": "28501c5a70064ceb",
+      "status": "awaiting_approval",
+      "sample_mode": true,
+      "model": "offline-fallback",
+      "data_source": "sample-sqlite",
+      "understanding": "Fill each claim's team and role from the staff directory in Zetaris, tidy categories, standardise dates, add GST and flag large claims, with totals by team.",
+      "assumptions": [
+        "sample mode: the PM used the built-in spec for this demo file"
+      ],
+      "reused": null,
+      "spec": {
+        "name": "expense_claims_filler",
+        "summary": "Fill each claim's team and role from the staff directory in Zetaris, tidy categories, standardise dates, add GST and flag large claims, with totals by team.",
+        "input": {
+          "sheet": "Claims",
+          "columns": [
+            "Claim ID",
+            "Employee Email",
+            "Date",
+            "Category",
+            "Amount"
+          ]
+        },
+        "references": {
+          "staff": {
+            "source": "zetaris",
+            "sql": "SELECT email, team, role FROM workforce.people",
+            "fields": [
+              "email",
+              "team",
+              "role"
+            ]
+          }
+        },
+        "steps": [
+          {
+            "op": "clean_text",
+            "columns": [
+              "Category"
+            ],
+            "case": "title",
+            "collapse_spaces": true
+          },
+          {
+            "op": "lookup",
+            "key": "Employee Email",
+            "reference": "staff",
+            "reference_key": "email",
+            "fields": {
+              "Team": "team",
+              "Role": "role"
+            },
+            "normalize": [
+              "strip",
+              "lower"
+            ],
+            "mode": "fill_blanks",
+            "status_column": "Directory Match",
+            "statuses": {
+              "found": "matched",
+              "not_found": "not in directory",
+              "ambiguous": "check manually"
+            }
+          },
+          {
+            "op": "format_date",
+            "column": "Date",
+            "input_formats": [
+              "%Y-%m-%d",
+              "%d/%m/%Y",
+              "%d %b %Y"
+            ],
+            "output_format": "%Y-%m-%d",
+            "invalid": "keep"
+          },
+          {
+            "op": "compute",
+            "column": "Amount incl GST",
+            "expression": "{Amount} * 1.1",
+            "round": 2
+          },
+          {
+            "op": "flag",
+            "column": "Needs Approval",
+            "when": [
+              {
+                "column": "Amount",
+                "op": "gt",
+                "value": 500
+              }
+            ],
+            "match": "all",
+            "then": "Yes",
+            "else": "No"
+          },
+          {
+            "op": "summarize",
+            "sheet": "Totals by Team",
+            "group_by": [
+              "Team"
+            ],
+            "values": [
+              {
+                "column": "Claim ID",
+                "agg": "count",
+                "as": "Claims"
+              },
+              {
+                "column": "Amount",
+                "agg": "sum",
+                "as": "Total Amount"
+              }
+            ],
+            "round": 2
+          }
+        ]
+      },
+      "spec_rounds": 0,
+      "critiques": [
+        []
+      ],
+      "advisories": [
+        "step 2 (lookup): 38 of 40 'Employee Email' values match the reference; the rest get the not_found status"
+      ],
+      "code": "\"\"\"expense_claims_filler: Fill each claim's team and role from the staff directory in Zetaris, tidy categories, standardise dates, add GST and flag large claims, with totals by team.\n\nCompiled by AgentOffice from the approved spec (sample mode): the step runtime is embedded below.\n\"\"\"\n\nimport json\n\n\nimport copy\nimport re\nfrom datetime import datetime\n\nNORMALIZERS = (\"strip\", \"upper\", \"lower\", \"collapse_spaces\", \"digits_only\")\n\n\nclass SpecError(ValueError):\n    pass\n\n\ndef is_blank(v):\n    return v is None or (isinstance(v, str) and v.strip() == \"\")\n\n\ndef is_num(v):\n    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v\n\n\ndef text(v):\n    \"\"\"A value as text: None -> \"\", whole floats without \".0\", everything else str().\"\"\"\n    if v is None:\n        return \"\"\n    if isinstance(v, float) and v.is_integer():\n        return str(int(v))\n    return str(v)\n\n\ndef normalize(v, steps):\n    s = text(v)\n    for step in steps:\n        if step == \"strip\":\n            s = s.strip()\n        elif step == \"upper\":\n            s = s.upper()\n        elif step == \"lower\":\n            s = s.lower()\n        elif step == \"collapse_spaces\":\n            s = \" \".join(s.split())\n        elif step == \"digits_only\":\n            s = \"\".join(ch for ch in s if ch in \"0123456789\")\n    return s\n\n\n# ------------------------------------------------------------------ conditions\n\ndef condition_holds(cond, row):\n    v = row.get(cond[\"column\"])\n    op, value = cond[\"op\"], cond.get(\"value\")\n    if op == \"blank\":\n        return is_blank(v)\n    if op == \"not_blank\":\n        return not is_blank(v)\n    if op in (\"eq\", \"ne\", \"in\"):\n        options = value if op == \"in\" else [value]\n        hit = False\n        for option in options:\n            if is_num(v) and is_num(option):\n                hit = v == option\n            else:\n                hit = text(v).strip().casefold() == text(option).strip().casefold()\n            if hit:\n                break\n        return (not hit) if op == \"ne\" else hit\n    if op in (\"gt\", \"gte\", \"lt\", \"lte\"):\n        if is_num(v) and is_num(value):\n            a, b = v, value\n        elif isinstance(v, str) and isinstance(value, str) and not is_blank(v):\n            a, b = v.strip(), value.strip()\n        else:\n            return False\n        return {\"gt\": a > b, \"gte\": a >= b, \"lt\": a < b, \"lte\": a <= b}[op]\n    if op == \"contains\":\n        return text(value).strip().casefold() in text(v).casefold()\n    if op == \"starts_with\":\n        return text(v).strip().casefold().startswith(text(value).strip().casefold())\n    raise SpecError(f\"unknown condition op {op!r}\")\n\n\ndef conditions_hold(conds, match, row):\n    results = [condition_holds(c, row) for c in conds]\n    return all(results) if match == \"all\" else any(results)\n\n\n# ------------------------------------------------------------------ expressions\n\n_TOKEN = re.compile(r\"\\s*(?:(\\{[^{}]+\\})|(\\d+(?:\\.\\d+)?)|([-+*/()]))\")\n\n\ndef parse_expression(expr):\n    \"\"\"Tokens of an arithmetic expression: {Column} references, numbers, + - * / and parentheses.\"\"\"\n    pos, tokens = 0, []\n    expr = expr.strip()\n    while pos < len(expr):\n        m = _TOKEN.match(expr, pos)\n        if not m or m.end() == pos:\n            raise SpecError(f\"cannot parse expression at {expr[pos:pos + 12]!r}\")\n        col, num, sym = m.groups()\n        if col:\n            tokens.append((\"col\", col[1:-1]))\n        elif num:\n            tokens.append((\"num\", float(num) if \".\" in num else int(num)))\n        else:\n            tokens.append((\"sym\", sym))\n        pos = m.end()\n    _Parser(tokens, None).parse()   # syntax check: no row, every column counts as 1\n    return tokens\n\n\ndef expression_columns(expr):\n    return [value for kind, value in parse_expression(expr) if kind == \"col\"]\n\n\nclass _Blank(Exception):\n    pass\n\n\nclass _Parser:\n    \"\"\"expr := term (('+'|'-') term)*; term := unary (('*'|'/') unary)*; unary := '-' unary | atom.\"\"\"\n\n    def __init__(self, tokens, row):\n        self.tokens, self.row, self.i = tokens, row, 0\n\n    def parse(self):\n        value = self.expr()\n        if self.i != len(self.tokens):\n            raise SpecError(\"unexpected token in expression\")\n        return value\n\n    def peek(self):\n        return self.tokens[self.i] if self.i < len(self.tokens) else (None, None)\n\n    def take(self):\n        tok = self.peek()\n        self.i += 1\n        return tok\n\n    def expr(self):\n        value = self.term()\n        while self.peek() in ((\"sym\", \"+\"), (\"sym\", \"-\")):\n            op = self.take()[1]\n            right = self.term()\n            value = None if value is None or right is None else (value + right if op == \"+\" else value - right)\n        return value\n\n    def term(self):\n        value = self.unary()\n        while self.peek() in ((\"sym\", \"*\"), (\"sym\", \"/\")):\n            op = self.take()[1]\n            right = self.unary()\n            if value is None or right is None:\n                value = None\n            elif op == \"*\":\n                value = value * right\n            else:\n                value = None if right == 0 else value / right\n        return value\n\n    def unary(self):\n        if self.peek() == (\"sym\", \"-\"):\n            self.take()\n            value = self.unary()\n            return None if value is None else -value\n        return self.atom()\n\n    def atom(self):\n        kind, value = self.take()\n        if kind == \"num\":\n            return value\n        if kind == \"col\":\n            if self.row is None:\n                return 1\n            v = self.row.get(value)\n            return v if is_num(v) else None\n        if (kind, value) == (\"sym\", \"(\"):\n            inner = self.expr()\n            if self.take() != (\"sym\", \")\"):\n                raise SpecError(\"missing ')' in expression\")\n            return inner\n        raise SpecError(\"expression is incomplete\")\n\n\ndef evaluate(tokens, row):\n    return _Parser(tokens, row).parse()\n\n\n# ------------------------------------------------------------------ steps\n\ndef _clean_text(rows, step):\n    for row in rows:\n        for col in step[\"columns\"]:\n            v = row.get(col)\n            if not isinstance(v, str):\n                continue\n            s = v.strip()\n            if step.get(\"collapse_spaces\"):\n                s = \" \".join(s.split())\n            case = step.get(\"case\", \"none\")\n            if case == \"lower\":\n                s = s.lower()\n            elif case == \"upper\":\n                s = s.upper()\n            elif case == \"title\":\n                s = s.title()\n            row[col] = s if s != \"\" else None\n    return rows\n\n\ndef _fill_blank(rows, step):\n    col = step[\"column\"]\n    for row in rows:\n        if is_blank(row.get(col)):\n            row[col] = row.get(step[\"from_column\"]) if \"from_column\" in step else step.get(\"value\")\n    return rows\n\n\ndef _map_values(rows, step):\n    col, mapping = step[\"column\"], step[\"mapping\"]\n    ci = step.get(\"match\", \"exact\") == \"ci\"\n    folded = {k.strip().casefold(): v for k, v in mapping.items()} if ci else None\n    for row in rows:\n        v = row.get(col)\n        if is_blank(v):\n            continue\n        key = text(v)\n        if ci:\n            key = key.strip().casefold()\n            if key in folded:\n                row[col] = folded[key]\n        elif key in mapping:\n            row[col] = mapping[key]\n    return rows\n\n\ndef _lookup(rows, step, reference):\n    ref_rows = reference.get(step[\"reference\"], [])\n    steps = step.get(\"normalize\", [])\n    index = {}\n    for r in ref_rows:\n        k = normalize(r.get(step[\"reference_key\"]), steps)\n        if k:\n            index.setdefault(k, []).append(r)\n    statuses = step.get(\"statuses\", {\"found\": \"found\", \"not_found\": \"not_found\", \"ambiguous\": \"ambiguous\"})\n    overwrite = step.get(\"mode\", \"fill_blanks\") == \"overwrite\"\n    for row in rows:\n        k = normalize(row.get(step[\"key\"]), steps)\n        matches = index.get(k, []) if k else []\n        for out_col in step[\"fields\"]:\n            row.setdefault(out_col, None)\n        if len(matches) == 1:\n            match = matches[0]\n            for out_col, ref_field in step[\"fields\"].items():\n                if overwrite or is_blank(row.get(out_col)):\n                    row[out_col] = match.get(ref_field)\n            status = statuses[\"found\"]\n        else:\n            status = statuses[\"ambiguous\"] if matches else statuses[\"not_found\"]\n        if step.get(\"status_column\"):\n            row[step[\"status_column\"]] = status\n    return rows\n\n\ndef _compute(rows, step):\n    tokens = parse_expression(step[\"expression\"])\n    digits = step.get(\"round\")\n    for row in rows:\n        value = evaluate(tokens, row)\n        if value is not None and digits is not None:\n            value = int(round(value)) if digits == 0 else round(value, digits)\n        row[step[\"column\"]] = value\n    return rows\n\n\n_PLACEHOLDER = re.compile(r\"\\{([^{}]+)\\}\")\n\n\ndef _concat(rows, step):\n    for row in rows:\n        s = _PLACEHOLDER.sub(lambda m: text(row.get(m.group(1))).strip(), step[\"template\"]).strip()\n        row[step[\"column\"]] = s if s != \"\" else None\n    return rows\n\n\ndef _split(rows, step):\n    into, sep = step[\"into\"], step[\"separator\"]\n    for row in rows:\n        v = row.get(step[\"column\"])\n        parts = []\n        if not is_blank(v):\n            s = text(v).strip()\n            parts = s.split(None, len(into) - 1) if sep == \" \" else s.split(sep, len(into) - 1)\n        for i, col in enumerate(into):\n            part = parts[i].strip() if i < len(parts) else \"\"\n            row[col] = part if part != \"\" else None\n    return rows\n\n\ndef _format_date(rows, step):\n    col = step[\"column\"]\n    for row in rows:\n        v = row.get(col)\n        out = None\n        if isinstance(v, str) and v.strip():\n            for fmt in step[\"input_formats\"]:\n                try:\n                    out = datetime.strptime(v.strip(), fmt).strftime(step[\"output_format\"])\n                    break\n                except ValueError:\n                    continue\n        if out is not None:\n            row[col] = out\n        elif step.get(\"invalid\", \"keep\") == \"blank\":\n            row[col] = None\n    return rows\n\n\ndef _flag(rows, step):\n    col = step[\"column\"]\n    for row in rows:\n        row.setdefault(col, None)\n        if conditions_hold(step[\"when\"], step.get(\"match\", \"all\"), row):\n            row[col] = step[\"then\"]\n        elif \"else\" in step:\n            row[col] = step[\"else\"]\n    return rows\n\n\ndef _filter(rows, step):\n    return [row for row in rows if conditions_hold(step[\"keep_when\"], step.get(\"match\", \"all\"), row)]\n\n\ndef _dedupe(rows, step):\n    steps = step.get(\"normalize\", [\"strip\", \"lower\"])\n    keys = [tuple(normalize(row.get(c), steps) for c in step[\"columns\"]) for row in rows]\n    keep_last = step.get(\"keep\", \"first\") == \"last\"\n    chosen = {}\n    for i, key in enumerate(keys):\n        if all(part == \"\" for part in key):\n            continue\n        if keep_last or key not in chosen:\n            chosen[key] = i\n    keep = set(chosen.values())\n    return [row for i, row in enumerate(rows) if i in keep or all(part == \"\" for part in keys[i])]\n\n\ndef _sort_key(v):\n    return (0, v, \"\") if is_num(v) else (1, 0, text(v).strip().casefold())\n\n\ndef _sort(rows, step):\n    for key in reversed(step[\"by\"]):\n        col = key[\"column\"]\n        filled = [r for r in rows if not is_blank(r.get(col))]\n        blanks = [r for r in rows if is_blank(r.get(col))]\n        filled.sort(key=lambda r: _sort_key(r.get(col)), reverse=bool(key.get(\"descending\")))\n        rows = filled + blanks\n    return rows\n\n\ndef _summarize(rows, step):\n    groups = {}\n    for row in rows:\n        key = tuple((text(row.get(c)).strip() or \"(blank)\") for c in step[\"group_by\"])\n        groups.setdefault(key, []).append(row)\n    digits = step.get(\"round\")\n    out = []\n    for key, members in groups.items():\n        record = dict(zip(step[\"group_by\"], key))\n        for agg in step[\"values\"]:\n            col, how = agg[\"column\"], agg[\"agg\"]\n            if how == \"count\":\n                value = sum(1 for r in members if not is_blank(r.get(col)))\n            else:\n                nums = [r.get(col) for r in members if is_num(r.get(col))]\n                if how == \"sum\":\n                    value = sum(nums)\n                elif not nums:\n                    value = None\n                elif how == \"avg\":\n                    value = sum(nums) / len(nums)\n                elif how == \"min\":\n                    value = min(nums)\n                else:\n                    value = max(nums)\n                if value is not None and digits is not None:\n                    value = int(round(value)) if digits == 0 else round(value, digits)\n            record[agg[\"as\"]] = value\n        out.append(record)\n    return out\n\n\nROW_OPS = {\"clean_text\": _clean_text, \"fill_blank\": _fill_blank, \"map_values\": _map_values, \"compute\": _compute,\n           \"concat\": _concat, \"split\": _split, \"format_date\": _format_date, \"flag\": _flag, \"filter\": _filter,\n           \"dedupe\": _dedupe, \"sort\": _sort}\n\n\ndef created_columns(step):\n    \"\"\"Columns a step adds to every row (in order), if they do not exist yet.\"\"\"\n    op = step[\"op\"]\n    if op in (\"compute\", \"concat\", \"flag\", \"fill_blank\"):\n        return [step[\"column\"]]\n    if op == \"split\":\n        return list(step[\"into\"])\n    if op == \"lookup\":\n        return list(step[\"fields\"]) + ([step[\"status_column\"]] if step.get(\"status_column\") else [])\n    return []\n\n\ndef output_columns(spec, input_columns):\n    \"\"\"The final column order: input columns, then each new column in the order a step creates it,\n    or exactly spec[\"output_columns\"] when the spec gives it.\"\"\"\n    if spec.get(\"output_columns\"):\n        return list(spec[\"output_columns\"])\n    columns = list(input_columns)\n    for step in spec[\"steps\"]:\n        for col in created_columns(step):\n            if col not in columns:\n                columns.append(col)\n    return columns\n\n\ndef execute(spec, rows, reference):\n    \"\"\"{\"rows\": [...], \"sheets\": {name: [...]}} for the spec applied to rows (list of dicts).\"\"\"\n    for i, row in enumerate(rows):\n        for col in spec[\"input\"][\"columns\"]:\n            if col not in row:\n                raise ValueError(f\"row {i + 1} is missing column {col!r}\")\n    for name, ref in spec.get(\"references\", {}).items():\n        for r in reference.get(name, []):\n            for field in ref[\"fields\"]:\n                if field not in r:\n                    raise ValueError(f\"reference {name!r} is missing field {field!r}\")\n    input_columns = list(rows[0]) if rows else list(spec[\"input\"][\"columns\"])\n    rows = copy.deepcopy(rows)\n    sheets = {}\n    for step in spec[\"steps\"]:\n        op = step[\"op\"]\n        if op == \"lookup\":\n            rows = _lookup(rows, step, reference)\n        elif op == \"summarize\":\n            sheets[step[\"sheet\"]] = _summarize(rows, step)\n        else:\n            rows = ROW_OPS[op](rows, step)\n    columns = output_columns(spec, input_columns)\n    return {\"rows\": [{c: row.get(c) for c in columns} for row in rows], \"sheets\": sheets}\n\n\nSPEC = json.loads(\"{\\\"name\\\": \\\"expense_claims_filler\\\", \\\"summary\\\": \\\"Fill each claim's team and role from the staff directory in Zetaris, tidy categories, standardise dates, add GST and flag large claims, with totals by team.\\\", \\\"input\\\": {\\\"sheet\\\": \\\"Claims\\\", \\\"columns\\\": [\\\"Claim ID\\\", \\\"Employee Email\\\", \\\"Date\\\", \\\"Category\\\", \\\"Amount\\\"]}, \\\"references\\\": {\\\"staff\\\": {\\\"source\\\": \\\"zetaris\\\", \\\"sql\\\": \\\"SELECT email, team, role FROM workforce.people\\\", \\\"fields\\\": [\\\"email\\\", \\\"team\\\", \\\"role\\\"]}}, \\\"steps\\\": [{\\\"op\\\": \\\"clean_text\\\", \\\"columns\\\": [\\\"Category\\\"], \\\"case\\\": \\\"title\\\", \\\"collapse_spaces\\\": true}, {\\\"op\\\": \\\"lookup\\\", \\\"key\\\": \\\"Employee Email\\\", \\\"reference\\\": \\\"staff\\\", \\\"reference_key\\\": \\\"email\\\", \\\"fields\\\": {\\\"Team\\\": \\\"team\\\", \\\"Role\\\": \\\"role\\\"}, \\\"normalize\\\": [\\\"strip\\\", \\\"lower\\\"], \\\"mode\\\": \\\"fill_blanks\\\", \\\"status_column\\\": \\\"Directory Match\\\", \\\"statuses\\\": {\\\"found\\\": \\\"matched\\\", \\\"not_found\\\": \\\"not in directory\\\", \\\"ambiguous\\\": \\\"check manually\\\"}}, {\\\"op\\\": \\\"format_date\\\", \\\"column\\\": \\\"Date\\\", \\\"input_formats\\\": [\\\"%Y-%m-%d\\\", \\\"%d/%m/%Y\\\", \\\"%d %b %Y\\\"], \\\"output_format\\\": \\\"%Y-%m-%d\\\", \\\"invalid\\\": \\\"keep\\\"}, {\\\"op\\\": \\\"compute\\\", \\\"column\\\": \\\"Amount incl GST\\\", \\\"expression\\\": \\\"{Amount} * 1.1\\\", \\\"round\\\": 2}, {\\\"op\\\": \\\"flag\\\", \\\"column\\\": \\\"Needs Approval\\\", \\\"when\\\": [{\\\"column\\\": \\\"Amount\\\", \\\"op\\\": \\\"gt\\\", \\\"value\\\": 500}], \\\"match\\\": \\\"all\\\", \\\"then\\\": \\\"Yes\\\", \\\"else\\\": \\\"No\\\"}, {\\\"op\\\": \\\"summarize\\\", \\\"sheet\\\": \\\"Totals by Team\\\", \\\"group_by\\\": [\\\"Team\\\"], \\\"values\\\": [{\\\"column\\\": \\\"Claim ID\\\", \\\"agg\\\": \\\"count\\\", \\\"as\\\": \\\"Claims\\\"}, {\\\"column\\\": \\\"Amount\\\", \\\"agg\\\": \\\"sum\\\", \\\"as\\\": \\\"Total Amount\\\"}], \\\"round\\\": 2}]}\")\n\n\ndef run(rows, reference):\n    return execute(SPEC, rows, reference)\n",
+      "code_hash": "74af58f21ae9332d67aa40c4c7e965844c6da958b8de25fa0a9cb7be03068ab9",
+      "code_version": 1,
+      "code_origin": "compiled from the spec (offline)",
+      "qa": {
+        "passed": true,
+        "pass_rate": 1.0,
+        "cases": 36,
+        "model_cases": 0,
+        "checks": [
+          {
+            "name": "sandbox_policy",
+            "passed": true,
+            "detail": "only allowed constructs"
+          },
+          {
+            "name": "no_credentials",
+            "passed": true,
+            "detail": "no hardcoded credentials"
+          },
+          {
+            "name": "runs",
+            "passed": true,
+            "detail": "38 calls in 0.097s"
+          },
+          {
+            "name": "matches_spec",
+            "passed": true,
+            "detail": "36/36 cases match the spec's expected output"
+          },
+          {
+            "name": "whole_file",
+            "passed": true,
+            "detail": "all 40 rows of your file match the spec"
+          },
+          {
+            "name": "deterministic",
+            "passed": true,
+            "detail": "same output on a second run"
+          },
+          {
+            "name": "fails_loudly_on_schema_drift",
+            "passed": true,
+            "detail": "renaming 'Claim ID' raised: ValueError: row 1 is missing column 'Claim ID'"
+          }
+        ],
+        "advisories": [],
+        "output_rows": 40,
+        "preview": {
+          "rows": [
+            {
+              "Claim ID": "EC-1001",
+              "Employee Email": "grace.fenn@example.com",
+              "Date": "2026-09-25",
+              "Category": "Meals",
+              "Description": "Team lunch",
+              "Amount": 612.56,
+              "Team": "Operations",
+              "Role": "Ops lead",
+              "Directory Match": "matched",
+              "Amount incl GST": 673.82,
+              "Needs Approval": "Yes"
+            },
+            {
+              "Claim ID": "EC-1002",
+              "Employee Email": "HUGO.KADE@EXAMPLE.COM",
+              "Date": "2026-09-05",
+              "Category": "Office Supplies",
+              "Description": "Printer paper",
+              "Amount": 334.83,
+              "Team": "Sales",
+              "Role": "Account executive",
+              "Directory Match": "matched",
+              "Amount incl GST": 368.31,
+              "Needs Approval": "No"
+            },
+            {
+              "Claim ID": "EC-1003",
+              "Employee Email": "liam.calder@example.com",
+              "Date": "2026-09-09",
+              "Category": "Office Supplies",
+              "Description": "Printer paper",
+              "Amount": 357.7,
+              "Team": "Admin",
+              "Role": "HR generalist",
+              "Directory Match": "matched",
+              "Amount incl GST": 393.47,
+              "Needs Approval": "No"
+            },
+            {
+              "Claim ID": "EC-1004",
+              "Employee Email": "farid.arden@example.com",
+              "Date": "2026-10-08",
+              "Category": "Office Supplies",
+              "Description": "Printer paper",
+              "Amount": 885.55,
+              "Team": "Operations",
+              "Role": "Ops coordinator",
+              "Directory Match": "matched",
+              "Amount incl GST": 974.11,
+              "Needs Approval": "Yes"
+            },
+            {
+              "Claim ID": "EC-1005",
+              "Employee Email": " ana.dune@example.com ",
+              "Date": "2026-10-09",
+              "Category": "Travel",
+              "Description": "Taxi to client site",
+              "Amount": 101.14,
+              "Team": "Finance",
+              "Role": "AP clerk",
+              "Directory Match": "matched",
+              "Amount incl GST": 111.25,
+              "Needs Approval": "No"
+            },
+            {
+              "Claim ID": "EC-1006",
+              "Employee Email": " hugo.kade@example.com ",
+              "Date": "2026-09-14",
+              "Category": "Travel",
+              "Description": "Taxi to client site",
+              "Amount": 620.15,
+              "Team": "Sales",
+              "Role": "Account executive",
+              "Directory Match": "matched",
+              "Amount incl GST": 682.17,
+              "Needs Approval": "Yes"
+            },
+            {
+              "Claim ID": "EC-1007",
+              "Employee Email": "isla.brook@example.com",
+              "Date": "2026-09-30",
+              "Category": "Meals",
+              "Description": "Team lunch",
+              "Amount": 212.09,
+              "Team": "Sales",
+              "Role": "Account executive",
+              "Directory Match": "matched",
+              "Amount incl GST": 233.3,
+              "Needs Approval": "No"
+            },
+            {
+              "Claim ID": "EC-1008",
+              "Employee Email": "KEMI.LARK@EXAMPLE.COM",
+              "Date": "2026-09-04",
+              "Category": "Meals",
+              "Description": "Team lunch",
+              "Amount": 564.47,
+              "Team": "Admin",
+              "Role": "Office admin",
+              "Directory Match": "matched",
+              "Amount incl GST": 620.92,
+              "Needs Approval": "Yes"
+            }
+          ],
+          "sheets": {
+            "Totals by Team": [
+              {
+                "Team": "Operations",
+                "Claims": 11,
+                "Total Amount": 6192.46
+              },
+              {
+                "Team": "Sales",
+                "Claims": 7,
+                "Total Amount": 2938.62
+              },
+              {
+                "Team": "Admin",
+                "Claims": 8,
+                "Total Amount": 3802.47
+              },
+              {
+                "Team": "Finance",
+                "Claims": 12,
+                "Total Amount": 4744.33
+              },
+              {
+                "Team": "(blank)",
+                "Claims": 2,
+                "Total Amount": 1156.84
+              }
+            ]
+          }
+        }
+      },
+      "qa_failures": [],
+      "qa_rounds": [
+        {
+          "round": 1,
+          "code_version": 1,
+          "code_hash": "74af58f21ae9332d67aa40c4c7e965844c6da958b8de25fa0a9cb7be03068ab9",
+          "passed": true,
+          "pass_rate": 1.0,
+          "failed_checks": [],
+          "failure_purposes": []
+        }
+      ],
+      "memo": {
+        "decision": "approve_for_human_review",
+        "rationale": "The automation passed all 36 QA cases, including your whole file.",
+        "risks": [
+          "step 2 (lookup): 38 of 40 'Employee Email' values match the reference; the rest get the not_found status"
+        ],
+        "what_you_get": [
+          "40 rows with the changes applied",
+          "sheet 'Totals by Team'",
+          "an AgentOffice sheet recording the approval and code hash"
+        ],
+        "confidence": 0.92
+      },
+      "approval_id": "apr_8132239ba933",
+      "outputs": null,
+      "agents_used": [
+        "DataProfilerAgent",
+        "MemoryKeeperAgent",
+        "PMAgent",
+        "RetrieverAgent",
+        "SpecCritic",
+        "EngineerAgent",
+        "QAAgent",
+        "ManagerAgent"
+      ],
+      "usage": {
+        "model_calls": 0,
+        "data_queries": 3
+      },
+      "reference": {
+        "staff": {
+          "rows": 12,
+          "sample": [
+            {
+              "email": "ana.dune@example.com",
+              "team": "Finance",
+              "role": "AP clerk"
+            },
+            {
+              "email": "ben.ives@example.com",
+              "team": "Finance",
+              "role": "AP clerk"
+            },
+            {
+              "email": "chloe.north@example.com",
+              "team": "Finance",
+              "role": "Finance analyst"
+            }
+          ]
+        }
+      },
+      "profile": [
+        {
+          "sheet": "Claims",
+          "rows": 40,
+          "columns": 8
+        }
+      ],
+      "input_columns": [
+        "Claim ID",
+        "Employee Email",
+        "Date",
+        "Category",
+        "Description",
+        "Amount",
+        "Team",
+        "Role"
+      ],
+      "approval": {
+        "approval_id": "apr_8132239ba933",
+        "run_id": "28501c5a70064ceb",
+        "automation": "expense_claims_filler",
+        "routine": "expense_claims_filler",
+        "sample_mode": true,
+        "code_hash": "74af58f21ae9332d67aa40c4c7e965844c6da958b8de25fa0a9cb7be03068ab9",
+        "report_hash": "20d7664b44c758e19a4ed27b5a76416a934b72b4211b83c46d0dc84bff82ca65",
+        "memo": {
+          "decision": "approve_for_human_review",
+          "rationale": "The automation passed all 36 QA cases, including your whole file.",
+          "risks": [
+            "step 2 (lookup): 38 of 40 'Employee Email' values match the reference; the rest get the not_found status"
+          ],
+          "what_you_get": [
+            "40 rows with the changes applied",
+            "sheet 'Totals by Team'",
+            "an AgentOffice sheet recording the approval and code hash"
+          ],
+          "confidence": 0.92
+        },
+        "task_id": "task_b98403e6e3e2",
+        "kind": "task",
+        "status": "pending",
+        "requested_at": "2026-10-25T09:58:26.361Z",
+        "code_path": "state/automations/74af58f21ae9332d.py"
+      }
+    }
+  },
+  "error": null,
+  "elapsed_s": 2.0,
+  "approval_decision": {
+    "status": "completed",
+    "approval": {
+      "approval_id": "apr_8132239ba933",
+      "run_id": "28501c5a70064ceb",
+      "automation": "expense_claims_filler",
+      "routine": "expense_claims_filler",
+      "sample_mode": true,
+      "code_hash": "74af58f21ae9332d67aa40c4c7e965844c6da958b8de25fa0a9cb7be03068ab9",
+      "report_hash": "20d7664b44c758e19a4ed27b5a76416a934b72b4211b83c46d0dc84bff82ca65",
+      "memo": {
+        "decision": "approve_for_human_review",
+        "rationale": "The automation passed all 36 QA cases, including your whole file.",
+        "risks": [
+          "step 2 (lookup): 38 of 40 'Employee Email' values match the reference; the rest get the not_found status"
+        ],
+        "what_you_get": [
+          "40 rows with the changes applied",
+          "sheet 'Totals by Team'",
+          "an AgentOffice sheet recording the approval and code hash"
+        ],
+        "confidence": 0.92
+      },
+      "task_id": "task_b98403e6e3e2",
+      "kind": "task",
+      "status": "approved",
+      "requested_at": "2026-10-25T09:58:26.361Z",
+      "approver": "Demo approver (scripted)",
+      "note": "scripted demo approval (run_examples.py)",
+      "decided_at": "2026-10-25T09:58:28.175Z",
+      "code_path": "state/automations/74af58f21ae9332d.py"
+    },
+    "outputs": {
+      "files": [
+        {
+          "file_id": "task_b98403e6e3e2_expense_claims_filled.xlsx",
+          "format": "xlsx",
+          "rows": 40
+        }
+      ],
+      "rows_in": 40,
+      "rows_out": 40,
+      "cells_changed": 255,
+      "sheets": [
+        "Totals by Team"
+      ]
+    },
+    "memory": {
+      "status": "created",
+      "id": "mem_af2587bac1eb5587",
+      "superseded": []
+    }
+  }
+}

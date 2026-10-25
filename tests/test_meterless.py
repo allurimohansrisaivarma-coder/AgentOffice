@@ -147,4 +147,4 @@ def test_openai_compatible_has_no_meterless_headers(make_settings):
 
 def test_build_generator(make_settings):
     assert build_generator(make_settings(sample_mode=True)) is None
-    assert build_generator(make_settings()).name == "meterless/meterless/test-route"
+    assert build_generator(make_settings()).name == "meterless/test-route"

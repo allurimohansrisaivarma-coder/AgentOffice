@@ -41,10 +41,13 @@ def _client(url):
             lambda p: client.get(p).content)
 
 
-def run_tasks(out_dir: Path, get, post, get_bytes, *, sample: bool, approver: str | None) -> int:
+def run_tasks(out_dir: Path, get, post, get_bytes, *, sample: bool, approver: str | None,
+              only: list[str] | None = None) -> int:
     failures = 0
     for demo in get("/samples")["samples"]:
         name = demo["upload_id"].removeprefix("demo_")
+        if only and name not in only:
+            continue
         job = post("/chat", {"message": demo["suggested_prompt"], "upload_id": demo["upload_id"],
                              "options": {"sample_mode": sample}})
         view = get(f"/jobs/{job['job_id']}")
@@ -78,13 +81,15 @@ def main(argv=None) -> int:
     parser.add_argument("--url", help="POST to this running server instead of running in-process")
     parser.add_argument("--tasks", action="store_true", help="run the spreadsheet demo tasks instead")
     parser.add_argument("--approver", help="with --tasks: approve each passing task as this named approver")
+    parser.add_argument("--only", nargs="+", metavar="NAME", help="with --tasks: only these demos (e.g. expense_claims)")
     args = parser.parse_args(argv)
 
     out_dir = ROOT / "output_examples" / ("sample_mode" if args.sample else "")
     out_dir.mkdir(parents=True, exist_ok=True)
     get, post_path, get_bytes = _client(args.url)
     if args.tasks:
-        return 1 if run_tasks(out_dir, get, post_path, get_bytes, sample=args.sample, approver=args.approver) else 0
+        return 1 if run_tasks(out_dir, get, post_path, get_bytes, sample=args.sample, approver=args.approver,
+                              only=args.only) else 0
     post = lambda body: post_path("/run", body)
 
     failures = 0
