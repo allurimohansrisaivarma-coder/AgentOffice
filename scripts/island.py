@@ -5,7 +5,7 @@
     python scripts/island.py --url http://localhost:8000
 
 How it works (standard library only, through ctypes):
-  * Microsoft Edge (or Chrome) opens the chat UI in app mode (/?shell=desktop) with its own profile under
+  * Microsoft Edge (or Chrome, with --browser chrome) opens the chat UI in app mode (/?shell=desktop) with its own profile under
     state/island-browser, so it never touches your normal browser profile.
   * The window loses its title bar and taskbar button, stays on top, and is clipped to a pill (collapsed) or a
     rounded panel (open), centred at the top of the main screen like a dynamic island.
@@ -63,15 +63,20 @@ def _bind() -> None:
     u.GetWindowThreadProcessId.argtypes = [H, ctypes.c_void_p]
     u.GetDpiForWindow.argtypes = [H]
     g.CreateRoundRectRgn.restype = wintypes.HRGN
+    g.CreateRectRgn.restype = wintypes.HRGN
+    g.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+    u.GetWindowRgn.argtypes = [H, wintypes.HRGN]
 
 
-def browser_path() -> str | None:
-    candidates = [shutil.which("msedge"), shutil.which("chrome")]
-    for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA")):
-        if base:
-            candidates += [str(Path(base) / "Microsoft/Edge/Application/msedge.exe"),
-                           str(Path(base) / "Google/Chrome/Application/chrome.exe")]
-    return next((c for c in candidates if c and Path(c).exists()), None)
+def browser_path(prefer: str = "edge") -> str | None:
+    """Edge first: its app window accepts a borderless, clipped frame (Chrome draws its own title bar)."""
+    bases = [os.environ.get(v) for v in ("ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA")]
+    found = {"edge": [shutil.which("msedge"), *(str(Path(b) / "Microsoft/Edge/Application/msedge.exe")
+                                                  for b in bases if b)],
+             "chrome": [shutil.which("chrome"), *(str(Path(b) / "Google/Chrome/Application/chrome.exe")
+                                                   for b in bases if b)]}
+    order = found[prefer] + found["chrome" if prefer == "edge" else "edge"]
+    return next((c for c in order if c and Path(c).exists()), None)
 
 
 def healthy(url: str) -> bool:
@@ -91,7 +96,9 @@ class Island:
         self.screen_w = self.user32.GetSystemMetrics(0)
         self.screen_h = self.user32.GetSystemMetrics(1)
         self.mode = None
+        self.frame = 0           # height of the browser's own title bar, hidden above the screen edge
         self.size = (0, 0)
+        self.radius = 0
         self.previous = None
 
     def px(self, css: tuple[int, int]) -> tuple[int, int]:
@@ -113,19 +120,34 @@ class Island:
         except OSError:
             pass
 
+    def clip(self) -> None:
+        """Clip to the pill/panel shape below the browser's title bar (the system owns the region after)."""
+        w, h = self.size
+        f = self.frame
+        region = self.gdi32.CreateRoundRectRgn(0, f, w + 1, f + h + 1, self.radius * 2, self.radius * 2)
+        self.user32.SetWindowRgn(self.hwnd, region, True)
+
+    def ensure_clipped(self) -> None:
+        """Browsers may reset the region on their own repaints; put it back if it is gone."""
+        probe = self.gdi32.CreateRectRgn(0, 0, 0, 0)
+        kind = self.user32.GetWindowRgn(self.hwnd, probe)
+        self.gdi32.DeleteObject(probe)
+        if kind == 0 and self.size != (0, 0):   # ERROR: no region
+            self.clip()
+
     def place(self, w: int, h: int, radius: int) -> None:
         x = (self.screen_w - w) // 2
-        y = int(TOP_MARGIN * self.scale)
-        self.user32.SetWindowPos(self.hwnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED | SWP_SHOWWINDOW
-                                 | SWP_NOACTIVATE)
-        region = self.gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2)
-        self.user32.SetWindowRgn(self.hwnd, region, True)   # the system owns the region afterwards
-        self.size = (w, h)
+        y = int(TOP_MARGIN * self.scale) - self.frame
+        self.size, self.radius = (w, h), radius
+        self.user32.SetWindowPos(self.hwnd, HWND_TOPMOST, x, y, w, h + self.frame,
+                                 SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOACTIVATE)
+        self.clip()
 
-    def show(self, mode: str, animate: bool = True) -> None:
-        if mode == self.mode:
+    def show(self, mode: str, frame_css: int, animate: bool = True) -> None:
+        frame = int(frame_css * self.scale)
+        if mode == self.mode and frame == self.frame:
             return
-        self.mode = mode
+        self.mode, self.frame = mode, frame
         target = self.px(PANEL if mode == "panel" else ISLAND)
         radius = int((28 if mode == "panel" else ISLAND[1] / 2) * self.scale)
         start = self.size if animate and self.size != (0, 0) else target
@@ -161,6 +183,14 @@ class Island:
         u.AttachThreadInput(this_thread, other, False)
 
 
+def parse_title(title: str) -> tuple[str, int]:
+    """"AgentOffice · panel · 33" -> ("panel", 33): the page's state and the browser title-bar height."""
+    parts = [p.strip() for p in title.split("·")]
+    mode = "panel" if len(parts) > 1 and parts[1] == "panel" else "island"
+    frame = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+    return mode, min(frame, 120)
+
+
 def find_window(timeout_s: float = 20.0) -> int | None:
     user32 = ctypes.windll.user32
     found: list[int] = []
@@ -189,6 +219,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="AgentOffice desktop island (Windows).")
     parser.add_argument("--url", default=f"http://localhost:{os.environ.get('PORT', '8000')}")
     parser.add_argument("--serve", action="store_true", help="start the API (run.py) if it is not running")
+    parser.add_argument("--browser", choices=("edge", "chrome"), default="edge")
     args = parser.parse_args(argv)
     if os.name != "nt":
         print("The desktop island is Windows-only; open the chat UI in a browser instead:", args.url)
@@ -214,7 +245,7 @@ def main(argv=None) -> int:
             server.terminate()
             return 1
 
-    exe = browser_path()
+    exe = browser_path(args.browser)
     if exe is None:
         print("Microsoft Edge or Google Chrome is needed for the desktop island. Open", args.url, "in a browser.")
         return 1
@@ -231,13 +262,15 @@ def main(argv=None) -> int:
 
     island = Island(hwnd)
     island.strip_frame()
-    island.show("island", animate=False)
+    island.show(*parse_title(island.title()), animate=False)
     user32 = ctypes.windll.user32
     hotkey = bool(user32.RegisterHotKey(None, 1, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_SPACE))
     print("AgentOffice island is running at the top of your screen.",
           "Press Ctrl+Shift+Space to open it." if hotkey else
-          "Ctrl+Shift+Space is taken by another app; click the island to open it.", "Ctrl+C here to quit.")
+          "Ctrl+Shift+Space is taken by another app; click the island to open it.", "Ctrl+C here to quit.",
+          flush=True)
     msg = wintypes.MSG()
+    tick = 0
     try:
         while user32.IsWindow(hwnd):
             while user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, PM_REMOVE):
@@ -245,7 +278,10 @@ def main(argv=None) -> int:
                     island.toggle_focus()
             title = island.title()
             if title.startswith(TITLE_PREFIX):
-                island.show("panel" if title.endswith("panel") else "island")
+                island.show(*parse_title(title))
+            tick += 1
+            if tick % 12 == 0:
+                island.ensure_clipped()
             time.sleep(0.04)
     except KeyboardInterrupt:
         pass

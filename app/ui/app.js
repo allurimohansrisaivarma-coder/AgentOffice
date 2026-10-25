@@ -74,7 +74,10 @@ function agentName(a) { return AGENTS[a] || a.replace(/Agent$/, ""); }
 function render() {
   island.dataset.state = state.expanded ? "expanded" : state.run;
   pill.setAttribute("aria-expanded", String(state.expanded));
-  document.title = desktop ? `AgentOffice Â· ${state.expanded ? "panel" : "island"}` : "AgentOffice";
+  // Desktop shell: scripts/island.py reads the state and the browser's own title-bar height from the title.
+  document.title = desktop
+    ? `AgentOffice · ${state.expanded ? "panel" : "island"} · ${Math.max(0, window.outerHeight - window.innerHeight)}`
+    : "AgentOffice";
 }
 function setRun(run, text, badge) {
   state.run = run;
@@ -110,6 +113,7 @@ document.addEventListener("keydown", (e) => {
 });
 if (desktop) {
   document.body.classList.add("shell-desktop");
+  window.addEventListener("resize", render);
   // scripts/island.py focuses the window on the global hotkey; focus opens, losing focus folds it back.
   window.addEventListener("focus", () => { state.pickingFile = false; expand(); });
   window.addEventListener("blur", () => { if (!state.pickingFile) collapse(); });
@@ -122,9 +126,9 @@ function setAttachment(meta) {
   attachmentEl.innerHTML = "";
   attachmentEl.hidden = !meta;
   if (!meta) return;
-  const rows = meta.sheets.map((s) => `${s.name}: ${s.rows} rows`).join(" Â· ");
-  const chip = el("div", "file-chip", `<span aria-hidden="true">ðŸ“„</span><span class="name">${esc(meta.filename)}</span>` +
-    `<span class="meta">${esc(rows)}</span><button type="button" aria-label="Remove attachment">âœ•</button>`);
+  const rows = meta.sheets.map((s) => `${s.name}: ${s.rows} rows`).join(" · ");
+  const chip = el("div", "file-chip", `<span aria-hidden="true">📄</span><span class="name">${esc(meta.filename)}</span>` +
+    `<span class="meta">${esc(rows)}</span><button type="button" aria-label="Remove attachment">✕</button>`);
   chip.querySelector("button").addEventListener("click", () => setAttachment(null));
   attachmentEl.appendChild(chip);
 }
@@ -132,7 +136,7 @@ async function uploadFile(file) {
   if (!file) return;
   if (!/\.(csv|xlsx|xlsm)$/i.test(file.name)) { bot(`I can read .csv and .xlsx files; ${esc(file.name)} is neither.`, "error"); return; }
   attachmentEl.hidden = false;
-  attachmentEl.innerHTML = `<div class="file-chip"><span class="name">Uploading ${esc(file.name)}â€¦</span></div>`;
+  attachmentEl.innerHTML = `<div class="file-chip"><span class="name">Uploading ${esc(file.name)}…</span></div>`;
   try {
     const meta = await api(`/uploads?filename=${encodeURIComponent(file.name)}`, { method: "POST", body: file });
     setAttachment(meta);
@@ -167,7 +171,7 @@ function bot(html, extra) {
 function user(text, meta) {
   const m = el("div", "msg user");
   m.appendChild(document.createTextNode(text));
-  if (meta) m.appendChild(el("div", "file-chip", `<span aria-hidden="true">ðŸ“„</span><span class="name">${esc(meta.filename)}</span>`));
+  if (meta) m.appendChild(el("div", "file-chip", `<span aria-hidden="true">📄</span><span class="name">${esc(meta.filename)}</span>`));
   messages.appendChild(m);
   scrollDown();
 }
@@ -203,7 +207,7 @@ form.addEventListener("submit", async (e) => {
   user(text, attachment);
   input.value = ""; autosize(); setAttachment(null);
   state.busy = true; sendBtn.disabled = true;
-  setRun("busy", "Front desk Â· reading your request", "working");
+  setRun("busy", "Front desk · reading your request", "working");
   try {
     const body = { message: text, upload_id: attachment ? attachment.upload_id : null,
                    options: { sample_mode: $("sample-toggle").checked } };
@@ -229,7 +233,7 @@ function stepClass(ev) {
 }
 function stepDetail(ev) {
   let s = ev.summary || "";
-  try { const j = JSON.parse(s); if (typeof j === "object") s = Array.isArray(j) ? j.join(" Â· ") : Object.entries(j).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" Â· "); } catch (_) { /* plain text */ }
+  try { const j = JSON.parse(s); if (typeof j === "object") s = Array.isArray(j) ? j.join(" · ") : Object.entries(j).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · "); } catch (_) { /* plain text */ }
   if (ev.action === "data_query") s = `${s}${ev.target === "Zetaris" ? " from Zetaris" : " from sample data"}`;
   return s;
 }
@@ -238,13 +242,13 @@ function addStep(run, ev) {
   run.list.querySelectorAll(".step.live").forEach((n) => n.classList.remove("live"));
   const who = agentName(ev.agent);
   const what = ACTIONS[ev.action] || ev.action.replace(/_/g, " ");
-  const li = el("li", `step ${stepClass(ev)} live`, `<span class="tick" aria-hidden="true">${stepClass(ev) === "ok" ? "âœ“" : "!"}</span>` +
+  const li = el("li", `step ${stepClass(ev)} live`, `<span class="tick" aria-hidden="true">${stepClass(ev) === "ok" ? "✓" : "!"}</span>` +
     `<span><span class="who">${esc(who)}</span> <span class="what">${esc(what)}</span>` +
     `<span class="detail" title="${esc(stepDetail(ev))}">${esc(stepDetail(ev))}</span></span>`);
   run.list.appendChild(li);
   run.steps.push(li);
   if (run.steps.length > 9) run.steps[run.steps.length - 10].hidden = true;
-  setRun("busy", `${who} Â· ${what.toLowerCase()}`, ev.model && ev.model !== "offline-fallback" ? "live" : "working");
+  setRun("busy", `${who} · ${what.toLowerCase()}`, ev.model && ev.model !== "offline-fallback" ? "live" : "working");
   scrollDown();
 }
 function finishCard(run) {
@@ -293,7 +297,7 @@ function showResult(result, traceId) {
 // ------------------------------------------------------------------ task card
 
 function cond(c) {
-  const ops = { eq: "=", ne: "â‰ ", gt: ">", gte: "â‰¥", lt: "<", lte: "â‰¤", in: "in", contains: "contains", starts_with: "starts with", blank: "is blank", not_blank: "is not blank" };
+  const ops = { eq: "=", ne: "≠", gt: ">", gte: "≥", lt: "<", lte: "≤", in: "in", contains: "contains", starts_with: "starts with", blank: "is blank", not_blank: "is not blank" };
   const v = c.value === undefined ? "" : " " + (Array.isArray(c.value) ? c.value.join(", ") : JSON.stringify(c.value));
   return `<code>${esc(c.column)}</code> ${esc(ops[c.op] || c.op)}${esc(v)}`;
 }
@@ -315,7 +319,7 @@ function describeStep(s, refs) {
     case "flag": return `Set ${cols([s.column])} to ${esc(JSON.stringify(s.then))} when ${s.when.map(cond).join(s.match === "any" ? " or " : " and ")}${"else" in s ? `, else ${esc(JSON.stringify(s.else))}` : ""}`;
     case "filter": return `Keep rows where ${s.keep_when.map(cond).join(s.match === "any" ? " or " : " and ")}`;
     case "dedupe": return `Remove duplicates by ${cols(s.columns)} (keep ${esc(s.keep || "first")})`;
-    case "sort": return `Sort by ${s.by.map((b) => `<code>${esc(b.column)}</code>${b.descending ? " â†“" : " â†‘"}`).join(", ")}`;
+    case "sort": return `Sort by ${s.by.map((b) => `<code>${esc(b.column)}</code>${b.descending ? " ↓" : " ↑"}`).join(", ")}`;
     case "summarize": return `New sheet <code>${esc(s.sheet)}</code>: ${s.values.map((v) => `${esc(v.agg)} of ${esc(v.column)}`).join(", ")} by ${cols(s.group_by)}`;
     default: return esc(s.op);
   }
@@ -331,14 +335,14 @@ function table(rows, inputCols) {
 function resultBlock(task) {
   const o = task.outputs;
   if (!o) return "";
-  const links = o.files.map((f) => `<a class="btn primary" href="/files/${encodeURIComponent(f.file_id)}" download>â¬‡ ${esc(f.format.toUpperCase())}: ${esc(f.file_id)}</a>`).join("");
+  const links = o.files.map((f) => `<a class="btn primary" href="/files/${encodeURIComponent(f.file_id)}" download title="${esc(f.file_id)}">⬇ Filled spreadsheet (.${esc(f.format)})</a>`).join("");
   return `<div class="result"><b>Done.</b> <span class="muted">${o.rows_out} rows written${o.cells_changed != null ? `, ${o.cells_changed} cells changed or added` : ""}${o.sheets.length ? `, plus ${o.sheets.map(esc).join(", ")}` : ""}. Approved code ${esc(task.code_hash.slice(0, 12))} ran on your file.</span>
-    <div class="links">${links}<a class="btn" href="/tasks/${encodeURIComponent(task.task_id)}/code" download>â¬‡ Automation (.py)</a></div></div>`;
+    <div class="links">${links}<a class="btn" href="/tasks/${encodeURIComponent(task.task_id)}/code" download>⬇ Automation (.py)</a></div></div>`;
 }
 function taskCard(task, traceId) {
   const qa = task.qa, memo = task.memo || {};
   const refs = task.spec.references || {};
-  const checks = qa.checks.map((c) => `<span class="chip ${c.passed ? "" : "fail"}" title="${esc(c.detail)}">${c.passed ? "âœ“" : "âœ•"} ${esc(c.name.replace(/_/g, " "))}</span>`).join("");
+  const checks = qa.checks.map((c) => `<span class="chip ${c.passed ? "" : "fail"}" title="${esc(c.detail)}">${c.passed ? "✓" : "✕"} ${esc(c.name.replace(/_/g, " "))}</span>`).join("");
   const sheets = Object.entries(qa.preview.sheets || {}).map(([name, rows]) => `<div class="section-label">Sheet: ${esc(name)}</div>${table(rows)}`).join("");
   const advisories = [...(task.advisories || []), ...(qa.advisories || []).map((a) => a.detail)].filter(Boolean);
   const card = el("div", "card msg");
@@ -358,7 +362,7 @@ function taskCard(task, traceId) {
     ${sheets}
     <div class="memo"><b>Manager:</b> ${esc(memo.rationale || "")}
       ${advisories.length ? `<ul>${advisories.slice(0, 5).map((a) => `<li>${esc(a)}</li>`).join("")}</ul>` : ""}</div>
-    <details class="code"><summary>View the code (sha256 ${esc(task.code_hash.slice(0, 12))}, v${task.code_version}) Â· trace ${esc(traceId || task.run_id)}</summary><pre>${esc(task.code)}</pre></details>
+    <details class="code"><summary>View the code (sha256 ${esc(task.code_hash.slice(0, 12))}, v${task.code_version}) · trace ${esc(traceId || task.run_id)}</summary><pre>${esc(task.code)}</pre></details>
     <div class="slot"></div>`;
   messages.appendChild(card);
   const slot = card.querySelector(".slot");
@@ -369,7 +373,7 @@ function taskCard(task, traceId) {
     approvalBox(slot, task);
     setRun("attention", "Approval needed", "review");
   } else {
-    slot.innerHTML = `<div class="result rejected"><b>Not sent for approval.</b> <span class="muted">Manager decision: ${esc(memo.decision)}. ${task.qa_failures?.length ? "First QA failure: " + esc(task.qa_failures[0].purpose + " â€“ " + task.qa_failures[0].problem) : ""}</span></div>`;
+    slot.innerHTML = `<div class="result rejected"><b>Not sent for approval.</b> <span class="muted">Manager decision: ${esc(memo.decision)}. ${task.qa_failures?.length ? "First QA failure: " + esc(task.qa_failures[0].purpose + " – " + task.qa_failures[0].problem) : ""}</span></div>`;
     setRun("error", "QA did not pass", "stopped");
   }
   scrollDown();
@@ -386,7 +390,7 @@ function approvalBox(slot, task) {
     if (!approver) { name.focus(); name.placeholder = "Your name is needed to approve"; return; }
     store("agentoffice.approver", approver);
     slot.querySelectorAll("button").forEach((x) => (x.disabled = true));
-    setRun("busy", b.dataset.d === "approve" ? "Operator Â· running your file" : "Recording your decision", "working");
+    setRun("busy", b.dataset.d === "approve" ? "Operator · running your file" : "Recording your decision", "working");
     try {
       const done = await api(`/tasks/${encodeURIComponent(task.task_id)}/decision`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -419,7 +423,7 @@ function analysisCard(a, traceId) {
     <ul class="plan">${r.findings.slice(0, 6).map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
     ${ranking ? `<div class="section-label">What to automate first</div><div class="table-wrap"><table><thead><tr><th>Routine</th><th>h/week saved</th><th>Risk</th></tr></thead><tbody>${ranking}</tbody></table></div>` : ""}
     ${r.decision ? `<div class="memo"><b>Manager (${esc(r.decision.decision)}, confidence ${esc(r.confidence)}):</b> ${esc(r.decision.rationale)}</div>` : ""}
-    <p class="muted">${esc(a.mode.model)} Â· ${esc(a.mode.data_source)} Â· ${a.usage.model_calls} model calls, ${a.usage.data_queries} queries Â· trace ${esc(traceId)}</p>
+    <p class="muted">${esc(a.mode.model)} · ${esc(a.mode.data_source)} · ${a.usage.model_calls} model calls, ${a.usage.data_queries} queries · trace ${esc(traceId)}</p>
     <div class="slot"></div>`;
   messages.appendChild(card);
   const approval = a.approval;
@@ -456,8 +460,8 @@ async function init() {
     $("sample-toggle").checked = c.sample_mode;
     $("sample-toggle").disabled = c.forced_sample_mode || !c.default_mode_ready;
     const modeText = () => $("sample-toggle").checked
-      ? `<span class="dot sample"></span>Sample mode Â· bundled data, no sponsor calls`
-      : `<span class="dot"></span>Live Â· ${esc(c.model)} via Meterless Nightshift Â· Zetaris`;
+      ? `<span class="dot sample"></span>Sample mode · bundled data, no sponsor calls`
+      : `<span class="dot"></span>Live · ${esc(c.model)} via Meterless Nightshift · Zetaris`;
     $("mode").innerHTML = modeText();
     $("sample-toggle").addEventListener("change", () => { $("mode").innerHTML = modeText(); });
   } catch (_) {
