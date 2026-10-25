@@ -4,7 +4,7 @@
 
 This is our Open Agent Hackathon 2026 submission. The primary track is **Track 3, Reasoning Architecture**. Stages 1 and 2 also address Track 1 (Fragmented Intelligence) and Track 2 (Explain Why).
 
-> **Status (23 Oct 2026):** all three stages, plus cross-run memory, run end to end in **sample mode**, both locally and in the Docker image. The test suite passes (152 tests, also on Python 3.11 inside the image). We have **not yet run default mode against a live Zetaris instance or Meterless Nightshift**, because neither is installed yet. See [Done vs not yet](#done-vs-not-yet).
+> **Status (25 Oct 2026):** all three stages run end to end in both **sample mode** and **default mode against Meterless Nightshift** (NVIDIA Nemotron). Live traces and outputs are saved to `output_examples/`. Zetaris tables are loaded and verified on live Zetaris REST endpoints. See [Done vs not yet](#done-vs-not-yet).
 
 ## What it does
 
@@ -232,12 +232,13 @@ scripts/            check_connections, load_zetaris, generate_workforce_data, ru
 
 | Done (tested) | Not yet |
 |---|---|
-| Three stages, 13 agents, real critique and revision loops (tested with a scripted model test double) | **A default-mode run with Nightshift** (the installer is currently blocked by antivirus) |
-| World Model engine, wired into every stage | Pinning a Nemotron `meterless/*` route for the NVIDIA award |
-| H-MEM engine: cross-run memory that changes later decisions | H-MEM dreaming and sleep consolidation (not built) |
+| Three stages, 13 agents, real critique and revision loops (tested with a scripted model test double) | Pinning a Nemotron `meterless/*` route for the NVIDIA award |
+| Meterless Nightshift live default-mode runs (connected, reasoning stripped, live traces in `output_examples/`) | H-MEM dreaming and sleep consolidation (not built) |
+| World Model engine, wired into every stage | Docker → Nightshift reachability (in progress) |
+| H-MEM engine: cross-run memory that changes later decisions | |
 | Meterless provider contract, connection check, auto-detect | |
 | Zetaris: tables loaded and verified; every pipeline query runs on live Zetaris with results identical to sample mode | |
-| Sample mode from an empty `.env`; Docker image built from a fresh clone, 152 tests passing on Python 3.11 inside it, with no `.env` and no network keys (AGENTS.md §16) | Docker → Nightshift reachability (needs Nightshift running) |
+| Sample mode from an empty `.env`; Docker image built from a fresh clone, 152 tests passing on Python 3.11 inside it, with no `.env` and no network keys (AGENTS.md §16) | |
 | Sandbox, QA oracle, approvals, hash-chained traces | |
 
 ## Known limitations

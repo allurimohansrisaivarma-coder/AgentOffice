@@ -79,3 +79,10 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# Binary executables & installers
+*.exe
+*.msi
+*.dmg
+*.pkg
+*.zip
