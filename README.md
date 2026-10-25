@@ -309,7 +309,7 @@ scripts/            island (desktop), check_connections, load_zetaris, generate_
 | World Model and H-MEM engines, wired into both modes | |
 | Meterless provider contract, connection check, auto-detect, streamed chat with a long read timeout | |
 | Zetaris: 7 REST tables registered and verified; uploads queryable immediately; analysis queries match sample mode | |
-| Sample mode from an empty `.env`; 177 tests | |
+| Sample mode from an empty `.env`; 178 tests | |
 | Sandbox, QA oracles, approvals, hash-chained traces | |
 
 ## Known limitations

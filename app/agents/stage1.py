@@ -15,7 +15,7 @@ import json
 import re
 from typing import Any, Optional
 
-from app.agents.base import OFFLINE_MODEL, Agent, AgentError
+from app.agents.base import OFFLINE_MODEL, Agent
 from app.engines.world_model import entity_observation, relationship_observation
 
 # How much each source is trusted as a measure of time spent (World Model confidence).

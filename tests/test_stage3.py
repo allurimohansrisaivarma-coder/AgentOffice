@@ -8,7 +8,6 @@ the configured provider.
 
 import json
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.meterless import ChatResult

@@ -1,5 +1,3 @@
-import copy
-
 import pytest
 
 from app.automation.compiler import compile_spec

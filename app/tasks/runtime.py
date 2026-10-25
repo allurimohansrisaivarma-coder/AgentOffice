@@ -126,10 +126,6 @@ def expression_columns(expr):
     return [value for kind, value in parse_expression(expr) if kind == "col"]
 
 
-class _Blank(Exception):
-    pass
-
-
 class _Parser:
     """expr := term (('+'|'-') term)*; term := unary (('*'|'/') unary)*; unary := '-' unary | atom."""
 

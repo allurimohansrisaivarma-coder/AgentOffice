@@ -11,7 +11,6 @@ boundary. Human approve/reject decisions are captured directly, no model.
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 from app.agents.base import OFFLINE_MODEL, Agent, AgentError
 from app.engines.hmem import MemoryStoreService

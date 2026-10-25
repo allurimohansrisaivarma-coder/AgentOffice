@@ -291,7 +291,7 @@ class TaskPlanner(Agent):
                   + (f"Automations a human already approved (H-MEM); if one does exactly what is asked on this "
                      f"file, reply {{\"reuse\": <name>, \"understanding\": ...}} instead of a new spec:\n"
                      f"{json.dumps(reusable)[:2500]}\n\n" if reusable else "")
-                  + (f"Lessons from earlier runs (H-MEM):\n- " + "\n- ".join(lessons) + "\n\n" if lessons else "")
+                  + ("Lessons from earlier runs (H-MEM):\n- " + "\n- ".join(lessons) + "\n\n" if lessons else "")
                   + spec_format()
                   + "\nEXAMPLE (another file):\n" + json.dumps(DEMO_SPECS["expense_claims"])
                   + "\n\nReply with JSON: {\"understanding\": <what you will do, one sentence>, \"assumptions\": "

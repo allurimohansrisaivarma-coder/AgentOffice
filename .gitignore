@@ -59,15 +59,31 @@ yarn-debug.log*
 yarn-error.log*
 
 # Runtime output & state
+# state/ holds the World Model and H-MEM databases, the approval ledger, approved code,
+# uploads/ (users' spreadsheets), outputs/ (filled workbooks), tasks/ and island-browser/ (the desktop
+# island's browser profile). None of it belongs in git.
 logs/*
 !logs/.gitkeep
 state/
+uploads/
+outputs/
+island-browser/
 *.log
 *.sqlite
 *.sqlite3
 *.db
 tmp/
 temp/
+
+# Scratch files from the demo script and local tools
+/run1.json
+/run2.json
+/q2.json
+/reject.json
+scratch/
+*.tmp
+~$*
+.claude/settings.local.json
 
 # OS / Editor files
 .DS_Store

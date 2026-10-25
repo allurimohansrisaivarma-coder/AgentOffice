@@ -1,6 +1,6 @@
 {
   "request_id": "example-002",
-  "trace_id": "c21534a41ad640a7",
+  "trace_id": "0d1bd4e082444288",
   "status": "success",
   "agents_used": [
     "MemoryKeeperAgent",
@@ -123,7 +123,7 @@
           {
             "name": "runs",
             "passed": true,
-            "detail": "ran in 0.057s"
+            "detail": "ran in 0.051s"
           },
           {
             "name": "output_shape",
@@ -664,13 +664,13 @@
     }
   },
   "approval": {
-    "approval_id": "apr_66e942f574c1",
-    "run_id": "c21534a41ad640a7",
+    "approval_id": "apr_35a80c352ad1",
+    "run_id": "0d1bd4e082444288",
     "automation": "order_status_responder",
     "routine": "order_status_updates",
     "sample_mode": true,
     "code_hash": "3af798eb1a94b9cc164be16f595024fa1a0ba493d04ad762e480a383ee521462",
-    "report_hash": "87c85e555c635f773a4d83c37a1f5c35c71bddfa842e0115a653fac37136d874",
+    "report_hash": "f59c6ea65c67aed64fd987b4c0e5283d39583cf38ebf1fff5ed5f924ff1ea0d4",
     "memo": {
       "decision": "approve_for_human_review",
       "rationale": "order_status_updates runs 79.5 times a week (8.82 h/week hands-on). The automation passed all 19 QA cases after 1 round(s).",
@@ -684,8 +684,10 @@
       "confidence": 0.93,
       "confidence_formula": "0.45*QA pass rate + 0.2*evidence volume + 0.15*routine consistency + 0.2*(1 - risk)"
     },
+    "task_id": null,
+    "kind": "pipeline",
     "status": "pending",
-    "requested_at": "2026-10-23T16:47:31.985Z",
+    "requested_at": "2026-10-25T12:12:58.271Z",
     "code_path": "state/automations/3af798eb1a94b9cc.py"
   },
   "mode": {
@@ -703,7 +705,15 @@
     "data_queries": 15
   },
   "memory": {
-    "retrieved": [],
+    "retrieved": [
+      {
+        "id": "mem_ff576f6470889bd8",
+        "content": "For order_status_updates hours, trust sample:workforce.task_events: Sources differ 5.43x (activity 8.82 h/week, tickets 17.87 h/week, timesheets 47.88 h/week). The activity log measures hands-on time, so it sizes the automation; timesheets are self-reported and tickets are logged selectively.",
+        "layer": "long_term",
+        "score": 0.3869,
+        "retrievalReason": "domain 'order_status_updates' requested; entity 1.00, domain 1.00, semantic 0.16"
+      }
+    ],
     "human_decisions_applied": {},
     "mined": [
       {
@@ -730,12 +740,12 @@
       {
         "status": "created",
         "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
-        "content": "Run c21534a41ad640a7 chose order_status_updates; Manager decision approve_for_human_review (confidence 0.93).",
-        "id": "mem_a0eb4843fd7c1c7e",
-        "conflicts": 0
+        "content": "Run 0d1bd4e082444288 chose order_status_updates; Manager decision approve_for_human_review (confidence 0.93).",
+        "id": "mem_3123930d7ca6c0f3",
+        "conflicts": 1
       }
     ]
   },
-  "log_path": "logs/trace-c21534a41ad640a7.jsonl",
-  "execution_time_seconds": 0.382
+  "log_path": "logs/trace-0d1bd4e082444288.jsonl",
+  "execution_time_seconds": 0.357
 }
