@@ -39,10 +39,13 @@ WS_CAPTION, WS_THICKFRAME, WS_SYSMENU = 0x00C00000, 0x00040000, 0x00080000
 WS_MINIMIZEBOX, WS_MAXIMIZEBOX = 0x00020000, 0x00010000
 WS_EX_TOOLWINDOW, WS_EX_APPWINDOW = 0x00000080, 0x00040000
 HWND_TOPMOST = -1
-SWP_NOACTIVATE, SWP_FRAMECHANGED, SWP_SHOWWINDOW = 0x0010, 0x0020, 0x0040
+SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_FRAMECHANGED, SWP_SHOWWINDOW = 0x0001, 0x0002, 0x0010, 0x0020, 0x0040
 MOD_CONTROL, MOD_SHIFT, MOD_NOREPEAT = 0x0002, 0x0004, 0x4000
 VK_SPACE, WM_HOTKEY, PM_REMOVE = 0x20, 0x0312, 0x0001
+DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED = 2, 1
 DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND = 33, 1
+DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE = 34, 0xFFFFFFFE
+DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE = 38, 1
 
 
 def _bind() -> None:
@@ -62,6 +65,10 @@ def _bind() -> None:
     u.SetWindowLongW.argtypes = [H, ctypes.c_int, wintypes.LONG]
     u.GetWindowThreadProcessId.argtypes = [H, ctypes.c_void_p]
     u.GetDpiForWindow.argtypes = [H]
+    u.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+    u.GetWindowRect.argtypes = [H, ctypes.POINTER(wintypes.RECT)]
+    u.GetClientRect.argtypes = [H, ctypes.POINTER(wintypes.RECT)]
+    u.ClientToScreen.argtypes = [H, ctypes.POINTER(wintypes.POINT)]
     g.CreateRoundRectRgn.restype = wintypes.HRGN
     g.CreateRectRgn.restype = wintypes.HRGN
     g.DeleteObject.argtypes = [wintypes.HGDIOBJ]
@@ -99,7 +106,16 @@ class Island:
         self.frame = 0           # height of the browser's own title bar, hidden above the screen edge
         self.size = (0, 0)
         self.radius = 0
+        self.borders = (0, 0, 0, 0)   # left, top, right, bottom: window rect minus client rect
         self.previous = None
+
+    def measure_borders(self) -> None:
+        win, client, origin = wintypes.RECT(), wintypes.RECT(), wintypes.POINT(0, 0)
+        self.user32.GetWindowRect(self.hwnd, ctypes.byref(win))
+        self.user32.GetClientRect(self.hwnd, ctypes.byref(client))
+        self.user32.ClientToScreen(self.hwnd, ctypes.byref(origin))
+        left, top = origin.x - win.left, origin.y - win.top
+        self.borders = (left, top, win.right - origin.x - client.right, win.bottom - origin.y - client.bottom)
 
     def px(self, css: tuple[int, int]) -> tuple[int, int]:
         w, h = css
@@ -113,18 +129,25 @@ class Island:
                                                          | WS_MAXIMIZEBOX))
         ex = u.GetWindowLongW(self.hwnd, GWL_EXSTYLE)
         u.SetWindowLongW(self.hwnd, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW)   # no taskbar button
-        pref = ctypes.c_int(DWMWCP_DONOTROUND)   # we clip our own shape
-        try:
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(self.hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
-                                                       ctypes.byref(pref), ctypes.sizeof(pref))
-        except OSError:
-            pass
+        # we clip our own shape: no Mica backdrop (it ignores the clip), frame, border or corner rounding
+        for attribute, value in ((DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE),
+                                 (DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED),
+                                 (DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND),
+                                 (DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE)):
+            v = ctypes.c_uint(value)
+            try:
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(self.hwnd, attribute, ctypes.byref(v), ctypes.sizeof(v))
+            except OSError:
+                pass
+        u.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOMOVE)
+        self.measure_borders()
 
     def clip(self) -> None:
         """Clip to the pill/panel shape below the browser's title bar (the system owns the region after)."""
         w, h = self.size
-        f = self.frame
-        region = self.gdi32.CreateRoundRectRgn(0, f, w + 1, f + h + 1, self.radius * 2, self.radius * 2)
+        left, top = self.borders[0], self.borders[1] + self.frame
+        region = self.gdi32.CreateRoundRectRgn(left, top, left + w + 1, top + h + 1, self.radius * 2,
+                                               self.radius * 2)
         self.user32.SetWindowRgn(self.hwnd, region, True)
 
     def ensure_clipped(self) -> None:
@@ -136,11 +159,13 @@ class Island:
             self.clip()
 
     def place(self, w: int, h: int, radius: int) -> None:
-        x = (self.screen_w - w) // 2
-        y = int(TOP_MARGIN * self.scale) - self.frame
+        """Show the page's w x h area centred at the top of the screen; the title bar sits above the edge."""
+        bl, bt, br, bb = self.borders
+        x = (self.screen_w - w) // 2 - bl
+        y = int(TOP_MARGIN * self.scale) - self.frame - bt
         self.size, self.radius = (w, h), radius
-        self.user32.SetWindowPos(self.hwnd, HWND_TOPMOST, x, y, w, h + self.frame,
-                                 SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOACTIVATE)
+        self.user32.SetWindowPos(self.hwnd, HWND_TOPMOST, x, y, w + bl + br, h + self.frame + bt + bb,
+                                 SWP_SHOWWINDOW | SWP_NOACTIVATE)
         self.clip()
 
     def show(self, mode: str, frame_css: int, animate: bool = True) -> None:
