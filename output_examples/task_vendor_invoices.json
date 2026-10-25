@@ -1,12 +1,12 @@
 {
-  "job_id": "job_f9d3896e520c",
+  "job_id": "job_a226f1997ec5",
   "kind": "task",
   "status": "failed",
-  "trace_id": "b11a9b771d194692",
+  "trace_id": "2e31a9b48cc849fc",
   "events": [
     {
       "i": 0,
-      "at": "2026-10-25T09:45:29.217Z",
+      "at": "2026-10-25T10:02:33.644Z",
       "agent": "Orchestrator",
       "action": "run_started",
       "status": "ok",
@@ -16,7 +16,7 @@
     },
     {
       "i": 1,
-      "at": "2026-10-25T09:45:32.266Z",
+      "at": "2026-10-25T10:02:37.019Z",
       "agent": "FrontDeskAgent",
       "action": "route",
       "status": "ok",
@@ -26,7 +26,7 @@
     },
     {
       "i": 2,
-      "at": "2026-10-25T09:45:32.277Z",
+      "at": "2026-10-25T10:02:37.026Z",
       "agent": "Orchestrator",
       "action": "plan_run",
       "status": "ok",
@@ -36,7 +36,7 @@
     },
     {
       "i": 3,
-      "at": "2026-10-25T09:45:34.530Z",
+      "at": "2026-10-25T10:02:39.308Z",
       "agent": "DataProfilerAgent",
       "action": "data_query",
       "status": "ok",
@@ -46,7 +46,7 @@
     },
     {
       "i": 4,
-      "at": "2026-10-25T09:45:34.722Z",
+      "at": "2026-10-25T10:02:39.457Z",
       "agent": "DataProfilerAgent",
       "action": "data_query",
       "status": "ok",
@@ -56,7 +56,7 @@
     },
     {
       "i": 5,
-      "at": "2026-10-25T09:45:34.723Z",
+      "at": "2026-10-25T10:02:39.457Z",
       "agent": "DataProfilerAgent",
       "action": "profile_file",
       "status": "ok",
@@ -66,7 +66,7 @@
     },
     {
       "i": 6,
-      "at": "2026-10-25T09:45:34.729Z",
+      "at": "2026-10-25T10:02:39.464Z",
       "agent": "MemoryKeeperAgent",
       "action": "hmem_retrieve",
       "status": "ok",
@@ -76,7 +76,7 @@
     },
     {
       "i": 7,
-      "at": "2026-10-25T09:46:22.300Z",
+      "at": "2026-10-25T10:04:51.956Z",
       "agent": "PMAgent",
       "action": "plan_task",
       "status": "ok",
@@ -86,7 +86,7 @@
     },
     {
       "i": 8,
-      "at": "2026-10-25T09:46:22.300Z",
+      "at": "2026-10-25T10:04:51.956Z",
       "agent": "SpecCritic",
       "action": "critique_spec",
       "status": "approved",
@@ -96,17 +96,17 @@
     },
     {
       "i": 9,
-      "at": "2026-10-25T09:46:22.301Z",
+      "at": "2026-10-25T10:04:51.957Z",
       "agent": "Orchestrator",
       "action": "handoff",
       "status": "ok",
       "target": "EngineerAgent",
       "model": null,
-      "summary": "spec vendor_invoices_cleanup: 5 steps, references none"
+      "summary": "spec vendor_invoice_cleanup: 5 steps, references none"
     },
     {
       "i": 10,
-      "at": "2026-10-25T09:55:23.849Z",
+      "at": "2026-10-25T10:07:51.999Z",
       "agent": "EngineerAgent",
       "action": "write_code",
       "status": "error",
@@ -116,7 +116,7 @@
     },
     {
       "i": 11,
-      "at": "2026-10-25T09:55:23.850Z",
+      "at": "2026-10-25T10:07:52.001Z",
       "agent": "Orchestrator",
       "action": "run_failed",
       "status": "error",
@@ -132,5 +132,5 @@
     "message": "ReadTimeout: timed out",
     "recoverable": true
   },
-  "elapsed_s": 597.5
+  "elapsed_s": 321.9
 }

@@ -15,7 +15,8 @@ Provider contract (meterless.ai/engines.html, POWER "Add Meterless as a provider
 - connect links http://<host>:<port>/connect#k=<key> carry base URL and key
 - 180 s timeout, since a request may wait for a model to load
 Chat is streamed for Nightshift, so the timeout applies to silence between
-chunks; MAX_STREAM_S bounds a whole reply.
+chunks; MAX_STREAM_S bounds a whole reply. The read timeout is 600 s (at least
+the contract's 180 s) because Nightshift may buffer a long reply until it is done.
 """
 
 from __future__ import annotations
@@ -37,6 +38,9 @@ PROVIDER_NAME = "Meterless Runtime"
 DEFAULT_BASE_URL = "http://127.0.0.1:8088/v1"
 MODEL_LOAD_TIMEOUT_S = 180.0
 MAX_STREAM_S = 900.0
+# Nightshift may send nothing until a reply is complete, and Nemotron Ultra writing a 7-step automation module
+# (reasoning + code) can take 3-6 minutes, so a single silent wait may last this long.
+LONG_REPLY_TIMEOUT_S = 600.0
 PLACEHOLDER_TOKENS = frozenset({"rt-local"})
 DETECT_PORTS = (8088, 8090, 8787, 11434)
 DETECT_HOSTS = ("127.0.0.1", "localhost", "[::1]")
@@ -181,7 +185,9 @@ class ChatClient:
                             raise AdapterError(self.service, "timeout", f"no complete reply after {MAX_STREAM_S:g}s",
                                                recoverable=True, status_code=status, attempts=attempts)
             except httpx.HTTPError as e:
-                if not got_data and attempts <= self.max_retries:
+                # a connection failure is retried; a timeout is not (the server was busy generating: retrying
+                # would only double the wait)
+                if not got_data and not isinstance(e, httpx.TimeoutException) and attempts <= self.max_retries:
                     time.sleep(_http.BACKOFF_BASE_S * 2 ** (attempts - 1))
                     continue
                 raise AdapterError(self.service, "timeout" if isinstance(e, httpx.TimeoutException) else "unreachable",
@@ -256,7 +262,7 @@ def meterless_client(settings, transport: Optional[httpx.BaseTransport] = None) 
     return ChatClient(
         normalize_base_url(settings.meterless_base_url), settings.meterless_runtime_token,
         settings.meterless_model, service=PROVIDER_ID,
-        timeout_s=max(settings.model_timeout_s, MODEL_LOAD_TIMEOUT_S),
+        timeout_s=max(settings.model_timeout_s, MODEL_LOAD_TIMEOUT_S, LONG_REPLY_TIMEOUT_S),
         max_retries=settings.max_retries, transport=transport,
         extra_headers={"meterless-app": settings.meterless_app},
         chat_headers={"meterless-scope": "user"},
