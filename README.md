@@ -222,7 +222,7 @@ Inside the container, `localhost` would mean the container itself. So `localhost
 | `GET /` | The chat UI (island + panel). `?shell=desktop` is the variant `scripts/island.py` loads. |
 | `POST /uploads?filename=<name>` | Upload a CSV/XLSX as the raw request body. Returns the sheets, columns, row counts and a preview. `GET /uploads/{id}` returns the same; `GET /samples` lists the demo files with a suggested request. |
 | `POST /chat` | `{"message", "upload_id"?, "options": {"sample_mode"}}`. Starts a background job and returns `{job_id}`. The front desk routes the message to task mode, the analysis pipeline or a reply. |
-| `GET /jobs/{id}?after=<n>` | The job's live agent events since event `n`, then `result` (`{type: "task" | "analysis" | "reply", ...}`) or a structured `error`, plus its `trace_id`. |
+| `GET /jobs/{id}?after=<n>` | The job's live agent events since event `n`, then `result` (`type` is `task`, `analysis` or `reply`) or a structured `error`, plus its `trace_id`. |
 | `GET /tasks/{id}` | A task: request, understanding, spec, references, code and hash, QA checks and preview, Manager memo, approval, outputs. `GET /tasks/{id}/code` downloads the automation as a `.py` file. |
 | `POST /tasks/{id}/decision` | `{"decision": "approve" \| "reject", "approver", "note", "code_hash"}`. Records the decision in the ledger and H-MEM; **approve runs exactly that code** on the file and returns the outputs. A code hash that doesn't match returns 409. `POST /tasks/{id}/run` re-runs an approved task. |
 | `GET /files/{file_id}` | Download a filled workbook (`.xlsx`) or `.csv`. |
