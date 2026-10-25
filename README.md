@@ -180,6 +180,8 @@ Nemotron runs through Nightshift lanes; no local GPU is used. We pin `METERLESS_
 ## Quick start (Windows PowerShell)
 
 ```powershell
+git clone https://github.com/allurimohansrisaivarma-coder/AgentOffice.git
+cd AgentOffice
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest -q

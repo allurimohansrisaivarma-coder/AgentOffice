@@ -5,7 +5,7 @@
   "primary_track": "Track 3 - Reasoning Architecture",
   "also_addresses": ["Track 1 - Fragmented Intelligence", "Track 2 - Explain Why"],
   "description": "An AI office team you tell what to do: attach a spreadsheet and describe the repetitive work, and the agents plan it, write the automation, test it on your data and ask you to approve the exact code before handing back the filled file. It also analyses where a team's time goes and proposes what to automate first.",
-  "repository": "https://github.com/allurimohansrisaivarma-coder/AutoStack_Gen-AI",
+  "repository": "https://github.com/allurimohansrisaivarma-coder/AgentOffice",
   "run": {
     "desktop_app": "Windows: scripts/install_shortcut.ps1 creates an AgentOffice shortcut (AgentOffice.pyw): no terminal, no browser tab, Ctrl+Shift+Space opens the island",
     "sample_mode": "docker run --rm -p 8000:8000 -e SAMPLE_MODE=true oah-submission, then open http://localhost:8000",
