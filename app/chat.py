@@ -27,8 +27,10 @@ def public_task(record: dict, approvals: Optional[ApprovalLedger] = None) -> dic
     """A task record for the UI: reference data and the profile summarised, approval state attached."""
     out = {k: v for k, v in record.items() if k not in ("reference", "profile")}
     out["reference"] = {name: {"rows": len(rows), "sample": rows[:3]} for name, rows in record["reference"].items()}
-    out["profile"] = [{"sheet": s["name"], "rows": s["rows"], "columns": len(s["columns"])}
-                      for s in record.get("profile", {}).get("sheets", [])]
+    sheets = record.get("profile", {}).get("sheets", [])
+    out["profile"] = [{"sheet": s["name"], "rows": s["rows"], "columns": len(s["columns"])} for s in sheets]
+    out["input_columns"] = next((
+        [c["name"] for c in s["columns"]] for s in sheets if s["name"] == record["spec"]["input"]["sheet"]), [])
     if approvals and record.get("approval_id"):
         out["approval"] = approvals.get(record["approval_id"])
     return out

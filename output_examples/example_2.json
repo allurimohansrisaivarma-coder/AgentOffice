@@ -1,12 +1,753 @@
 {
   "request_id": "example-002",
-  "trace_id": "6bd175ed58974d40",
-  "status": "error",
-  "error": {
-    "type": "zetaris_bad_request",
-    "message": "HTTP 400: {\"msg\":\"REST API call failed: Connection refused\\n  URL: GET http://host.docker.internal:8000/data/workforce/people\\n  Content-Type: application/x-www-form-urlencoded\\n  Headers: Map()\\n  Request body: Map()\\n  Response body: \\n  Equivalent curl (sensitive values masked, replace before running):\\ncu",
-    "recoverable": false
+  "trace_id": "1205a2f9656e4220",
+  "status": "success",
+  "agents_used": [
+    "MemoryKeeperAgent",
+    "SourceMapperAgent",
+    "ReconcilerAgent",
+    "ConflictCriticAgent",
+    "ResearchPlannerAgent",
+    "RetrieverAgent",
+    "ReportWriterAgent",
+    "InsightCriticAgent",
+    "PMAgent",
+    "EngineerAgent",
+    "QAAgent",
+    "ManagerAgent",
+    "PriorityCritic"
+  ],
+  "result": {
+    "summary": "Order status updates dominate operations coordinators' time; email replies and order lookups are the largest repetitive tasks. Automate order_status_updates first: about 7.9 h/week saved (medium risk). The order_status_responder automation passed all 25 spec-derived QA cases after 1 QA round(s); Manager decision: approve_for_human_review.",
+    "findings": [
+      "The operations team consists of two coordinators: Elif Juno (P005) and Farid Arden (P006).",
+      "Timesheets show four task categories for operations coordinators: order_status_updates at 187.8 hours, inventory_reconciliation at 107.5 hours, shipping_exceptions at 77.8 hours, and scheduling at 76.5 hours.",
+      "Ticket logs record 3,996 minutes for order_status_updates and 3,425 minutes for shipping_exceptions.",
+      "Task_events reveal the top two actions by duration: Email reply_customer_status at 94,808 seconds and ERP lookup_order at 75,226 seconds.",
+      "The timesheet hours for order_status_updates (187.8 hours) are roughly 2.5 times the hours for scheduling (76.5 hours).",
+      "Data conflict: order_status_updates - Task_events records actual hands-on time (8.82 h), while tickets (17.87 h) only capture voluntarily logged effort and timesheets (47.88 h) are self‑reported and typically inflated.",
+      "Data conflict: crm_data_entry - Task_events provides measured activity (7.73 h); timesheets (33.71 h) rely on self‑reporting and tend to overstate the true effort.",
+      "Data conflict: invoice_matching - Task_events reflects real hands‑on work (32.86 h), whereas tickets (19.47 h) represent only time people chose to log and timesheets (71.54 h) are self‑reported and likely exaggerated.",
+      "invoice_matching: 120.5 runs/week by 2 people, 32.86 h/week hands-on in the activity log (timesheets report 71.54 h/week, tickets log 19.47 h/week); risk high",
+      "order_status_updates: 79.5 runs/week by 2 people, 8.82 h/week hands-on in the activity log (timesheets report 47.88 h/week, tickets log 17.87 h/week); risk medium",
+      "crm_data_entry: 56.3 runs/week by 2 people, 7.73 h/week hands-on in the activity log (timesheets report 33.71 h/week, not tracked in tickets); risk medium"
+    ],
+    "confidence": 0.93,
+    "ranking": [
+      {
+        "routine": "order_status_updates",
+        "estimated_hours_saved_per_week": 7.9,
+        "risk": "medium",
+        "reason": "Task_events shows 8.82 active hours/week; ERP lookup_order and Email reply_customer_status consume ~7.9 hours/week combined. Automating the lookup and verification would recover most of that time. Risk is medium because replies go to external customers."
+      }
+    ],
+    "decision": {
+      "decision": "approve_for_human_review",
+      "rationale": "The order_status_updates routine consumes 47.88 reported hours/week across 2 coordinators (8.82 active hours/week) with 79.5 instances/week. The three-step sequence (Email.open_status_request, ERP.lookup_order, Email.reply_customer_status) is highly repetitive (variant_share 4%) and automatable. QA passed 25/25 cases (100% pass rate) with no failed checks. Estimated savings: 7.9 hours/week. Risk is medium primarily because reply_customer_status sends emails externally. QA advisories flag non-blocking issues: normalization assumes string input, Unicode case-folding, error message detail, inline check logic, and empty-key behavior. These are addressable before production.",
+      "risks": [
+        "Medium: reply_customer_status sends email outside the team — incorrect automation could send wrong status to customers",
+        "Normalization function `digits_only` assumes string input; non-string values (None, int) would raise TypeError",
+        "Customer comparison uses `.lower()` which may not handle Unicode case folding correctly (e.g., ß vs SS, Turkish İ)",
+        "Input validation raises ValueError with only field name, not record index, complicating debugging",
+        "Customer check logic is inline; extracting to helper would improve maintainability and testability",
+        "Empty normalized keys on right are stored under '' but left records with empty keys get order_not_found — subtle behavior needs documentation"
+      ],
+      "rollout": [
+        "Human reviewer assesses risk assessment and QA advisories; approves mitigation plan",
+        "Address QA warnings: add type checking/coercion in normalization, replace `.lower()` with `.casefold()`",
+        "Automate internal steps first: Email.open_status_request and ERP.lookup_order (no external side effects)",
+        "Implement Email.reply_customer_status with human-in-the-loop approval before sending",
+        "Pilot with one coordinator for 2 weeks, monitoring error rates and customer feedback",
+        "Review pilot metrics; if savings ≥6 hrs/week and zero critical incidents, proceed to full rollout",
+        "Full rollout to both coordinators with ongoing monitoring and quarterly review"
+      ],
+      "confidence": 0.93,
+      "confidence_formula": "0.45*QA pass rate + 0.2*evidence volume + 0.15*routine consistency + 0.2*(1 - risk)"
+    },
+    "automation": {
+      "name": "order_status_responder",
+      "routine": "order_status_updates",
+      "spec": {
+        "name": "order_status_responder",
+        "routine": "order_status_updates",
+        "summary": "Look up the order behind each customer status request and confirm it belongs to that customer.",
+        "left": {
+          "name": "status_requests",
+          "id_field": "request_id",
+          "fields": {
+            "request_id": "str",
+            "order_ref": "str",
+            "customer": "str"
+          }
+        },
+        "right": {
+          "name": "orders",
+          "id_field": "order_id",
+          "fields": {
+            "order_id": "str",
+            "customer": "str",
+            "status": "str"
+          }
+        },
+        "key": {
+          "left": "order_ref",
+          "right": "order_id",
+          "normalize": [
+            "digits_only"
+          ]
+        },
+        "checks": [
+          {
+            "left": "customer",
+            "right": "customer",
+            "op": "equals_ci",
+            "fail_status": "customer_mismatch"
+          }
+        ],
+        "statuses": {
+          "no_match": "order_not_found",
+          "ambiguous": "manual_review",
+          "pass": "reply_with_status"
+        }
+      },
+      "spec_origin": "written by meterless/meterless/deep",
+      "code": "import re\nfrom typing import Any, Dict, List, Optional\n\n\ndef run(left: List[Dict[str, Any]], right: List[Dict[str, Any]]) -> List[Dict[str, Any]]:\n    # Validate left records have all declared fields\n    left_fields = {\"request_id\", \"order_ref\", \"customer\"}\n    for record in left:\n        for field in left_fields:\n            if field not in record:\n                raise ValueError(field)\n\n    # Validate right records have all declared fields\n    right_fields = {\"order_id\", \"customer\", \"status\"}\n    for record in right:\n        for field in right_fields:\n            if field not in record:\n                raise ValueError(field)\n\n    # Normalization: keep only digits 0-9\n    def digits_only(s: str) -> str:\n        return re.sub(r\"[^0-9]\", \"\", s)\n\n    # Build map from normalized order_id to list of right records\n    right_norm_map: Dict[str, List[Dict[str, Any]]] = {}\n    for r in right:\n        k = digits_only(r[\"order_id\"])\n        right_norm_map.setdefault(k, []).append(r)\n\n    results: List[Dict[str, Any]] = []\n    for l in left:\n        k = digits_only(l[\"order_ref\"])\n\n        # No match or empty key\n        if not k or k not in right_norm_map:\n            results.append({\n                \"left_id\": l[\"request_id\"],\n                \"right_id\": None,\n                \"status\": \"order_not_found\"\n            })\n            continue\n\n        matches = right_norm_map[k]\n\n        # Ambiguous match\n        if len(matches) > 1:\n            results.append({\n                \"left_id\": l[\"request_id\"],\n                \"right_id\": None,\n                \"status\": \"manual_review\"\n            })\n            continue\n\n        # Single match\n        r = matches[0]\n        right_id = r[\"order_id\"]\n\n        # Check: equals_ci on customer\n        left_customer = l[\"customer\"]\n        right_customer = r[\"customer\"]\n\n        # Wrong type fails the check\n        if not isinstance(left_customer, str) or not isinstance(right_customer, str):\n            results.append({\n                \"left_id\": l[\"request_id\"],\n                \"right_id\": right_id,\n                \"status\": \"customer_mismatch\"\n            })\n            continue\n\n        # Compare after stripping whitespace and ignoring case\n        if left_customer.strip().lower() != right_customer.strip().lower():\n            results.append({\n                \"left_id\": l[\"request_id\"],\n                \"right_id\": right_id,\n                \"status\": \"customer_mismatch\"\n            })\n            continue\n\n        # All checks passed\n        results.append({\n            \"left_id\": l[\"request_id\"],\n            \"right_id\": right_id,\n            \"status\": \"reply_with_status\"\n        })\n\n    return results\n",
+      "code_hash": "22f7a77148e2cae2a7de20cf110ef354e2e029c5f59e0de1ba104165977a27ce",
+      "version": 1,
+      "origin": "written by meterless/meterless/deep",
+      "qa": {
+        "passed": true,
+        "pass_rate": 1.0,
+        "cases": 25,
+        "model_cases": 6,
+        "checks": [
+          {
+            "name": "sandbox_policy",
+            "passed": true,
+            "detail": "only allowed constructs"
+          },
+          {
+            "name": "no_credentials",
+            "passed": true,
+            "detail": "no hardcoded credentials"
+          },
+          {
+            "name": "runs",
+            "passed": true,
+            "detail": "ran in 0.074s"
+          },
+          {
+            "name": "output_shape",
+            "passed": true,
+            "detail": "one {left_id, right_id, status} per left record, in order"
+          },
+          {
+            "name": "matches_spec",
+            "passed": true,
+            "detail": "25/25 cases match the spec's expected output"
+          },
+          {
+            "name": "deterministic",
+            "passed": true,
+            "detail": "same output on a second run"
+          },
+          {
+            "name": "fails_loudly_on_schema_drift",
+            "passed": true,
+            "detail": "renaming 'order_ref' raised: ValueError: order_ref"
+          }
+        ],
+        "advisories": [
+          {
+            "severity": "warning",
+            "detail": "Normalization function `digits_only` assumes string input; if `order_ref` or `order_id` is not a string (e.g., None, int), `re.sub` will raise TypeError. The spec declares fields as str but doesn't guarantee input validation. Consider adding type check or coercion."
+          },
+          {
+            "severity": "info",
+            "detail": "Customer comparison uses `.lower()` which may not handle Unicode case folding correctly (e.g., 'ß' vs 'SS', Turkish 'İ'). Consider using `.casefold()` for better Unicode support."
+          },
+          {
+            "severity": "info",
+            "detail": "Input validation raises ValueError with only field name, not record index, making debugging harder when multiple records exist. Consider including record position in error message."
+          },
+          {
+            "severity": "info",
+            "detail": "The customer check logic is inline; extracting to a helper function (e.g., `equals_ci`) would improve readability, testability, and maintainability."
+          },
+          {
+            "severity": "warning",
+            "detail": "If a right record's `order_id` normalizes to an empty string, it is stored under key `''` in `right_norm_map`. A left record with an empty normalized `order_ref` will still get `order_not_found` due to `if not k`, which matches the spec. However, this behavior is subtle; add a comment clarifying that empty normalized keys on the right are effectively ignored for matching."
+          }
+        ]
+      },
+      "qa_failures": []
+    }
   },
-  "log_path": "logs/trace-6bd175ed58974d40.jsonl",
-  "execution_time_seconds": 15.397
+  "collaboration": {
+    "feedback_loop_completed": true,
+    "revision_count": 0,
+    "qa_rounds": [
+      {
+        "round": 1,
+        "code_version": 1,
+        "code_hash": "22f7a77148e2cae2a7de20cf110ef354e2e029c5f59e0de1ba104165977a27ce",
+        "passed": true,
+        "pass_rate": 1.0,
+        "failed_checks": [],
+        "failure_purposes": []
+      }
+    ],
+    "priority_critique_rounds": 0,
+    "insight_critique_rounds": 1,
+    "evaluator_findings": [
+      "insight critique round 1: claim 1: the number 41.8 is not one of its cited values (or a ratio of them)",
+      "insight critique round 1: claim 1: the number 449.5 is not one of its cited values (or a ratio of them)",
+      "insight critique round 1: claim 2: the number 53.9 is not one of its cited values (or a ratio of them)",
+      "insight critique round 1: claim 2: the number 7,421 is not one of its cited values (or a ratio of them)",
+      "insight critique round 1: claim 3: the number 81.3 is not one of its cited values (or a ratio of them)",
+      "insight critique round 1: claim 3: the number 209,113 is not one of its cited values (or a ratio of them)",
+      "insight critique round 1: claim 4: the number 17.0 is not one of its cited values (or a ratio of them)",
+      "QA round 1 (code v1): passed",
+      "conflict critique: order_status_updates -> trust zetaris:workforce.task_events",
+      "conflict critique: crm_data_entry -> trust zetaris:workforce.task_events",
+      "conflict critique: invoice_matching -> trust zetaris:workforce.task_events"
+    ]
+  },
+  "stages": {
+    "discover": {
+      "sources": {
+        "tables": [
+          "people",
+          "timesheets",
+          "task_events"
+        ],
+        "joins": [
+          {
+            "left": "people.person_id",
+            "right": "timesheets.person_id"
+          },
+          {
+            "left": "people.person_id",
+            "right": "task_events.person_id"
+          }
+        ],
+        "reason": "Identify operations coordinators from the people table, then combine with timesheets to see self-reported task categories (especially 'scheduling' and other high-time categories) and task_events to see actual hands-on task durations, app/action patterns, and total time spent, revealing repetitive work that consumes their week and indicating safe automation candidates.",
+        "row_counts": {
+          "people": 12,
+          "timesheets": 827,
+          "task_events": 8266
+        }
+      },
+      "reconciliation": {
+        "links": [
+          {
+            "task": "client_calls",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "crm_data_entry",
+            "ticket_category": null,
+            "routine": "crm_data_entry",
+            "confidence": 1.0
+          },
+          {
+            "task": "expense_review",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "inventory_reconciliation",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "invoice_matching",
+            "ticket_category": "invoice_matching",
+            "routine": "invoice_matching",
+            "confidence": 1.0
+          },
+          {
+            "task": "meeting_scheduling",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "month_end_close",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "office_requests",
+            "ticket_category": "office_requests",
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "onboarding_paperwork",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "order_status_updates",
+            "ticket_category": "order_status_updates",
+            "routine": "order_status_updates",
+            "confidence": 1.0
+          },
+          {
+            "task": "pipeline_reporting",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "quote_preparation",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "reporting",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "scheduling",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "shipping_exceptions",
+            "ticket_category": "shipping_exceptions",
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "timesheet_chasing",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "vendor_queries",
+            "ticket_category": "vendor_queries",
+            "routine": null,
+            "confidence": 1.0
+          }
+        ],
+        "cross_source_links": 8,
+        "people": 12,
+        "observations": 145
+      },
+      "conflicts": {
+        "conflicts": [
+          {
+            "task": "order_status_updates",
+            "values": {
+              "zetaris:workforce.task_events": 8.82,
+              "zetaris:workforce.tickets": 17.87,
+              "zetaris:workforce.timesheets": 47.88
+            },
+            "ratio": 5.43,
+            "world_model_choice": 8.82
+          },
+          {
+            "task": "crm_data_entry",
+            "values": {
+              "zetaris:workforce.task_events": 7.73,
+              "zetaris:workforce.timesheets": 33.71
+            },
+            "ratio": 4.36,
+            "world_model_choice": 7.73
+          },
+          {
+            "task": "invoice_matching",
+            "values": {
+              "zetaris:workforce.task_events": 32.86,
+              "zetaris:workforce.tickets": 19.47,
+              "zetaris:workforce.timesheets": 71.54
+            },
+            "ratio": 3.67,
+            "world_model_choice": 32.86
+          }
+        ],
+        "assessments": [
+          {
+            "task": "order_status_updates",
+            "trusted_source": "zetaris:workforce.task_events",
+            "explanation": "Task_events records actual hands-on time (8.82 h), while tickets (17.87 h) only capture voluntarily logged effort and timesheets (47.88 h) are self‑reported and typically inflated."
+          },
+          {
+            "task": "crm_data_entry",
+            "trusted_source": "zetaris:workforce.task_events",
+            "explanation": "Task_events provides measured activity (7.73 h); timesheets (33.71 h) rely on self‑reporting and tend to overstate the true effort."
+          },
+          {
+            "task": "invoice_matching",
+            "trusted_source": "zetaris:workforce.task_events",
+            "explanation": "Task_events reflects real hands‑on work (32.86 h), whereas tickets (19.47 h) represent only time people chose to log and timesheets (71.54 h) are self‑reported and likely exaggerated."
+          }
+        ]
+      }
+    },
+    "explain": {
+      "sub_questions": [
+        {
+          "id": "q1",
+          "question": "Who are the operations coordinators (person_id, name, role, team)?"
+        },
+        {
+          "id": "q2",
+          "question": "For operations coordinators, what is the total hours per task_category from timesheets?"
+        },
+        {
+          "id": "q3",
+          "question": "For operations coordinators, what is the total logged_minutes per ticket category from tickets?"
+        },
+        {
+          "id": "q4",
+          "question": "For operations coordinators, what are the top 10 app/action combinations by total duration_seconds from task_events, along with event count and average duration per event?"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "q1",
+          "question": "Who are the operations coordinators (person_id, name, role, team)?",
+          "sql": "SELECT person_id, name, role, team FROM workforce.people WHERE role = 'Ops coordinator'",
+          "rows": [
+            {
+              "person_id": "P005",
+              "name": "Elif Juno",
+              "role": "Ops coordinator",
+              "team": "Operations"
+            },
+            {
+              "person_id": "P006",
+              "name": "Farid Arden",
+              "role": "Ops coordinator",
+              "team": "Operations"
+            }
+          ],
+          "attempts": 1
+        },
+        {
+          "id": "q2",
+          "question": "For operations coordinators, what is the total hours per task_category from timesheets?",
+          "sql": "SELECT t.task_category, SUM(t.hours) AS total_hours FROM workforce.timesheets t JOIN workforce.people p ON t.person_id = p.person_id WHERE p.role = 'Ops coordinator' GROUP BY t.task_category ORDER BY total_hours DESC LIMIT 30",
+          "rows": [
+            {
+              "task_category": "order_status_updates",
+              "total_hours": 187.75
+            },
+            {
+              "task_category": "inventory_reconciliation",
+              "total_hours": 107.5
+            },
+            {
+              "task_category": "shipping_exceptions",
+              "total_hours": 77.75
+            },
+            {
+              "task_category": "scheduling",
+              "total_hours": 76.5
+            }
+          ],
+          "attempts": 1
+        },
+        {
+          "id": "q3",
+          "question": "For operations coordinators, what is the total logged_minutes per ticket category from tickets?",
+          "sql": "SELECT t.category, SUM(t.logged_minutes) AS total_logged_minutes, SUM(t.logged_minutes) / 6.0 AS per_week_logged_minutes FROM workforce.tickets t JOIN workforce.people p ON t.assignee_id = p.person_id WHERE p.role = 'Ops coordinator' GROUP BY t.category ORDER BY total_logged_minutes DESC LIMIT 30",
+          "rows": [
+            {
+              "category": "order_status_updates",
+              "total_logged_minutes": 3996,
+              "per_week_logged_minutes": 666.0
+            },
+            {
+              "category": "shipping_exceptions",
+              "total_logged_minutes": 3425,
+              "per_week_logged_minutes": 570.833333
+            }
+          ],
+          "attempts": 1
+        },
+        {
+          "id": "q4",
+          "question": "For operations coordinators, what are the top 10 app/action combinations by total duration_seconds from task_events, along with event count and average duration per event?",
+          "sql": "SELECT te.app, te.action, SUM(te.duration_seconds) AS total_duration_seconds, COUNT(*) AS event_count, AVG(te.duration_seconds) AS avg_duration_seconds FROM workforce.task_events te JOIN workforce.people p ON te.person_id = p.person_id WHERE p.role = 'Ops coordinator' GROUP BY te.app, te.action ORDER BY total_duration_seconds DESC LIMIT 10",
+          "rows": [
+            {
+              "app": "Email",
+              "action": "reply_customer_status",
+              "total_duration_seconds": 94808,
+              "event_count": 477,
+              "avg_duration_seconds": 198.75890985324946
+            },
+            {
+              "app": "ERP",
+              "action": "lookup_order",
+              "total_duration_seconds": 75226,
+              "event_count": 458,
+              "avg_duration_seconds": 164.24890829694323
+            },
+            {
+              "app": "Email",
+              "action": "open_status_request",
+              "total_duration_seconds": 20479,
+              "event_count": 477,
+              "avg_duration_seconds": 42.932914046121596
+            },
+            {
+              "app": "Chat",
+              "action": "reply_message",
+              "total_duration_seconds": 18600,
+              "event_count": 110,
+              "avg_duration_seconds": 169.0909090909091
+            }
+          ],
+          "attempts": 1
+        }
+      ],
+      "headline": "Order status updates dominate operations coordinators' time; email replies and order lookups are the largest repetitive tasks.",
+      "claims": [
+        {
+          "text": "The operations team consists of two coordinators: Elif Juno (P005) and Farid Arden (P006).",
+          "evidence": [
+            {
+              "query": "q1",
+              "row": 0,
+              "column": "person_id",
+              "value": "P005"
+            },
+            {
+              "query": "q1",
+              "row": 0,
+              "column": "name",
+              "value": "Elif Juno"
+            },
+            {
+              "query": "q1",
+              "row": 1,
+              "column": "person_id",
+              "value": "P006"
+            },
+            {
+              "query": "q1",
+              "row": 1,
+              "column": "name",
+              "value": "Farid Arden"
+            }
+          ]
+        },
+        {
+          "text": "Timesheets show four task categories for operations coordinators: order_status_updates at 187.8 hours, inventory_reconciliation at 107.5 hours, shipping_exceptions at 77.8 hours, and scheduling at 76.5 hours.",
+          "evidence": [
+            {
+              "query": "q2",
+              "row": 0,
+              "column": "total_hours",
+              "value": 187.75
+            },
+            {
+              "query": "q2",
+              "row": 1,
+              "column": "total_hours",
+              "value": 107.5
+            },
+            {
+              "query": "q2",
+              "row": 2,
+              "column": "total_hours",
+              "value": 77.75
+            },
+            {
+              "query": "q2",
+              "row": 3,
+              "column": "total_hours",
+              "value": 76.5
+            }
+          ]
+        },
+        {
+          "text": "Ticket logs record 3,996 minutes for order_status_updates and 3,425 minutes for shipping_exceptions.",
+          "evidence": [
+            {
+              "query": "q3",
+              "row": 0,
+              "column": "total_logged_minutes",
+              "value": 3996
+            },
+            {
+              "query": "q3",
+              "row": 1,
+              "column": "total_logged_minutes",
+              "value": 3425
+            }
+          ]
+        },
+        {
+          "text": "Task_events reveal the top two actions by duration: Email reply_customer_status at 94,808 seconds and ERP lookup_order at 75,226 seconds.",
+          "evidence": [
+            {
+              "query": "q4",
+              "row": 0,
+              "column": "total_duration_seconds",
+              "value": 94808
+            },
+            {
+              "query": "q4",
+              "row": 1,
+              "column": "total_duration_seconds",
+              "value": 75226
+            }
+          ]
+        },
+        {
+          "text": "The timesheet hours for order_status_updates (187.8 hours) are roughly 2.5 times the hours for scheduling (76.5 hours).",
+          "evidence": [
+            {
+              "query": "q2",
+              "row": 0,
+              "column": "total_hours",
+              "value": 187.75
+            },
+            {
+              "query": "q2",
+              "row": 3,
+              "column": "total_hours",
+              "value": 76.5
+            }
+          ]
+        }
+      ],
+      "dropped_claims": [],
+      "critique_rounds": 1,
+      "objections": [
+        [
+          "claim 1: the number 41.8 is not one of its cited values (or a ratio of them)",
+          "claim 1: the number 449.5 is not one of its cited values (or a ratio of them)",
+          "claim 2: the number 53.9 is not one of its cited values (or a ratio of them)",
+          "claim 2: the number 7,421 is not one of its cited values (or a ratio of them)",
+          "claim 3: the number 81.3 is not one of its cited values (or a ratio of them)",
+          "claim 3: the number 209,113 is not one of its cited values (or a ratio of them)",
+          "claim 4: the number 17.0 is not one of its cited values (or a ratio of them)"
+        ],
+        []
+      ]
+    },
+    "build": {
+      "history": [
+        {
+          "round": 1,
+          "code_version": 1,
+          "code_hash": "22f7a77148e2cae2a7de20cf110ef354e2e029c5f59e0de1ba104165977a27ce",
+          "passed": true,
+          "pass_rate": 1.0,
+          "failed_checks": [],
+          "failure_purposes": []
+        }
+      ]
+    }
+  },
+  "approval": {
+    "approval_id": "apr_c5fbd505f32c",
+    "run_id": "1205a2f9656e4220",
+    "automation": "order_status_responder",
+    "routine": "order_status_updates",
+    "sample_mode": false,
+    "code_hash": "22f7a77148e2cae2a7de20cf110ef354e2e029c5f59e0de1ba104165977a27ce",
+    "report_hash": "d772fea63cda6406a06ba4e6d71da578af984ae8ccc8e02793d843a73401bb19",
+    "memo": {
+      "decision": "approve_for_human_review",
+      "rationale": "The order_status_updates routine consumes 47.88 reported hours/week across 2 coordinators (8.82 active hours/week) with 79.5 instances/week. The three-step sequence (Email.open_status_request, ERP.lookup_order, Email.reply_customer_status) is highly repetitive (variant_share 4%) and automatable. QA passed 25/25 cases (100% pass rate) with no failed checks. Estimated savings: 7.9 hours/week. Risk is medium primarily because reply_customer_status sends emails externally. QA advisories flag non-blocking issues: normalization assumes string input, Unicode case-folding, error message detail, inline check logic, and empty-key behavior. These are addressable before production.",
+      "risks": [
+        "Medium: reply_customer_status sends email outside the team — incorrect automation could send wrong status to customers",
+        "Normalization function `digits_only` assumes string input; non-string values (None, int) would raise TypeError",
+        "Customer comparison uses `.lower()` which may not handle Unicode case folding correctly (e.g., ß vs SS, Turkish İ)",
+        "Input validation raises ValueError with only field name, not record index, complicating debugging",
+        "Customer check logic is inline; extracting to helper would improve maintainability and testability",
+        "Empty normalized keys on right are stored under '' but left records with empty keys get order_not_found — subtle behavior needs documentation"
+      ],
+      "rollout": [
+        "Human reviewer assesses risk assessment and QA advisories; approves mitigation plan",
+        "Address QA warnings: add type checking/coercion in normalization, replace `.lower()` with `.casefold()`",
+        "Automate internal steps first: Email.open_status_request and ERP.lookup_order (no external side effects)",
+        "Implement Email.reply_customer_status with human-in-the-loop approval before sending",
+        "Pilot with one coordinator for 2 weeks, monitoring error rates and customer feedback",
+        "Review pilot metrics; if savings ≥6 hrs/week and zero critical incidents, proceed to full rollout",
+        "Full rollout to both coordinators with ongoing monitoring and quarterly review"
+      ],
+      "confidence": 0.93,
+      "confidence_formula": "0.45*QA pass rate + 0.2*evidence volume + 0.15*routine consistency + 0.2*(1 - risk)"
+    },
+    "status": "pending",
+    "requested_at": "2026-10-25T09:08:58.322Z",
+    "code_path": "state/automations/22f7a77148e2cae2.py"
+  },
+  "mode": {
+    "sample_mode": false,
+    "model": "meterless/meterless/deep",
+    "data_source": "zetaris",
+    "stages": [
+      "discover",
+      "explain",
+      "build"
+    ]
+  },
+  "usage": {
+    "model_calls": 18,
+    "data_queries": 14
+  },
+  "memory": {
+    "retrieved": [],
+    "human_decisions_applied": {},
+    "mined": [
+      {
+        "status": "reinforced",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "For invoice_matching, crm_data_entry, and order_status_updates, trust zetaris:workforce.task_events for actual hands-on time (measured activity) over timesheets (self-reported, inflated) and tickets (voluntarily logged, incomplete).",
+        "id": "mem_99b7b298bf782774",
+        "conflicts": 0
+      },
+      {
+        "status": "reinforced",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Task_events shows invoice_matching at 32.86h/week vs timesheets 71.54h and tickets 19.47h; use measured hands-on time to size automation savings, not self-reported estimates.",
+        "id": "mem_71036ebb0b5cd271",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Every number in a claim must be a directly cited cell value or a ratio of two cited values; Insight Critic rejected claims with computed percentages (41.8, 449.5, 53.9) not present in the source data.",
+        "id": "mem_feef480880967b72",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Run selected order_status_updates for automation review; Manager approved for human review (confidence 0.93).",
+        "id": "mem_cd527812051fa52e",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Task_events records actual hands-on time for order_status_updates (8.82h) vs tickets (17.87h) and timesheets (47.88h); prefer measured activity for sizing.",
+        "id": "mem_fac44ac61cbe3dfa",
+        "conflicts": 0
+      }
+    ]
+  },
+  "log_path": "logs/trace-1205a2f9656e4220.jsonl",
+  "execution_time_seconds": 797.778
 }

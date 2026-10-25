@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentOffice</title>
+  <meta name="description" content="AgentOffice: tell your AI office team what to do with a spreadsheet; it plans, builds, tests and asks you to approve.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23111'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%237c9cff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+  <main class="desk" aria-hidden="true">
+    <div class="desk-hint">
+      <div class="desk-title">AgentOffice</div>
+      <p>Your AI office team. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> or <kbd>Ctrl</kbd> + <kbd>K</kbd>, or click the island.</p>
+      <ol class="desk-steps">
+        <li><b>Tell it the task</b> and attach a CSV or Excel file</li>
+        <li><b>The team plans, writes and tests</b> the automation on your real data</li>
+        <li><b>You approve</b> the exact code, then download the filled spreadsheet</li>
+      </ol>
+    </div>
+  </main>
+
+  <section id="island" class="island" data-state="idle" aria-label="AgentOffice assistant">
+    <button id="pill" class="pill" type="button" aria-expanded="false" aria-controls="panel" title="Open AgentOffice (Ctrl+Shift+Space)">
+      <span class="orb" aria-hidden="true"><span class="orb-core"></span></span>
+      <span id="pill-text" class="pill-text">AgentOffice</span>
+      <span id="pill-badge" class="pill-badge" hidden></span>
+    </button>
+
+    <div id="panel" class="panel" role="dialog" aria-label="AgentOffice chat">
+      <header class="panel-head">
+        <span class="orb small" aria-hidden="true"><span class="orb-core"></span></span>
+        <div class="head-text">
+          <div class="head-title">AgentOffice</div>
+          <div id="mode" class="head-mode">connecting…</div>
+        </div>
+        <label class="switch" title="Sample mode: no sponsor calls, bundled demo data">
+          <input id="sample-toggle" type="checkbox">
+          <span>Sample</span>
+        </label>
+        <button id="collapse" class="icon-btn" type="button" aria-label="Collapse (Esc)" title="Collapse (Esc)">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+
+      <div id="messages" class="messages" aria-live="polite"></div>
+
+      <form id="composer" class="composer" autocomplete="off">
+        <div id="attachment" class="attachment" hidden></div>
+        <div class="composer-row">
+          <button id="attach" class="icon-btn" type="button" aria-label="Attach a CSV or Excel file" title="Attach a CSV or Excel file">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l7.9-7.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <textarea id="input" rows="1" placeholder="Tell the team what to do…" aria-label="Message"></textarea>
+          <button id="send" class="send-btn" type="submit" aria-label="Send">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <input id="file" type="file" accept=".csv,.xlsx,.xlsm" hidden>
+      </form>
+      <div id="drop" class="drop" hidden><div>Drop a CSV or Excel file</div></div>
+    </div>
+  </section>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>
