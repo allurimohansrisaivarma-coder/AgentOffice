@@ -1,12 +1,736 @@
 {
   "request_id": "example-003",
-  "trace_id": "52ab6ef5a1d84a6a",
-  "status": "error",
-  "error": {
-    "type": "zetaris_bad_request",
-    "message": "HTTP 400: {\"msg\":\"REST API call failed: Connection refused\\n  URL: GET http://host.docker.internal:8000/data/workforce/people\\n  Content-Type: application/x-www-form-urlencoded\\n  Headers: Map()\\n  Request body: Map()\\n  Response body: \\n  Equivalent curl (sensitive values masked, replace before running):\\ncu",
-    "recoverable": false
+  "trace_id": "e1b82de8de2c44a9",
+  "status": "success",
+  "agents_used": [
+    "MemoryKeeperAgent",
+    "SourceMapperAgent",
+    "ReconcilerAgent",
+    "ConflictCriticAgent",
+    "ResearchPlannerAgent",
+    "RetrieverAgent",
+    "ReportWriterAgent",
+    "InsightCriticAgent",
+    "PMAgent",
+    "EngineerAgent",
+    "QAAgent",
+    "ManagerAgent",
+    "PriorityCritic"
+  ],
+  "result": {
+    "summary": "Sales reps report 124.75 hours of CRM data entry over six weeks; system events record 152,413 seconds across three repetitive actions. Automate crm_data_entry first: about 7.1 h/week saved (medium risk). The crm_lead_matcher automation passed all 28 spec-derived QA cases after 1 QA round(s); Manager decision: approve_for_human_review.",
+    "findings": [
+      "The sales team includes two account executives: Hugo Kade and Isla Brook.",
+      "Timesheets show 124.75 total hours spent on CRM data entry over six weeks, averaging 20.8 hours per week.",
+      "Task events record 152,413 total seconds of actual CRM data entry work, averaging 25,402 seconds per week.",
+      "Self-reported hours total 124.75, while measured system seconds total 152,413.",
+      "The work breaks down into three repetitive actions: log_activity (56.3 weekly events, 131 seconds average), create_contact (54.3 weekly events, 269 seconds average), and search_contact (53.5 weekly events, 64 seconds average).",
+      "Data conflict: order_status_updates - Task_events records actual hands-on time (8.82 h), while tickets (17.87 h) only capture voluntarily logged effort and timesheets (47.88 h) are self‑reported and typically inflated.",
+      "Data conflict: crm_data_entry - Task_events provides measured activity (7.73 h); timesheets (33.71 h) rely on self‑reporting and tend to overstate the true effort.",
+      "Data conflict: invoice_matching - Task_events reflects real hands‑on work (32.86 h), whereas tickets (19.47 h) represent only time people chose to log and timesheets (71.54 h) are self‑reported and likely exaggerated.",
+      "invoice_matching: 120.5 runs/week by 2 people, 32.86 h/week hands-on in the activity log (timesheets report 71.54 h/week, tickets log 19.47 h/week); risk high",
+      "order_status_updates: 79.5 runs/week by 2 people, 8.82 h/week hands-on in the activity log (timesheets report 47.88 h/week, tickets log 17.87 h/week); risk medium",
+      "crm_data_entry: 56.3 runs/week by 2 people, 7.73 h/week hands-on in the activity log (timesheets report 33.71 h/week, not tracked in tickets); risk medium"
+    ],
+    "confidence": 0.93,
+    "ranking": [
+      {
+        "routine": "crm_data_entry",
+        "estimated_hours_saved_per_week": 7.1,
+        "risk": "medium",
+        "reason": "Task events show 7.73 active hours/week; CRM search_contact, create_contact, and log_activity together consume ~7.1 hours/week (56.3×131s + 54.3×269s + 53.5×64s = 25,406s). Automating the match‑create‑log flow would recover nearly all measured hands‑on time."
+      }
+    ],
+    "decision": {
+      "decision": "approve_for_human_review",
+      "rationale": "The crm_data_entry routine consumes 33.71 reported hours/week across 2 sales reps (7.73 active hours/week) with 56.3 instances/week. The four-step sequence (Email.open_lead_email, CRM.search_contact, CRM.create_contact, CRM.log_activity) is repetitive (variant_share 8.3%) and automatable. QA passed 28/28 cases (100% pass rate) with no failed checks. Estimated savings: 7.1 hours/week. Risk is medium primarily because create_contact writes customer records in CRM. QA advisories flag non-blocking issues: email normalization assumes string input, duplicate check logic inline, Unicode case-folding, error message detail, and empty normalized email handling. These are addressable before production.",
+      "risks": [
+        "Medium: create_contact writes customer records in CRM — incorrect automation could create duplicate or erroneous customer records",
+        "Email normalization assumes string input; non-string values (None, int) in sender_email or email fields will raise AttributeError instead of clean validation error",
+        "Duplicate check logic for company and name comparisons is inline; extracting to helper would improve maintainability",
+        "Unicode case-insensitive comparison uses .lower() which may not handle all Unicode correctly (e.g., ß vs SS, Turkish İ); consider .casefold()",
+        "ValueError on missing field doesn't include record index, making debugging harder for large datasets",
+        "No validation that right['email'] normalizes to non-empty string before adding to map; empty normalized emails stored but never matched (correct per spec but could be documented)"
+      ],
+      "rollout": [
+        "Human review of risk assessment and QA advisories",
+        "Address QA warning: add type checking/coercion in email normalization",
+        "Implement automation for Email.open_lead_email and CRM.search_contact (read-only steps)",
+        "For CRM.create_contact and CRM.log_activity: implement with human-in-the-loop approval before writing",
+        "Pilot with one sales rep for 2 weeks",
+        "Monitor error rates, duplicate creation, and data quality",
+        "Full rollout if pilot successful"
+      ],
+      "confidence": 0.93,
+      "confidence_formula": "0.45*QA pass rate + 0.2*evidence volume + 0.15*routine consistency + 0.2*(1 - risk)"
+    },
+    "automation": {
+      "name": "crm_lead_matcher",
+      "routine": "crm_data_entry",
+      "spec": {
+        "name": "crm_lead_matcher",
+        "routine": "crm_data_entry",
+        "summary": "Match each incoming lead email to an existing CRM contact (or flag for creation) and log the activity automatically.",
+        "left": {
+          "name": "incoming_leads",
+          "id_field": "lead_id",
+          "fields": {
+            "lead_id": "str",
+            "sender_email": "str",
+            "lead_name": "str",
+            "company": "str",
+            "subject": "str"
+          }
+        },
+        "right": {
+          "name": "crm_contacts",
+          "id_field": "contact_id",
+          "fields": {
+            "contact_id": "str",
+            "email": "str",
+            "name": "str",
+            "company": "str",
+            "status": "str"
+          }
+        },
+        "key": {
+          "left": "sender_email",
+          "right": "email",
+          "normalize": [
+            "lower",
+            "strip"
+          ]
+        },
+        "checks": [
+          {
+            "left": "company",
+            "right": "company",
+            "op": "equals_ci",
+            "fail_status": "company_mismatch"
+          },
+          {
+            "left": "lead_name",
+            "right": "name",
+            "op": "equals_ci",
+            "fail_status": "name_mismatch"
+          }
+        ],
+        "statuses": {
+          "no_match": "contact_not_found",
+          "ambiguous": "manual_review",
+          "pass": "auto_create_and_log"
+        }
+      },
+      "spec_origin": "written by meterless/meterless/deep",
+      "code": "from typing import Any, List, Dict, Optional\n\ndef run(left: List[Dict[str, Any]], right: List[Dict[str, Any]]) -> List[Dict[str, Any]]:\n    # Validate left records\n    left_fields = {\"lead_id\", \"sender_email\", \"lead_name\", \"company\", \"subject\"}\n    for record in left:\n        for field in left_fields:\n            if field not in record:\n                raise ValueError(field)\n    \n    # Validate right records\n    right_fields = {\"contact_id\", \"email\", \"name\", \"company\", \"status\"}\n    for record in right:\n        for field in right_fields:\n            if field not in record:\n                raise ValueError(field)\n    \n    # Build normalized right map\n    def normalize_email(s: str) -> str:\n        return s.lower().strip()\n    \n    right_norm_map: Dict[str, List[Dict[str, Any]]] = {}\n    for r in right:\n        k = normalize_email(r['email'])\n        if k not in right_norm_map:\n            right_norm_map[k] = []\n        right_norm_map[k].append(r)\n    \n    # Process left records\n    results = []\n    for l in left:\n        k = normalize_email(l['sender_email'])\n        \n        if not k or k not in right_norm_map:\n            results.append({\n                \"left_id\": l['lead_id'],\n                \"right_id\": None,\n                \"status\": \"contact_not_found\"\n            })\n            continue\n        \n        matches = right_norm_map[k]\n        if len(matches) > 1:\n            results.append({\n                \"left_id\": l['lead_id'],\n                \"right_id\": None,\n                \"status\": \"manual_review\"\n            })\n            continue\n        \n        # Single match\n        r = matches[0]\n        right_id = r['contact_id']\n        \n        # Check company match (equals_ci)\n        left_company = l['company']\n        right_company = r['company']\n        \n        if not isinstance(left_company, str) or not isinstance(right_company, str):\n            results.append({\n                \"left_id\": l['lead_id'],\n                \"right_id\": right_id,\n                \"status\": \"company_mismatch\"\n            })\n            continue\n        \n        if left_company.strip().lower() != right_company.strip().lower():\n            results.append({\n                \"left_id\": l['lead_id'],\n                \"right_id\": right_id,\n                \"status\": \"company_mismatch\"\n            })\n            continue\n        \n        # Check name match (equals_ci)\n        left_name = l['lead_name']\n        right_name = r['name']\n        \n        if not isinstance(left_name, str) or not isinstance(right_name, str):\n            results.append({\n                \"left_id\": l['lead_id'],\n                \"right_id\": right_id,\n                \"status\": \"name_mismatch\"\n            })\n            continue\n        \n        if left_name.strip().lower() != right_name.strip().lower():\n            results.append({\n                \"left_id\": l['lead_id'],\n                \"right_id\": right_id,\n                \"status\": \"name_mismatch\"\n            })\n            continue\n        \n        # All checks pass\n        results.append({\n            \"left_id\": l['lead_id'],\n            \"right_id\": right_id,\n            \"status\": \"auto_create_and_log\"\n        })\n    \n    return results\n",
+      "code_hash": "9a5d1be0eaff686c21a3593f98241bf079c0533a14befebbf26d2d785982e256",
+      "version": 1,
+      "origin": "written by meterless/meterless/deep",
+      "qa": {
+        "passed": true,
+        "pass_rate": 1.0,
+        "cases": 28,
+        "model_cases": 6,
+        "checks": [
+          {
+            "name": "sandbox_policy",
+            "passed": true,
+            "detail": "only allowed constructs"
+          },
+          {
+            "name": "no_credentials",
+            "passed": true,
+            "detail": "no hardcoded credentials"
+          },
+          {
+            "name": "runs",
+            "passed": true,
+            "detail": "ran in 0.064s"
+          },
+          {
+            "name": "output_shape",
+            "passed": true,
+            "detail": "one {left_id, right_id, status} per left record, in order"
+          },
+          {
+            "name": "matches_spec",
+            "passed": true,
+            "detail": "28/28 cases match the spec's expected output"
+          },
+          {
+            "name": "deterministic",
+            "passed": true,
+            "detail": "same output on a second run"
+          },
+          {
+            "name": "fails_loudly_on_schema_drift",
+            "passed": true,
+            "detail": "renaming 'sender_email' raised: ValueError: sender_email"
+          }
+        ],
+        "advisories": [
+          {
+            "severity": "warning",
+            "detail": "Email normalization assumes string input; non-string email values (None, int, etc.) in left['sender_email'] or right['email'] will raise AttributeError instead of clean validation error."
+          },
+          {
+            "severity": "info",
+            "detail": "Duplicate check logic for company and name comparisons; could extract to helper function for maintainability."
+          },
+          {
+            "severity": "info",
+            "detail": "Unicode case-insensitive comparison uses .lower() which may not handle all Unicode correctly; consider .casefold()."
+          },
+          {
+            "severity": "info",
+            "detail": "ValueError on missing field doesn't include record index, making debugging harder for large datasets."
+          },
+          {
+            "severity": "info",
+            "detail": "No validation that right['email'] normalizes to non-empty string before adding to map; empty normalized emails are stored but never matched (correct per spec but could be documented)."
+          }
+        ]
+      },
+      "qa_failures": []
+    }
   },
-  "log_path": "logs/trace-52ab6ef5a1d84a6a.jsonl",
-  "execution_time_seconds": 9.513
+  "collaboration": {
+    "feedback_loop_completed": true,
+    "revision_count": 0,
+    "qa_rounds": [
+      {
+        "round": 1,
+        "code_version": 1,
+        "code_hash": "9a5d1be0eaff686c21a3593f98241bf079c0533a14befebbf26d2d785982e256",
+        "passed": true,
+        "pass_rate": 1.0,
+        "failed_checks": [],
+        "failure_purposes": []
+      }
+    ],
+    "priority_critique_rounds": 0,
+    "insight_critique_rounds": 2,
+    "evaluator_findings": [
+      "insight critique round 1: claim 2: the number 42.3 is not one of its cited values (or a ratio of them)",
+      "insight critique round 1: claim 2: the number 7.1 is not one of its cited values (or a ratio of them)",
+      "insight critique round 1: claim 3: the number 2.9 is not one of its cited values (or a ratio of them)",
+      "insight critique round 1: claim 3: the number 42.3 is not one of its cited values (or a ratio of them)",
+      "insight critique round 1: claim 4: the number 164 is not one of its cited values (or a ratio of them)",
+      "insight critique round 2: claim 3: The claim compares self-reported hours (124.75) directly to measured system seconds (152,413) without unit conversion, making the statement 'substantially higher' misleading because the numbers are in different units (hours vs seconds). The data does not support a direct magnitude comparison without conversion.",
+      "QA round 1 (code v1): passed",
+      "conflict critique: order_status_updates -> trust zetaris:workforce.task_events",
+      "conflict critique: crm_data_entry -> trust zetaris:workforce.task_events",
+      "conflict critique: invoice_matching -> trust zetaris:workforce.task_events"
+    ]
+  },
+  "stages": {
+    "discover": {
+      "sources": {
+        "tables": [
+          "people",
+          "timesheets",
+          "task_events"
+        ],
+        "joins": [
+          {
+            "left": "people.person_id",
+            "right": "timesheets.person_id"
+          },
+          {
+            "left": "people.person_id",
+            "right": "task_events.person_id"
+          }
+        ],
+        "reason": "To compare self-reported CRM data entry hours (timesheets) with actual CRM interaction time (task_events) for sales reps (team='Sales', role='Account executive'), and assess automation potential by analyzing volume and duration of CRM data entry actions.",
+        "row_counts": {
+          "people": 12,
+          "timesheets": 827,
+          "task_events": 8266
+        }
+      },
+      "reconciliation": {
+        "links": [
+          {
+            "task": "client_calls",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "crm_data_entry",
+            "ticket_category": null,
+            "routine": "crm_data_entry",
+            "confidence": 1.0
+          },
+          {
+            "task": "expense_review",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "inventory_reconciliation",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "invoice_matching",
+            "ticket_category": "invoice_matching",
+            "routine": "invoice_matching",
+            "confidence": 1.0
+          },
+          {
+            "task": "meeting_scheduling",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "month_end_close",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "office_requests",
+            "ticket_category": "office_requests",
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "onboarding_paperwork",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "order_status_updates",
+            "ticket_category": "order_status_updates",
+            "routine": "order_status_updates",
+            "confidence": 1.0
+          },
+          {
+            "task": "pipeline_reporting",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "quote_preparation",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "reporting",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "scheduling",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "shipping_exceptions",
+            "ticket_category": "shipping_exceptions",
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "timesheet_chasing",
+            "ticket_category": null,
+            "routine": null,
+            "confidence": 1.0
+          },
+          {
+            "task": "vendor_queries",
+            "ticket_category": "vendor_queries",
+            "routine": null,
+            "confidence": 1.0
+          }
+        ],
+        "cross_source_links": 8,
+        "people": 12,
+        "observations": 145
+      },
+      "conflicts": {
+        "conflicts": [
+          {
+            "task": "order_status_updates",
+            "values": {
+              "zetaris:workforce.task_events": 8.82,
+              "zetaris:workforce.tickets": 17.87,
+              "zetaris:workforce.timesheets": 47.88
+            },
+            "ratio": 5.43,
+            "world_model_choice": 8.82
+          },
+          {
+            "task": "crm_data_entry",
+            "values": {
+              "zetaris:workforce.task_events": 7.73,
+              "zetaris:workforce.timesheets": 33.71
+            },
+            "ratio": 4.36,
+            "world_model_choice": 7.73
+          },
+          {
+            "task": "invoice_matching",
+            "values": {
+              "zetaris:workforce.task_events": 32.86,
+              "zetaris:workforce.tickets": 19.47,
+              "zetaris:workforce.timesheets": 71.54
+            },
+            "ratio": 3.67,
+            "world_model_choice": 32.86
+          }
+        ],
+        "assessments": [
+          {
+            "task": "order_status_updates",
+            "trusted_source": "zetaris:workforce.task_events",
+            "explanation": "Task_events records actual hands-on time (8.82 h), while tickets (17.87 h) only capture voluntarily logged effort and timesheets (47.88 h) are self‑reported and typically inflated."
+          },
+          {
+            "task": "crm_data_entry",
+            "trusted_source": "zetaris:workforce.task_events",
+            "explanation": "Task_events provides measured activity (7.73 h); timesheets (33.71 h) rely on self‑reporting and tend to overstate the true effort."
+          },
+          {
+            "task": "invoice_matching",
+            "trusted_source": "zetaris:workforce.task_events",
+            "explanation": "Task_events reflects real hands‑on work (32.86 h), whereas tickets (19.47 h) represent only time people chose to log and timesheets (71.54 h) are self‑reported and likely exaggerated."
+          }
+        ]
+      }
+    },
+    "explain": {
+      "sub_questions": [
+        {
+          "id": "q1",
+          "question": "Who are the sales reps (person_id, name, role, team)?"
+        },
+        {
+          "id": "q2",
+          "question": "For sales reps, what is the total self-reported hours on CRM data entry from timesheets?"
+        },
+        {
+          "id": "q3",
+          "question": "For sales reps, what is the actual time spent on CRM data entry actions (create_contact, log_activity, search_contact) from task_events?"
+        },
+        {
+          "id": "q4",
+          "question": "For sales reps, what are the event count and average duration per CRM data entry action from task_events, to assess repetitiveness and automation potential?"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "q1",
+          "question": "Who are the sales reps (person_id, name, role, team)?",
+          "sql": "SELECT person_id, name, role, team FROM workforce.people WHERE team = 'Sales' AND role = 'Account executive'",
+          "rows": [
+            {
+              "person_id": "P008",
+              "name": "Hugo Kade",
+              "role": "Account executive",
+              "team": "Sales"
+            },
+            {
+              "person_id": "P009",
+              "name": "Isla Brook",
+              "role": "Account executive",
+              "team": "Sales"
+            }
+          ],
+          "attempts": 1
+        },
+        {
+          "id": "q2",
+          "question": "For sales reps, what is the total self-reported hours on CRM data entry from timesheets?",
+          "sql": "SELECT SUM(t.hours) AS total_self_reported_hours, SUM(t.hours) / 6.0 AS avg_weekly_self_reported_hours FROM workforce.people p JOIN workforce.timesheets t ON p.person_id = t.person_id WHERE p.team = 'Sales' AND p.role = 'Account executive' AND t.task_category = 'crm_data_entry'",
+          "rows": [
+            {
+              "total_self_reported_hours": 124.75,
+              "avg_weekly_self_reported_hours": 20.791666666666668
+            }
+          ],
+          "attempts": 1
+        },
+        {
+          "id": "q3",
+          "question": "For sales reps, what is the actual time spent on CRM data entry actions (create_contact, log_activity, search_contact) from task_events?",
+          "sql": "SELECT SUM(te.duration_seconds) AS total_actual_seconds, SUM(te.duration_seconds) / 6.0 AS avg_weekly_actual_seconds FROM workforce.people p JOIN workforce.task_events te ON p.person_id = te.person_id WHERE p.team = 'Sales' AND p.role = 'Account executive' AND te.action IN ('create_contact', 'log_activity', 'search_contact')",
+          "rows": [
+            {
+              "total_actual_seconds": 152413,
+              "avg_weekly_actual_seconds": 25402.166667
+            }
+          ],
+          "attempts": 1
+        },
+        {
+          "id": "q4",
+          "question": "For sales reps, what are the event count and average duration per CRM data entry action from task_events, to assess repetitiveness and automation potential?",
+          "sql": "SELECT te.action, COUNT(*) AS total_events, COUNT(*) / 6.0 AS weekly_events, AVG(te.duration_seconds) AS avg_duration_seconds FROM workforce.people p JOIN workforce.task_events te ON p.person_id = te.person_id WHERE p.team = 'Sales' AND p.role = 'Account executive' AND te.action IN ('create_contact', 'log_activity', 'search_contact') GROUP BY te.action ORDER BY total_events DESC LIMIT 30",
+          "rows": [
+            {
+              "action": "log_activity",
+              "total_events": 338,
+              "weekly_events": 56.333333,
+              "avg_duration_seconds": 130.90532544378698
+            },
+            {
+              "action": "create_contact",
+              "total_events": 326,
+              "weekly_events": 54.333333,
+              "avg_duration_seconds": 268.82515337423314
+            },
+            {
+              "action": "search_contact",
+              "total_events": 321,
+              "weekly_events": 53.5,
+              "avg_duration_seconds": 63.95638629283489
+            }
+          ],
+          "attempts": 1
+        }
+      ],
+      "headline": "Sales reps report 124.75 hours of CRM data entry over six weeks; system events record 152,413 seconds across three repetitive actions.",
+      "claims": [
+        {
+          "text": "The sales team includes two account executives: Hugo Kade and Isla Brook.",
+          "evidence": [
+            {
+              "query": "q1",
+              "row": 0,
+              "column": "name",
+              "value": "Hugo Kade"
+            },
+            {
+              "query": "q1",
+              "row": 1,
+              "column": "name",
+              "value": "Isla Brook"
+            }
+          ]
+        },
+        {
+          "text": "Timesheets show 124.75 total hours spent on CRM data entry over six weeks, averaging 20.8 hours per week.",
+          "evidence": [
+            {
+              "query": "q2",
+              "row": 0,
+              "column": "total_self_reported_hours",
+              "value": 124.75
+            },
+            {
+              "query": "q2",
+              "row": 0,
+              "column": "avg_weekly_self_reported_hours",
+              "value": 20.791666666666668
+            }
+          ]
+        },
+        {
+          "text": "Task events record 152,413 total seconds of actual CRM data entry work, averaging 25,402 seconds per week.",
+          "evidence": [
+            {
+              "query": "q3",
+              "row": 0,
+              "column": "total_actual_seconds",
+              "value": 152413
+            },
+            {
+              "query": "q3",
+              "row": 0,
+              "column": "avg_weekly_actual_seconds",
+              "value": 25402.166667
+            }
+          ]
+        },
+        {
+          "text": "Self-reported hours total 124.75, while measured system seconds total 152,413.",
+          "evidence": [
+            {
+              "query": "q2",
+              "row": 0,
+              "column": "total_self_reported_hours",
+              "value": 124.75
+            },
+            {
+              "query": "q3",
+              "row": 0,
+              "column": "total_actual_seconds",
+              "value": 152413
+            }
+          ]
+        },
+        {
+          "text": "The work breaks down into three repetitive actions: log_activity (56.3 weekly events, 131 seconds average), create_contact (54.3 weekly events, 269 seconds average), and search_contact (53.5 weekly events, 64 seconds average).",
+          "evidence": [
+            {
+              "query": "q4",
+              "row": 0,
+              "column": "weekly_events",
+              "value": 56.333333
+            },
+            {
+              "query": "q4",
+              "row": 0,
+              "column": "avg_duration_seconds",
+              "value": 130.90532544378698
+            },
+            {
+              "query": "q4",
+              "row": 1,
+              "column": "weekly_events",
+              "value": 54.333333
+            },
+            {
+              "query": "q4",
+              "row": 1,
+              "column": "avg_duration_seconds",
+              "value": 268.82515337423314
+            },
+            {
+              "query": "q4",
+              "row": 2,
+              "column": "weekly_events",
+              "value": 53.5
+            },
+            {
+              "query": "q4",
+              "row": 2,
+              "column": "avg_duration_seconds",
+              "value": 63.95638629283489
+            }
+          ]
+        }
+      ],
+      "dropped_claims": [],
+      "critique_rounds": 2,
+      "objections": [
+        [
+          "claim 2: the number 42.3 is not one of its cited values (or a ratio of them)",
+          "claim 2: the number 7.1 is not one of its cited values (or a ratio of them)",
+          "claim 3: the number 2.9 is not one of its cited values (or a ratio of them)",
+          "claim 3: the number 42.3 is not one of its cited values (or a ratio of them)",
+          "claim 4: the number 164 is not one of its cited values (or a ratio of them)"
+        ],
+        [
+          "claim 3: The claim compares self-reported hours (124.75) directly to measured system seconds (152,413) without unit conversion, making the statement 'substantially higher' misleading because the numbers are in different units (hours vs seconds). The data does not support a direct magnitude comparison without conversion."
+        ],
+        []
+      ]
+    },
+    "build": {
+      "history": [
+        {
+          "round": 1,
+          "code_version": 1,
+          "code_hash": "9a5d1be0eaff686c21a3593f98241bf079c0533a14befebbf26d2d785982e256",
+          "passed": true,
+          "pass_rate": 1.0,
+          "failed_checks": [],
+          "failure_purposes": []
+        }
+      ]
+    }
+  },
+  "approval": {
+    "approval_id": "apr_f40165ed8c17",
+    "run_id": "e1b82de8de2c44a9",
+    "automation": "crm_lead_matcher",
+    "routine": "crm_data_entry",
+    "sample_mode": false,
+    "code_hash": "9a5d1be0eaff686c21a3593f98241bf079c0533a14befebbf26d2d785982e256",
+    "report_hash": "ef79863bef5efd0989ea27f76699f6d5d691d5878316ed0d15a5785d037a71b6",
+    "memo": {
+      "decision": "approve_for_human_review",
+      "rationale": "The crm_data_entry routine consumes 33.71 reported hours/week across 2 sales reps (7.73 active hours/week) with 56.3 instances/week. The four-step sequence (Email.open_lead_email, CRM.search_contact, CRM.create_contact, CRM.log_activity) is repetitive (variant_share 8.3%) and automatable. QA passed 28/28 cases (100% pass rate) with no failed checks. Estimated savings: 7.1 hours/week. Risk is medium primarily because create_contact writes customer records in CRM. QA advisories flag non-blocking issues: email normalization assumes string input, duplicate check logic inline, Unicode case-folding, error message detail, and empty normalized email handling. These are addressable before production.",
+      "risks": [
+        "Medium: create_contact writes customer records in CRM — incorrect automation could create duplicate or erroneous customer records",
+        "Email normalization assumes string input; non-string values (None, int) in sender_email or email fields will raise AttributeError instead of clean validation error",
+        "Duplicate check logic for company and name comparisons is inline; extracting to helper would improve maintainability",
+        "Unicode case-insensitive comparison uses .lower() which may not handle all Unicode correctly (e.g., ß vs SS, Turkish İ); consider .casefold()",
+        "ValueError on missing field doesn't include record index, making debugging harder for large datasets",
+        "No validation that right['email'] normalizes to non-empty string before adding to map; empty normalized emails stored but never matched (correct per spec but could be documented)"
+      ],
+      "rollout": [
+        "Human review of risk assessment and QA advisories",
+        "Address QA warning: add type checking/coercion in email normalization",
+        "Implement automation for Email.open_lead_email and CRM.search_contact (read-only steps)",
+        "For CRM.create_contact and CRM.log_activity: implement with human-in-the-loop approval before writing",
+        "Pilot with one sales rep for 2 weeks",
+        "Monitor error rates, duplicate creation, and data quality",
+        "Full rollout if pilot successful"
+      ],
+      "confidence": 0.93,
+      "confidence_formula": "0.45*QA pass rate + 0.2*evidence volume + 0.15*routine consistency + 0.2*(1 - risk)"
+    },
+    "status": "pending",
+    "requested_at": "2026-10-25T09:23:23.794Z",
+    "code_path": "state/automations/9a5d1be0eaff686c.py"
+  },
+  "mode": {
+    "sample_mode": false,
+    "model": "meterless/meterless/deep",
+    "data_source": "zetaris",
+    "stages": [
+      "discover",
+      "explain",
+      "build"
+    ]
+  },
+  "usage": {
+    "model_calls": 22,
+    "data_queries": 14
+  },
+  "memory": {
+    "retrieved": [],
+    "human_decisions_applied": {},
+    "mined": [
+      {
+        "status": "reinforced",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "For invoice_matching, crm_data_entry, and order_status_updates, trust zetaris:workforce.task_events for actual hands-on time (measured activity) over timesheets (self-reported, inflated) and tickets (voluntarily logged, incomplete).",
+        "id": "mem_99b7b298bf782774",
+        "conflicts": 0
+      },
+      {
+        "status": "reinforced",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Task_events shows invoice_matching at 32.86h/week vs timesheets 71.54h and tickets 19.47h; use measured hands-on time to size automation savings, not self-reported estimates.",
+        "id": "mem_71036ebb0b5cd271",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Every number in a claim must be a cited value or a ratio of cited values; Insight Critic rejected claims with computed numbers (42.3, 7.1, 2.9) not directly in source data.",
+        "id": "mem_3235d85e5eee19e9",
+        "conflicts": 1
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "Team selected crm_data_entry for automation review; Manager approved for human review (confidence 0.93).",
+        "id": "mem_c2eb33fd25e0de3d",
+        "conflicts": 0
+      },
+      {
+        "status": "created",
+        "reason": "auto-policy: agent memory with provenance and confidence >= 0.5",
+        "content": "For order_status_updates, task_events (8.82h) is the trusted source; tickets (17.87h) and timesheets (47.88h) overstate due to voluntary logging and self-reporting bias.",
+        "id": "mem_c9461ce1e87fb250",
+        "conflicts": 0
+      }
+    ]
+  },
+  "log_path": "logs/trace-e1b82de8de2c44a9.jsonl",
+  "execution_time_seconds": 856.988
 }

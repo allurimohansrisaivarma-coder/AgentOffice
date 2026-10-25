@@ -1,12 +1,41 @@
 # AgentOffice
 
-**A simulated AI office team. It finds where an office team's time goes, explains why with evidence, and then decides on, builds and tests the automation that fixes it. A human approves before anything goes live.**
+**An AI office team you can just tell what to do. Attach a spreadsheet, describe the repetitive work ("fill in each person's team from the staff directory, fix the dates, flag the big claims, total by team"), and the agents plan it, write the automation, test it on your real data and ask you to approve the exact code before they hand back the filled file. Ask it where your team's time goes, and it finds out, explains why with evidence, and proposes what to automate first.**
 
-This is our Open Agent Hackathon 2026 submission. The primary track is **Track 3, Reasoning Architecture**. Stages 1 and 2 also address Track 1 (Fragmented Intelligence) and Track 2 (Explain Why).
+This is our Open Agent Hackathon 2026 submission. The primary track is **Track 3, Reasoning Architecture**. The analysis pipeline also addresses Track 1 (Fragmented Intelligence) and Track 2 (Explain Why).
 
-> **Status (25 Oct 2026):** all three stages run end to end in both **sample mode** and **default mode against Meterless Nightshift** (NVIDIA Nemotron). Live traces and outputs are saved to `output_examples/`. Zetaris tables are loaded and verified on live Zetaris REST endpoints. See [Done vs not yet](#done-vs-not-yet).
+> **Status (25 Oct 2026):** task mode, the analysis pipeline, the chat UI and the Windows desktop island all run end to end in **sample mode** and in **default mode** (Zetaris + Meterless Nightshift serving NVIDIA Nemotron). Live traces, outputs and filled workbooks are in [`output_examples/`](output_examples/). See [Done vs not yet](#done-vs-not-yet).
 
-## What it does
+## Use it
+
+- **Chat UI:** start the API (`python run.py`) and open http://localhost:8000. A dark "dynamic island" pill sits at the top; click it or press **Ctrl+Shift+Space** (or **Ctrl+K**) and it opens into a chat panel. Drop a CSV/Excel file on it or pick a demo file, type what you want, and watch the team work live.
+- **Desktop island (Windows):** `python scripts/island.py` puts the same island on top of every app, like Copilot: **Ctrl+Shift+Space** from anywhere opens it, Esc or clicking away folds it back. It uses Edge (or Chrome) in app mode with its own profile and only standard-library `ctypes`; no extra install.
+- **API:** everything the UI does is plain HTTP (see [API](#api)).
+
+## Task mode: "do this to my spreadsheet"
+
+```mermaid
+flowchart LR
+  U[You: task + CSV/XLSX] --> FD[Front desk]
+  FD --> DP[Data profiler] -->|SQL on upload_cells| ZT[(Zetaris)]
+  DP --> PM[PM] <-->|checked on real data| SC[Spec critic]
+  PM -->|lookup SQL| RT[Retriever] --> ZT
+  PM -->|step spec| EN[Engineer] -->|code| QA[QA] -->|failing cases| EN
+  QA --> MG[Manager] --> HA{{You approve this code hash}}
+  HA --> OP[Operator] --> F[Filled .xlsx/.csv + audit sheet]
+  MK[Memory keeper] -->|approved automations, lessons| PM
+  HA -->|decision| HM[(H-MEM)] --> MK
+```
+
+1. **Upload.** The file is parsed (CSV or XLSX, up to 5 MB / 20,000 rows; Excel dates become ISO text) and served to Zetaris as the REST table `upload_cells`, one row per cell.
+2. **Profile.** The Data Profiler queries the upload *through Zetaris*: blanks, numbers and distinct values per column, exact values of small columns, value shapes. Personal-looking values (names, emails, phones) are masked before any prompt.
+3. **Plan.** The PM turns the sentence into a **step spec** from a fixed vocabulary ([`app/tasks/spec.py`](app/tasks/spec.py)): `clean_text`, `fill_blank`, `map_values`, `lookup` (from a Zetaris table via SQL, or another sheet), `compute`, `concat`, `split`, `format_date`, `flag`, `filter`, `dedupe`, `sort`, `summarize` (a new sheet). The Spec Critic checks it against the real file and data: every column exists at that step, the lookup SQL runs on Zetaris and its keys actually match the file, every date matches an input format. Rejections go back to the PM (2 rounds).
+4. **Build and test.** The Engineer writes a standalone Python module from the spec. QA computes the expected output with an **independent reference runtime** ([`app/tasks/runtime.py`](app/tasks/runtime.py)) and runs the code in the sandbox on: real rows from your file, your whole file, single-cell mutations of every input column (blank, spaces, case, numbers typed as text), edge cases for each step (lookup misses and duplicate keys, date formats, thresholds, duplicate rows typed differently, blanks in sorts and groups), model-designed cases, a determinism re-run, and a **renamed column that must raise**. Failing cases go back to the Engineer (3 revisions).
+5. **Decide.** The Manager writes the memo behind a rule gate and requests approval bound to the code hash. The card shows the plan, QA results and a preview of your file after the change.
+6. **Run.** Approving runs exactly that code on your file and writes an `.xlsx` (plus `.csv` for CSV uploads) with the result sheet, any summary sheets and an **AgentOffice** sheet recording the approver, approval ID and code hash. Nothing is written before approval.
+7. **Remember.** The approval becomes an H-MEM memory. Next time, the PM can reuse that automation; QA re-tests it on the new file, and because the code hash matches an approval on record it runs without asking again.
+
+## Analysis mode: "where is our time going?"
 
 You ask a question such as *"Where is the finance team losing time, and what should we automate first?"*. Thirteen agents with distinct roles then work in three stages. They all read from and write to one shared **World Model**, and they carry lessons and human decisions from one run to the next in **H-MEM**.
 
@@ -79,13 +108,14 @@ It then runs the code in a sandbox ([`sandbox.py`](app/automation/sandbox.py)):
 ### Zetaris (data layer)
 All agent SQL goes through [`app/adapters/zetaris.py`](app/adapters/zetaris.py). It follows the REST contract (`/sql-editor/sqls/run`, Bearer key, `X-Org-ID`, a fresh UUID `X-Request-ID`), sends one statement per call, and retries only read-only statements, with timeouts and structured errors.
 
-Zetaris can't read local files, so the API serves each synthetic table as JSON (`GET /data/workforce/<table>`). [`scripts/load_zetaris.py`](scripts/load_zetaris.py) registers those endpoints as **Lightning REST tables**. It's a dry run by default; `--apply` runs one statement at a time and verifies row counts.
+Zetaris can't read local files, so the API serves each synthetic table as JSON (`GET /data/workforce/<table>`) and every recent upload as long-format cells (`GET /data/uploads/cells`). [`scripts/load_zetaris.py`](scripts/load_zetaris.py) registers those endpoints as **Lightning REST tables**. It's a dry run by default; `--apply` runs one statement at a time and verifies row counts (`--only upload_cells` for a single table).
 
 The agents write `workforce.<table>`. The adapter rewrites each reference to read its REST table, `(SELECT r.* FROM workforce_api.<table> LATERAL VIEW explode(rows) AS r)`, so no views or other extra objects are needed. The trace records the SQL that actually ran.
 
 **We verified this on a local Zetaris 2.4.3 install:**
-- All 6 statements succeed, and every row count matches the generator's manifest.
-- The pipeline's 15 queries run on Zetaris, and the findings are identical to sample mode.
+- All 7 statements succeed, and every workforce row count matches the generator's manifest.
+- A file is queryable through Zetaris the moment it's uploaded (Zetaris re-reads `upload_cells` at query time).
+- The analysis pipeline's 15 queries run on Zetaris, and the findings are identical to sample mode.
 
 ### Meterless
 - **Power rule.** Nightshift is the **primary model provider** ([`app/adapters/meterless.py`](app/adapters/meterless.py)). It follows the provider contract:
@@ -121,7 +151,7 @@ The agents write `workforce.<table>`. The adapter rewrites each reference to rea
   **What it changes:** when a human rejects an automation, the next run proposes a different routine. If there's no alternative, the Manager escalates the identical rejected code instead of asking again. The Engineer's prompt carries QA lessons from earlier runs. 16 tests cover the engine, including this three-session behaviour: learned → retrieved → behaved differently.
 
 ### NVIDIA
-Nemotron runs through Nightshift lanes; no local GPU is used. *We haven't yet pinned the exact Nemotron `meterless/*` route, because Nightshift isn't configured yet.* Every model call's trace records the model that actually answered.
+Nemotron runs through Nightshift lanes; no local GPU is used. We pin `METERLESS_MODEL=meterless/deep`, which Nightshift routes to **`nvidia/nemotron-3-ultra-550b-a55b`**. Every model call's trace records the model that actually answered. Nemotron reasons before it answers, so replies are stripped of their reasoning, get an 8,000-token budget, and a reply cut off at the length limit is detected (`finish_reason: length`) and retried with a request for compact JSON.
 
 ## Quick start (Windows PowerShell)
 
@@ -131,21 +161,30 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-**Sample mode** needs no keys and no network. It runs the real agent logic on the committed synthetic data, and needs no `.env` file.
-
-```powershell
-.\.venv\Scripts\python.exe scripts\run_examples.py --sample
-```
-
-Or start the API and call it yourself:
+**Sample mode** needs no keys and no network. It runs the real agent logic on the committed synthetic data, and needs no `.env` file. Start the API and open http://localhost:8000:
 
 ```powershell
 $env:SAMPLE_MODE = "true"; .\.venv\Scripts\python.exe run.py
 ```
 
+Then, optionally, the desktop island (Windows, in a second terminal):
+
+```powershell
+.\.venv\Scripts\python.exe scripts\island.py
+```
+
+Or run the saved examples without the UI:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_examples.py --sample
+.\.venv\Scripts\python.exe scripts\run_examples.py --sample --tasks --approver "your name"
+```
+
 ```bash
 curl -X POST http://localhost:8000/run -H "Content-Type: application/json" -d @input_examples/example_1.json
 ```
+
+In sample mode the PM can only plan the three bundled demo files (it uses their built-in specs, and says so); any other upload returns a clear `agent_no_offline_plan` error. Your own files need default mode.
 
 **Default mode** needs a running Zetaris instance and Meterless Nightshift; see [docs/PROJECT_PLAN.md §6](docs/PROJECT_PLAN.md).
 
@@ -154,13 +193,15 @@ curl -X POST http://localhost:8000/run -H "Content-Type: application/json" -d @i
    ```powershell
    .\.venv\Scripts\python.exe scripts\check_connections.py --detect
    ```
-3. Register the data in Zetaris (dry run first, then `--apply`):
+3. Start the API (`.\.venv\Scripts\python.exe run.py`): Zetaris pulls the data from it.
+4. Register the data in Zetaris (dry run first, then `--apply`):
    ```powershell
    .\.venv\Scripts\python.exe scripts\load_zetaris.py
    ```
-4. Run the examples:
+5. Use the UI at http://localhost:8000, or run the examples against the running API:
    ```powershell
-   .\.venv\Scripts\python.exe scripts\run_examples.py
+   .\.venv\Scripts\python.exe scripts\run_examples.py --url http://localhost:8000
+   .\.venv\Scripts\python.exe scripts\run_examples.py --url http://localhost:8000 --tasks
    ```
 
 **Docker** (the image targets Python 3.11):
@@ -178,8 +219,18 @@ Inside the container, `localhost` would mean the container itself. So `localhost
 
 | Endpoint | Purpose |
 |---|---|
+| `GET /` | The chat UI (island + panel). `?shell=desktop` is the variant `scripts/island.py` loads. |
+| `POST /uploads?filename=<name>` | Upload a CSV/XLSX as the raw request body. Returns the sheets, columns, row counts and a preview. `GET /uploads/{id}` returns the same; `GET /samples` lists the demo files with a suggested request. |
+| `POST /chat` | `{"message", "upload_id"?, "options": {"sample_mode"}}`. Starts a background job and returns `{job_id}`. The front desk routes the message to task mode, the analysis pipeline or a reply. |
+| `GET /jobs/{id}?after=<n>` | The job's live agent events since event `n`, then `result` (`{type: "task" | "analysis" | "reply", ...}`) or a structured `error`, plus its `trace_id`. |
+| `GET /tasks/{id}` | A task: request, understanding, spec, references, code and hash, QA checks and preview, Manager memo, approval, outputs. `GET /tasks/{id}/code` downloads the automation as a `.py` file. |
+| `POST /tasks/{id}/decision` | `{"decision": "approve" \| "reject", "approver", "note", "code_hash"}`. Records the decision in the ledger and H-MEM; **approve runs exactly that code** on the file and returns the outputs. A code hash that doesn't match returns 409. `POST /tasks/{id}/run` re-runs an approved task. |
+| `GET /files/{file_id}` | Download a filled workbook (`.xlsx`) or `.csv`. |
+| `GET /config` | Mode, model route and hotkeys for the UI. No secrets. |
+| `GET /data/uploads/cells` | Recent uploads as long-format cells for the Zetaris REST table `upload_cells`. |
+| `GET /approvals` | Every approval (newest first), optionally `?status=pending`. |
 | `POST /run` | `{"request_id", "user_query", "context", "options": {"sample_mode", "stages": ["discover", "explain", "build"]}}`. Returns `agents_used`, `result{summary, findings, confidence, ranking, decision, automation}`, `collaboration{feedback_loop_completed, revision_count, evaluator_findings, …}`, `stages`, `approval`, `log_path` and `execution_time_seconds`. Failures return `{status: "error", error{type, message, recoverable}, trace_id}`. |
-| `GET /approvals/{id}` / `POST /approvals/{id}` | The human approval gate: `{"decision": "approve" \| "reject", "approver", "note", "code_hash"}`. It's hash-chained and bound to the code hash. The decision also becomes a long-term H-MEM preference that later runs respect. Approving only records the decision; nothing is deployed. |
+| `GET /approvals/{id}` / `POST /approvals/{id}` | The human approval gate: `{"decision": "approve" \| "reject", "approver", "note", "code_hash"}`. It's hash-chained and bound to the code hash. The decision also becomes a long-term H-MEM preference that later runs respect. For analysis-mode automations, approving only records the decision; nothing is deployed. |
 | `GET /providers/meterless` | Test Connection for the primary provider. The token is never returned. |
 | `GET /data/workforce/{table}` | Serves the synthetic tables for Zetaris REST tables. |
 | `GET /health` | Configuration status. No external calls. |
