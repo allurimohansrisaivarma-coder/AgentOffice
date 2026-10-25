@@ -100,7 +100,9 @@ class Retriever(Agent):
     SYSTEM = ("You are the Retriever agent in AgentOffice. Write ONE read-only SQL query that answers the "
               "sub-question, using only the catalog's tables as workforce.<table>. " + PORTABLE_SQL_NOTE +
               " The data covers 6 working weeks; divide totals by 6.0 for per-week figures and give columns clear "
-              "aliases. Return at most 30 rows. Reply with only JSON: {\"sql\": \"...\"}.")
+              "aliases. Where the catalog lists a column's values, filter with those exact values (matching is "
+              "case-sensitive); never guess a value. Return at most 30 rows. Think briefly. Reply with only JSON: "
+              "{\"sql\": \"...\"}.")
 
     def retrieve(self, query: str, sub_questions: list[dict], catalog: list[dict], *, attempts: int = 3) -> list[dict]:
         tables = {t["table"] for t in catalog}
@@ -128,6 +130,12 @@ class Retriever(Agent):
                         break
                     prompt += (f"\n\nYour query:\n{sql}\nfailed with: {e.message}\n"
                                "Fix it (portable SQL only) and reply with the corrected JSON.")
+                    continue
+                if not rows and attempt + 1 < attempts:
+                    # Empty results are almost always a filter value that does not exist in the data.
+                    self.log("empty_result", status="retry", output_summary=f"{sub['id']}: 0 rows, asking for a fix")
+                    prompt += (f"\n\nYour query:\n{sql}\nreturned 0 rows. A filter value probably does not exist; "
+                               "use only values the catalog lists, exactly as written, and reply with the corrected JSON.")
                     continue
                 evidence.append({**sub, "sql": sql, "rows": rows, "attempts": attempt + 1})
                 break

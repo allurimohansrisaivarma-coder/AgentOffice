@@ -69,14 +69,26 @@ def load_table(name: str, data_dir: Path = DATA_DIR) -> tuple[list[str], dict[st
     return columns, types, rows
 
 
-def catalog(data_dir: Path = DATA_DIR) -> list[dict]:
-    """What the Source Mapper can discover: table refs, typed columns, row counts."""
+PERSONAL_COLUMNS = {"name", "email"}   # never listed: no personal data in prompts
+
+
+def catalog(data_dir: Path = DATA_DIR, max_values: int = 20) -> list[dict]:
+    """What the agents can discover: table refs, typed columns, row counts, and the exact
+    values of small categorical text columns, so model-written filters match the data
+    (e.g. role = 'Ops coordinator', not a guessed 'Operations Coordinator')."""
     manifest = load_manifest(data_dir)
     out = []
     for name, meta in manifest["tables"].items():
-        _, types, _ = load_table(name, data_dir)
-        out.append({"table": name, "ref": f"{SCHEMA}.{name}", "rows": meta["rows"],
-                    "columns": [{"name": c, "type": t} for c, t in types.items()],
+        _, types, rows = load_table(name, data_dir)
+        columns = []
+        for c, t in types.items():
+            col = {"name": c, "type": t}
+            if t == "TEXT" and c not in PERSONAL_COLUMNS and not c.endswith("_id") and c != "case_ref":
+                values = sorted({r[c] for r in rows if r[c] is not None})
+                if 0 < len(values) <= max_values:
+                    col["values"] = values
+            columns.append(col)
+        out.append({"table": name, "ref": f"{SCHEMA}.{name}", "rows": meta["rows"], "columns": columns,
                     "synthetic": manifest["synthetic"]})
     return out
 

@@ -85,7 +85,8 @@ class Reconciler(Agent):
     SYSTEM = ("You are the Reconciler agent in AgentOffice. The same unit of work is named in several systems: "
               "timesheet task categories, ticket categories and routines mined from the activity log. Link names "
               "that refer to the same task. Only link names that appear in the lists; leave a name unlinked rather "
-              "than guess. Reply with only JSON: {\"links\": [{\"task\": <timesheet category>, \"ticket_category\": "
+              "than guess. List ONLY timesheet categories that link to at least one other name. Think briefly. "
+              "Reply with only compact JSON: {\"links\": [{\"task\": <timesheet category>, \"ticket_category\": "
               "<name or null>, \"routine\": <name or null>, \"confidence\": 0..1}]}.")
 
     def _links(self, categories: list[str], ticket_cats: list[str], routines: list[str]) -> list[dict]:
@@ -112,7 +113,10 @@ class Reconciler(Agent):
                                                       "ticket_categories": ticket_cats,
                                                       "mined_routines": routines}, indent=1),
                              action="link_entities", validate=validate, target_agent="WorldModel")
-        return obj["links"]
+        # Every timesheet category stays a task; the model only names the cross-system links.
+        linked = {link["task"]: link for link in obj["links"]}
+        return [linked.get(c, {"task": c, "ticket_category": None, "routine": None, "confidence": 1.0})
+                for c in categories]
 
     def reconcile(self, evidence: dict) -> dict:
         people = self.query("SELECT person_id, team, role FROM workforce.people", "people and teams")

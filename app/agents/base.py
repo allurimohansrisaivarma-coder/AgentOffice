@@ -24,6 +24,8 @@ from app.llm import Generator
 from app.tracing import Tracer
 
 OFFLINE_MODEL = "offline-fallback"
+# Reasoning models (Nemotron via Nightshift) spend part of the budget thinking before they answer.
+MAX_TOKENS = 8000
 
 
 class AgentError(Exception):
@@ -104,7 +106,7 @@ class Agent:
     # ---------------------------------------------------------------- model
 
     def chat(self, system: str, user: str, *, action: str, target_agent: Optional[str] = None,
-             temperature: float = 0.2, max_tokens: int = 2000, retry_count: int = 0) -> str:
+             temperature: float = 0.2, max_tokens: int = MAX_TOKENS, retry_count: int = 0) -> str:
         ctx = self.ctx
         if ctx.generator is None:
             raise AgentError(self.name, "no_model", "no model available (sample mode)")
@@ -120,9 +122,11 @@ class Agent:
                      output_summary=e.message, error_type=e.to_dict()["type"], retry_count=retry_count,
                      elapsed_s=round(time.monotonic() - started, 2))
             raise
+        self._cut_off = result.finish_reason == "length"
         self.log(action, model=result.model, input_summary=user, output_summary=result.content,
                  target_agent=target_agent, retry_count=retry_count, tokens=result.usage.get("total_tokens"),
-                 provider=ctx.generator.name, elapsed_s=round(time.monotonic() - started, 2))
+                 provider=ctx.generator.name, elapsed_s=round(time.monotonic() - started, 2),
+                 status="truncated" if self._cut_off else "ok")
         return result.content
 
     def chat_json(self, system: str, user: str, *, action: str, validate: Callable[[Any], list[str]],
@@ -136,6 +140,9 @@ class Agent:
                 errors = validate(obj)
             except ValueError as e:
                 errors = [str(e)]
+                if getattr(self, "_cut_off", False):
+                    errors = ["the reply was cut off at the length limit before the JSON ended: "
+                              "think briefly and keep the JSON compact"]
             if not errors:
                 return obj
             self.log(f"{action}_rejected", status="retry" if attempt + 1 < attempts else "error",

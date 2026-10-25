@@ -253,8 +253,7 @@ class Engineer(Agent):
                      output_summary=f"v1 {draft['code_hash'][:12]}, {len(draft['code'])} chars")
             return draft
         text = self.chat(self.SYSTEM, f"{describe(spec)}\n\nSpec JSON:\n{json.dumps(spec, indent=1)}"
-                         + self._lesson_text, action="write_code", target_agent="QAAgent", temperature=0.1,
-                         max_tokens=3000)
+                         + self._lesson_text, action="write_code", target_agent="QAAgent", temperature=0.1)
         return self._draft(extract_code(text), 1, f"written by {self.ctx.model_name}")
 
     def revise(self, spec: dict, draft: dict, report: dict) -> dict:
@@ -273,7 +272,7 @@ class Engineer(Agent):
                   + "Fix the root cause (do not special-case these inputs) and reply with the full corrected module."
                   + getattr(self, "_lesson_text", ""))
         text = self.chat(self.SYSTEM, prompt, action="revise_code", target_agent="QAAgent", temperature=0.1,
-                         max_tokens=3000, retry_count=draft["version"])
+                         retry_count=draft["version"])
         return self._draft(extract_code(text), version, f"revised by {self.ctx.model_name}")
 
 

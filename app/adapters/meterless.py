@@ -43,6 +43,7 @@ class ChatResult:
     model: str            # the model the server says actually answered
     usage: dict = field(default_factory=dict)
     response_id: Optional[str] = None
+    finish_reason: Optional[str] = None   # "length" = cut off at max_tokens
 
 
 def normalize_base_url(url: str) -> str:
@@ -126,7 +127,8 @@ class ChatClient:
         if isinstance(content, list):   # some servers return content parts; plain text stays a string
             content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
         return ChatResult(content=content or "", model=body.get("model") or payload["model"],
-                          usage=body.get("usage") or {}, response_id=body.get("id"))
+                          usage=body.get("usage") or {}, response_id=body.get("id"),
+                          finish_reason=body["choices"][0].get("finish_reason"))
 
     def close(self) -> None:
         self._client.close()
