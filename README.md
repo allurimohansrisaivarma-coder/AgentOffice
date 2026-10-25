@@ -244,7 +244,7 @@ Everything in [`output_examples/`](output_examples/) is a **real response with i
 | Demo file | Default mode (Nemotron wrote the spec and code) | Sample mode |
 |---|---|---|
 | `leads_and_contacts.xlsx`: split names, match leads to the CRM sheet, fill owner | 4-step plan, code passed **34/34** QA cases on the first try (6 designed by the model); 119 cells filled after approval | 18/18 cases |
-| `expense_claims.xlsx`: team and role from the staff directory in Zetaris, tidy categories, ISO dates, GST, flag > 500, totals by team | TASK_EXPENSE_LIVE | 36/36 cases |
+| `expense_claims.xlsx`: team and role from the staff directory in Zetaris, tidy categories, ISO dates, GST, flag > 500, totals by team | 7-step plan with lookup SQL on `workforce.people`; **three QA rounds**: v1 rejected by the sandbox policy (`global`), v2 mishandled blank and text-typed amounts (caught by mutation and model-designed cases), v3 passed **49/49**; 275 cells filled and a *Totals by Team* sheet after approval | 36/36 cases |
 | `vendor_invoices.csv`: dedupe, fill statuses, mark overdue, sort | 6-step plan, code passed **40/40** QA cases on the first try (6 designed by the model); 34 rows in, 30 out after removing the re-typed duplicates | 24/24 cases |
 
 **Analysis questions** ([`input_examples/`](input_examples/)); different questions give different results:
