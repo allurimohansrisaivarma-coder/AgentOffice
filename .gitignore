@@ -109,3 +109,7 @@ Desktop.ini
 *.dmg
 *.pkg
 *.zip
+
+# Demo video recordings (submitted as a link, not kept in git)
+demo/
+*.mp4
