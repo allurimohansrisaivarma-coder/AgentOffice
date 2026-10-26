@@ -6,7 +6,7 @@ import time
 from fastapi.testclient import TestClient
 
 from app.adapters.meterless import ChatResult
-from app.assistant import assist, critique_grounding, mask_rows, unmask
+from app.assistant import assist, critique_grounding, critique_recipients, mask_rows, unmask
 from app.services import Services
 from app.tasks.agents import FrontDesk
 from app.tracing import Tracer
@@ -68,13 +68,88 @@ def test_an_invented_figure_is_sent_back_and_the_revision_passes(tmp_path, make_
         {"sub_questions": [{"question": "How many people are on the Finance team?"}]},
         {"sql": "SELECT COUNT(*) AS people FROM workforce.people WHERE team = 'Finance'"},
         {"answer": "The Finance team has 41 people."},
-        {"answer": f"The Finance team has {count} people."})
+        {"answer": f"The Finance team has {count} people."},
+        {"objections": []})                               # the wording review, once the rules pass
     out = assist("question", "How many people are on the Finance team?", None, settings=settings,
                  tracer=Tracer("a2", tmp_path, stream=None), generator=model, sample_mode=True, store=store,
                  pipeline=pipeline, builder=builder, uploads=services.uploads)
     assert out["answer"] == f"The Finance team has {count} people." and count != 41
     assert out["grounding"] == {"verified": True, "rounds": 1, "objections": []}
-    assert "the number 41" in model.prompts[-1]          # the objection reached the revision prompt
+    assert "the number 41" in model.prompts[-2]          # the objection reached the revision prompt
+    assert len(model.prompts) == 5                       # the rules caught 41 before any wording review ran
+
+
+def test_recipients_must_be_people_not_ids():
+    message = "Draft an email to the finance team and cc boss@example.com"
+    assert critique_recipients(["[[P2]]", "boss@example.com", "Finance team"], message) == []
+    objections = critique_recipients(["P001", "[[P4]]"], message)
+    assert len(objections) == 1 and "'P001'" in objections[0]
+
+
+def test_an_email_addressed_to_ids_is_sent_back_and_comes_back_to_people(tmp_path, make_settings):
+    settings = make_settings(sample_mode=True)
+    services = Services(settings)
+    store, pipeline, builder = services.world(True)
+    model = ScriptedModel(
+        {"sub_questions": [{"question": "Names and emails of the Finance AP clerks"}]},
+        {"sql": "SELECT person_id, name, email FROM workforce.people WHERE team = 'Finance' AND role = 'AP clerk' "
+                "ORDER BY person_id"},
+        {"to": ["P001", "P002"], "subject": "AP close", "body": "Hi both,\n\nPlease send your figures.\n\nThanks"},
+        {"to": ["[[P2]]", "[[P4]]"], "subject": "AP close", "body": "Hi [[P1]] and [[P3]],\n\nPlease send your "
+         "figures.\n\nThanks"},
+        {"objections": []})
+    out = assist("email", "Draft an email to the Finance AP clerks asking for their figures", None, settings=settings,
+                 tracer=Tracer("a3", tmp_path, stream=None), generator=model, sample_mode=True, store=store,
+                 pipeline=pipeline, builder=builder, uploads=services.uploads)
+    assert out["to"] == ["ana.dune@example.com", "ben.ives@example.com"]
+    assert out["grounding"] == {"verified": True, "rounds": 1, "objections": []}
+    assert "recipient 'P001'" in model.prompts[-2]
+
+
+def test_a_figure_tied_to_the_wrong_week_is_caught_by_the_wording_review(tmp_path, make_settings):
+    settings = make_settings(sample_mode=True)
+    services = Services(settings)
+    store, pipeline, builder = services.world(True)
+    week = "CAST((CAST(substr(work_date, 9, 2) AS INTEGER) - 1) / 7 AS INTEGER) + 1"
+    model = ScriptedModel(
+        {"sub_questions": [{"question": "Finance hours per week in September"}]},
+        {"sql": f"SELECT {week} AS week, SUM(t.hours) AS hours FROM workforce.timesheets t JOIN workforce.people p "
+                f"ON p.person_id = t.person_id WHERE p.team = 'Finance' AND substr(work_date, 1, 7) = '2026-09' "
+                f"GROUP BY {week} ORDER BY week"},
+        {"answer": "Weeks 1 and 2 had the same hours."},  # no figure at all, so the rules have nothing to catch
+        {"objections": [{"statement": "Weeks 1 and 2 had the same hours.", "reason": "week 1 and week 2 differ"}]},
+        {"answer": "Week 2 had more hours than week 1."},
+        {"objections": []})
+    out = assist("question", "Did Finance work the same hours in the first two weeks of September?", None,
+                 settings=settings, tracer=Tracer("a4", tmp_path, stream=None), generator=model, sample_mode=True,
+                 store=store, pipeline=pipeline, builder=builder, uploads=services.uploads)
+    assert out["answer"] == "Week 2 had more hours than week 1."
+    assert out["grounding"] == {"verified": True, "rounds": 1, "objections": []}
+    assert "week 1 and week 2 differ" in model.prompts[-2]   # the review's objection reached the revision
+    assert '"week": 1' in model.prompts[3]                   # the review saw the rows it was judging
+
+
+def test_a_result_cut_off_at_the_row_cap_reaches_the_writer_marked_truncated(tmp_path, make_settings):
+    settings = make_settings(sample_mode=True)
+    services = Services(settings)
+    store, pipeline, builder = services.world(True)
+    model = ScriptedModel(
+        {"sub_questions": [{"question": "Every timesheet entry"}]},
+        {"sql": "SELECT entry_id, hours FROM workforce.timesheets ORDER BY entry_id"},
+        {"answer": "Here are the first entries; the list may be incomplete."},
+        {"objections": []})
+    out = assist("question", "List every timesheet entry", None, settings=settings,
+                 tracer=Tracer("a5", tmp_path, stream=None), generator=model, sample_mode=True, store=store,
+                 pipeline=pipeline, builder=builder, uploads=services.uploads)
+    assert out["evidence"] == [{"question": "Every timesheet entry", "sql": out["evidence"][0]["sql"], "rows": 30,
+                                "truncated": True}]
+    assert '"truncated": true' in model.prompts[2]           # the writer is told the list is incomplete
+
+
+def test_sql_guidance_warns_that_zetaris_division_is_decimal():
+    # 8 / 7 is 1 on SQLite but 1.142857 on Zetaris; agents are told to CAST whole numbers
+    from app.data import PORTABLE_SQL_NOTE
+    assert "CAST(... AS INTEGER)" in PORTABLE_SQL_NOTE and "week of the month" in PORTABLE_SQL_NOTE
 
 
 def test_front_desk_routes_email_and_question_requests_offline(tmp_path, make_settings):
@@ -106,7 +181,8 @@ def test_email_draft_is_grounded_and_the_model_never_sees_personal_values(tmp_pa
         {"sub_questions": [{"question": "Who is on the Finance team?"}]},
         {"sql": "SELECT name, email, role FROM workforce.people WHERE team = 'Finance' ORDER BY person_id LIMIT 2"},
         {"to": ["[[P2]]", "[[P4]]"], "subject": "Friday close", "body": "Hi [[P1]] and [[P3]],\n\nPlease send your "
-         "AP figures by Friday.\n\nThanks"})
+         "AP figures by Friday.\n\nThanks"},
+        {"objections": []})
     out = assist("email", "Draft an email to the first two finance AP clerks asking for figures by Friday", None,
                  settings=settings, tracer=Tracer("a1", tmp_path, stream=None), generator=model, sample_mode=True,
                  store=store, pipeline=pipeline, builder=builder, uploads=services.uploads)

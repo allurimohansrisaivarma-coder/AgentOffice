@@ -22,7 +22,6 @@ the contract's 180 s) because Nightshift may buffer a long reply until it is don
 from __future__ import annotations
 
 import json
-import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
@@ -44,7 +43,6 @@ LONG_REPLY_TIMEOUT_S = 600.0
 PLACEHOLDER_TOKENS = frozenset({"rt-local"})
 DETECT_PORTS = (8088, 8090, 8787, 11434)
 DETECT_HOSTS = ("127.0.0.1", "localhost", "[::1]")
-_ROUTE = re.compile(r"^meterless/[a-z0-9_\-]+(\.[a-z0-9_\-]+)?$")
 
 
 @dataclass
@@ -76,11 +74,6 @@ def parse_connect_link(link: str) -> tuple[str, str]:
     if not parts.netloc or not parts.path.rstrip("/").endswith("/connect") or not key:
         raise ValueError("expected a connect link like http://<host>:<port>/connect#k=<key>")
     return f"{parts.scheme or 'http'}://{parts.netloc}/v1", key
-
-
-def is_route(model_id: str) -> bool:
-    """A recognised meterless/<class>[.<disposition>] routing mode."""
-    return bool(_ROUTE.match(model_id or ""))
 
 
 def check_token(token: str) -> None:
@@ -115,12 +108,6 @@ class ChatClient:
     def name(self) -> str:
         # "meterless/deep", not "meterless/meterless/deep", when the model id is already a route
         return self.model if self.model.startswith(f"{self.service}/") else f"{self.service}/{self.model}"
-
-    def list_models(self) -> list[str]:
-        response = request(self._client, "GET", f"{self.base_url}/models",
-                           service=self.service, max_retries=self.max_retries)
-        body = json_body(response, self.service)
-        return [m.get("id", "") for m in body.get("data", []) if isinstance(m, dict)]
 
     def chat(self, messages: list[dict], *, temperature: float = 0.2,
              model: Optional[str] = None, **params) -> ChatResult:

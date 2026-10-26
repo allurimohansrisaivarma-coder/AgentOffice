@@ -37,6 +37,7 @@ const ACTIONS = {
   plan_help: "Worked out what to look up", write_sql: "Wrote the query", fix_sql: "Fixed the query",
   write_answer: "Wrote the answer", revise_answer: "Revised the answer", write_email: "Drafted the email",
   revise_email: "Revised the draft", critique_grounding: "Checked every fact", assist_done: "Draft ready",
+  review_wording: "Checked each statement against the rows",
 };
 const HIDDEN = new Set(["zetaris_query"]);
 
@@ -662,7 +663,7 @@ const ASSIST_LAYOUT = {
     { id: "FrontDeskAgent", label: "Front desk", tag: "model", x: 24, y: 44, w: 118, h: 58 },
     { id: "AssistantAgent", label: "Assistant", tag: "model", x: 160, y: 44, w: 118, h: 58 },
     { id: "RetrieverAgent", label: "Retriever", tag: "model · Zetaris", x: 296, y: 44, w: 128, h: 58 },
-    { id: "GroundingCritic", label: "Grounding critic", tag: "rules", x: 160, y: 250, w: 140, h: 58 },
+    { id: "GroundingCritic", label: "Grounding critic", tag: "rules · model", x: 160, y: 250, w: 140, h: 58 },
   ],
   edges: [
     ["FrontDeskAgent", "AssistantAgent"], ["AssistantAgent", "RetrieverAgent"], ["RetrieverAgent", "AssistantAgent"],
@@ -681,7 +682,7 @@ const team = {
 };
 const sheet = {
   meta: null, active: null, data: {}, totals: {}, columns: {},
-  changed: 0, audit: false, replay: false, cellMap: {}, cellMeta: {},
+  changed: 0, audit: false, cellMap: {}, cellMeta: {},
 };
 
 function svgEl(tag, attrs) {
@@ -1284,7 +1285,7 @@ function sheetRender() {
   sheetStatus();
 }
 function sheetLoad(meta) {
-  sheet.meta = meta; sheet.changed = 0; sheet.audit = false; sheet.replay = false;
+  sheet.meta = meta; sheet.changed = 0; sheet.audit = false;
   sheet.cellMap = {}; sheet.cellMeta = {};
   sheet.data = {}; sheet.columns = {}; sheet.totals = {};
   $("sheet-replay").hidden = true;
@@ -1364,7 +1365,6 @@ function sheetOnEvent(ev, replay) {
 }
 function sheetShowOutput(writes, runId, cellsChanged, layout) {
   // The finished run's cells with real values (trace events mask personal-looking columns).
-  sheet.replay = false;
   const banner = $("sheet-replay");
   if (banner) {
     banner.hidden = false;

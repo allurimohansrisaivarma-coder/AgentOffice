@@ -36,9 +36,7 @@ def test_placeholder_token_rejected(make_settings):
     assert e.value.type == "not_configured" and "rt-local" in e.value.message
 
 
-def test_routes_and_timeout(make_settings):
-    assert meterless.is_route("meterless/auto") and meterless.is_route("meterless/deep.careful")
-    assert not meterless.is_route("nvidia/nemotron")
+def test_client_waits_for_a_model_to_load(make_settings):
     client = meterless_client(make_settings())
     assert client._client.timeout.read >= 180
 
@@ -52,8 +50,10 @@ def test_scope_header_only_on_chat(make_settings):
             return httpx.Response(200, json={"data": [{"id": "meterless/auto"}]})
         return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
 
-    client = meterless_client(make_settings(), transport=httpx.MockTransport(handler))
-    client.list_models()
+    transport = httpx.MockTransport(handler)
+    assert meterless.probe("http://nightshift.test/v1", "tok", app_name="agentoffice-tests",
+                           transport=transport)["status"] == "online"
+    client = meterless_client(make_settings(), transport=transport)
     assert client.chat([{"role": "user", "content": "x"}]).content == "ok"
     assert "meterless-scope" not in seen["/v1/models"]
     assert seen["/v1/models"]["meterless-app"] == "agentoffice-tests"
@@ -115,13 +115,6 @@ def test_chat_sends_nightshift_headers_and_reads_reply(make_settings):
     assert result.content == "hello"
     assert result.model == "nvidia/nemotron-test"   # what actually answered, for the trace
     assert result.usage == {"total_tokens": 7}
-
-
-def test_list_models(make_settings):
-    transport = httpx.MockTransport(
-        lambda r: httpx.Response(200, json={"data": [{"id": "meterless/auto"}, {"id": "meterless/fast"}]}))
-    assert meterless_client(make_settings(), transport=transport).list_models() == [
-        "meterless/auto", "meterless/fast"]
 
 
 def test_malformed_reply_is_structured_error(make_settings):

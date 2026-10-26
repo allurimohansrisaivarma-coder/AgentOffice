@@ -4,8 +4,10 @@
     Retriever (stage 2)  one read-only SQL query per sub-question on Zetaris; SQL errors go back to the model (capped)
     Assistant (write)    the answer or the email, from those rows only. Personal values (names, emails, phones)
                          reach the model as placeholders like [[P1]] and are filled back in locally afterwards
-    Grounding Critic     rules, no model: every number must come from the rows or the user's message and every
-                         placeholder must be one that was issued; objections go back for a revision (capped)
+    Grounding Critic     rules first: every number must come from the rows or the user's message, every
+                         placeholder must be one that was issued, and an email's recipients must be people from
+                         the rows or the request, never IDs. When the rules pass, a model review checks that each
+                         figure is tied to the right week, person or category. Objections go back (capped)
 
 Nothing is sent anywhere: an email is a draft the user copies. Sample mode has no model, so it says so
 instead of guessing.
@@ -17,6 +19,7 @@ import json
 import re
 from typing import Any, Optional
 
+from app.adapters.http import AdapterError
 from app.agents.base import Agent, AgentError, RunContext
 from app.agents.stage2 import _NUMBER, Retriever, _supported
 from app.config import Settings
@@ -88,7 +91,24 @@ def critique_grounding(text: str, evidence: list[dict], message: str, tokens: di
     return objections
 
 
+def critique_recipients(to: list[str], message: str) -> list[str]:
+    """An email goes to people from the rows (as their placeholders) or to whoever the user named; an ID such
+    as a person_id is not a recipient."""
+    return [f"recipient {r!r} is not a person from the rows or the request; put their email placeholder "
+            "(e.g. [[P2]]) in 'to', or leave 'to' empty" for r in (t.strip() for t in to)
+            if not (_TOKEN.fullmatch(r) or (r and r.casefold() in message.casefold()))]
+
+
 # ------------------------------------------------------------------ agents
+
+TRUNCATION_RULE = ("A result marked \"truncated\": true holds only its first 30 rows: never state a total, maximum, "
+                   "ranking or 'every week' from it, and say the list may be incomplete. ")
+
+
+def _results(evidence: list[dict]) -> list[dict]:
+    return [{"query": e["id"], "question": e["question"], "rows": e["rows"],
+             **({"truncated": True} if e.get("truncated") else {})} for e in evidence]
+
 
 class Assistant(Agent):
     name = "AssistantAgent"
@@ -97,6 +117,8 @@ class Assistant(Agent):
                    "question about their company's workforce data or their attached file, or an email to draft. "
                    "List the facts the request needs as 0 to 3 sub-questions that ONE read-only SQL query each can "
                    "answer over the catalog. Use 0 when the request needs no company data (e.g. a general email). "
+                   "For an email to people in the data (a team, a role, named staff), one sub-question must fetch "
+                   "their name and email, so the draft can address them. "
                    "Reply with only JSON: {\"sub_questions\": [{\"question\": \"...\"}]}.")
     WRITE_SYSTEM = {
         "question": ("You are the Assistant agent in AgentOffice. Answer the user's question from the query results "
@@ -109,8 +131,10 @@ class Assistant(Agent):
                   "from the query results and the user's message; never invent numbers, dates, amounts or people. "
                   "People appear as placeholders like [[P3]]: write them exactly as given, never a guessed name or "
                   "address. If the email needs a fact the results lack, leave a visible gap such as [amount]. "
+                  "'to' lists each recipient's email placeholder from the results (e.g. [[P4]]) or addresses the "
+                  "user wrote; never an ID such as a person_id, and leave it empty if the results hold no addresses. "
                   "Plain text, no markdown, a greeting and a sign-off. Reply with only JSON: "
-                  "{\"to\": [<placeholders or recipients the user named>], \"subject\": \"...\", \"body\": \"...\"}."),
+                  "{\"to\": [<email placeholders or recipients the user named>], \"subject\": \"...\", \"body\": \"...\"}."),
     }
 
     def plan(self, message: str, kind: str, cat: list[dict]) -> list[dict]:
@@ -139,25 +163,53 @@ class Assistant(Agent):
                 errors.append("'to' must be a list of strings (may be empty)")
             return errors
 
-        results = [{"query": e["id"], "question": e["question"], "rows": e["rows"]} for e in evidence]
+        results = _results(evidence)
         prompt = (f"User's request: {message}\n\nQuery results:\n{json.dumps(results, indent=1, default=str)}"
                   if results else f"User's request: {message}\n\nNo company data was needed or found for this.")
         if objections:
             prompt += ("\n\nYour previous draft:\n" + json.dumps(previous, default=str) + "\n\nThe Grounding Critic "
                        "objected:\n- " + "\n- ".join(objections) + "\nFix those points and reply with the full JSON.")
         action = ("revise_" if objections else "write_") + ("answer" if kind == "question" else "email")
-        return self.chat_json(self.WRITE_SYSTEM[kind], prompt, action=action, target_agent="GroundingCritic",
-                              validate=validate, temperature=0.3)
+        return self.chat_json(self.WRITE_SYSTEM[kind] + " " + TRUNCATION_RULE, prompt, action=action,
+                              target_agent="GroundingCritic", validate=validate, temperature=0.3)
 
 
 class GroundingCritic(Agent):
     name = "GroundingCritic"
 
-    def review(self, text: str, evidence: list[dict], message: str, tokens: dict[str, str], round_no: int) -> list[str]:
+    # Rules prove every figure and person exists in the rows; this review checks they are attached to the right
+    # row: the right week, person or category, ties and groupings as the rows show them.
+    REVIEW_SYSTEM = ("You are the Grounding Critic agent in AgentOffice. Every number and person in this draft has "
+                     "already been found in the query results. Check each statement against the rows it relies on: "
+                     "the right figure for the right week, person or category; ties, groupings and ranges stated "
+                     "exactly as the rows show; nothing claimed about rows that are not shown. " + TRUNCATION_RULE +
+                     "Object only to concrete mismatches, quoting the statement and the row values that contradict "
+                     "it. Reply with only JSON: {\"objections\": [{\"statement\": \"...\", \"reason\": \"...\"}]} "
+                     "(an empty list if every statement matches).")
+
+    def _review_wording(self, text: str, evidence: list[dict], message: str) -> list[str]:
+        prompt = (f"User's request: {message}\n\nQuery results:\n{json.dumps(_results(evidence), indent=1, default=str)}"
+                  f"\n\nDraft:\n{text}")
+        try:
+            obj = self.chat_json(self.REVIEW_SYSTEM, prompt, action="review_wording", target_agent="AssistantAgent",
+                                 attempts=1, validate=lambda o: [] if isinstance(o, dict) and isinstance(
+                                     o.get("objections"), list) else ["reply must be {\"objections\": [...]}"])
+        except (AgentError, AdapterError) as e:   # optional model call: degrade, never fail the run
+            self.log("review_wording", status="error", output_summary=f"wording review skipped: {e.message}")
+            return []
+        return [f"{str(o.get('statement', ''))[:200]!r}: {str(o.get('reason', ''))[:300]}"
+                for o in obj["objections"][:5] if isinstance(o, dict)]
+
+    def review(self, text: str, evidence: list[dict], message: str, tokens: dict[str, str], round_no: int, *,
+               recipients: Optional[list[str]] = None) -> list[str]:
         objections = critique_grounding(text, evidence, message, tokens)
+        objections += critique_recipients(recipients or [], message)
+        if not objections and evidence and not self.offline:
+            objections = self._review_wording(text, evidence, message)
         self.log("critique_grounding", target_agent="AssistantAgent", retry_count=round_no - 1,
                  status="needs_revision" if objections else "approved",
-                 output_summary=objections or "every number and person traces to the data or your request")
+                 output_summary=objections or "every number and person traces to the data or your request, and "
+                                              "each statement matches its rows")
         return objections
 
 
@@ -208,7 +260,8 @@ def assist(kind: str, message: str, upload_id: Optional[str], *, settings: Setti
     draft = assistant.write(message, kind, masked)
     rounds, history = 0, []
     while True:
-        objections = critic.review(draft_text(kind, draft), masked, message, tokens, rounds + 1)
+        objections = critic.review(draft_text(kind, draft), masked, message, tokens, rounds + 1,
+                                   recipients=draft.get("to") if kind == "email" else None)
         history.append(objections)
         if not objections or rounds >= MAX_ROUNDS:
             break
@@ -216,7 +269,8 @@ def assist(kind: str, message: str, upload_id: Optional[str], *, settings: Setti
         draft = assistant.write(message, kind, masked, objections=objections, previous=draft)
 
     out = {"kind": kind, "model": ctx.model_name, "data_source": data.name, "personal_values_masked": len(tokens),
-           "evidence": [{"question": e["question"], "sql": e["sql"], "rows": len(e["rows"])} for e in evidence],
+           "evidence": [{"question": e["question"], "sql": e["sql"], "rows": len(e["rows"]),
+                         "truncated": bool(e.get("truncated"))} for e in evidence],
            "grounding": {"verified": not objections, "rounds": rounds, "objections": objections}}
     if kind == "question":
         out["answer"] = unmask(draft["answer"], tokens)

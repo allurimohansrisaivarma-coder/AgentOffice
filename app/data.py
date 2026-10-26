@@ -11,6 +11,10 @@ is read-only and is always logged as a skipped Zetaris call by the caller.
 Keep agent SQL to the portable subset: SELECT, JOIN, WHERE, GROUP BY, HAVING,
 ORDER BY, LIMIT, COUNT/SUM/AVG/MIN/MAX, CASE, CAST. No dialect-specific
 date functions; dates are ISO strings, so substr(work_date, 1, 7) gives a month.
+`/` gives a decimal on Zetaris even between whole numbers (8 / 7 = 1.142857),
+so wrap any whole-number result in CAST(... AS INTEGER). For a week, group by
+the month plus CAST((CAST(substr(work_date, 9, 2) AS INTEGER) - 1) / 7 AS INTEGER) + 1,
+the week of the month (1 to 5).
 """
 
 from __future__ import annotations

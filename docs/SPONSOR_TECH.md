@@ -55,12 +55,12 @@ The code was built with **Claude Code**; the split-view Team and Sheet panes wer
 | **Whole product** | the AgentOffice desktop app (Start menu, then Ctrl+Shift+Space); for testing, the same service in a browser or `docker run -p 8000:8000 -e SAMPLE_MODE=true oah-submission`; setup in `docs/SETUP.md` | sample mode needs no keys |
 
 ### NVIDIA
-- **Nemotron** (`nvidia/nemotron-3-ultra-550b-a55b`, and `nvidia/nemotron-3.5-lightning-30b-a3b` where Nightshift routed a few analysis calls) is served through the Nightshift route `meterless/deep`, hosted, with no local GPU. It powers every model call: routing, planning specs, SQL, code writing and revision, test design, code review, critique, the decision memo, and answers and email drafts. The fact-checking critics (Spec, Priority, Grounding) are deterministic rules by design.
+- **Nemotron** (`nvidia/nemotron-3-ultra-550b-a55b`, and `nvidia/nemotron-3.5-lightning-30b-a3b` where Nightshift routed a few analysis calls) is served through the Nightshift route `meterless/deep`, hosted, with no local GPU. It powers every model call: routing, planning specs, SQL, code writing and revision, test design, code review, critique, the decision memo, and answers and email drafts. The Spec and Priority Critics are deterministic rules by design; the Insight and Grounding Critics check by rule first, then ask Nemotron for a wording review.
 
 ### AI coding tool
 - **We built most of the codebase with Claude Code (Anthropic)**, from an empty repository on 23 Oct 2026: scaffolding, adapters, both engines, the agents, the task mode, the chat UI and desktop island, tests and the Docker setup.
 - **Cursor** was used by one team member on 26 Oct 2026 to build the split-view **Team** and **Sheet** panes: the agent canvas and saved-run replay, the per-cell change events behind the Sheet grid, and the macOS sandbox fix. Those commits carry `Co-authored-by: Cursor`.
-- The team reviewed and tested all generated code (195 tests).
+- The team reviewed and tested all generated code (199 tests).
 - **No Meterless or NVIDIA credentials** were ever given to either coding tool.
 - **If the form asks how Cursor was used:** for the split-view Team and Sheet panes described above; the rest of the code was written with Claude Code.
 

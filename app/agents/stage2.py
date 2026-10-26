@@ -104,6 +104,11 @@ class Retriever(Agent):
               "case-sensitive); never guess a value. Return at most 30 rows. Think briefly. Reply with only JSON: "
               "{\"sql\": \"...\"}.")
 
+    def _fetch(self, sql: str, purpose: str) -> tuple[list[dict], bool]:
+        """(at most MAX_ROWS rows, whether the result had more): one extra row tells a full result from a cut one."""
+        rows = self.query(sql, purpose, limit=MAX_ROWS + 1)
+        return rows[:MAX_ROWS], len(rows) > MAX_ROWS
+
     def retrieve(self, query: str, sub_questions: list[dict], catalog: list[dict], *, attempts: int = 3) -> list[dict]:
         tables = {t["table"] for t in catalog}
         team = team_from_query(query, ["Finance", "Operations", "Sales", "Admin"])
@@ -113,8 +118,8 @@ class Retriever(Agent):
                 if sub["id"] not in OFFLINE_SQL:
                     continue
                 sql = OFFLINE_SQL[sub["id"]].format(team_filter=f"WHERE p.team = '{team}' " if team else "")
-                rows = self.query(sql, sub["question"], limit=MAX_ROWS)
-                evidence.append({**sub, "sql": sql, "rows": rows, "attempts": 1})
+                rows, truncated = self._fetch(sql, sub["question"])
+                evidence.append({**sub, "sql": sql, "rows": rows, "truncated": truncated, "attempts": 1})
                 continue
             prompt = f"Sub-question: {sub['question']}\n\nCatalog:\n{json.dumps(catalog, indent=1)}"
             for attempt in range(attempts):
@@ -123,7 +128,7 @@ class Retriever(Agent):
                                      else ["reply must be {\"sql\": \"...\"}"])
                 sql = split_statements(obj["sql"])[0]
                 try:
-                    rows = self.query(sql, sub["question"], limit=MAX_ROWS)
+                    rows, truncated = self._fetch(sql, sub["question"])
                 except AdapterError as e:
                     if attempt + 1 == attempts:
                         self.log("give_up_sub_question", status="error", output_summary=f"{sub['id']}: {e.message}")
@@ -137,7 +142,7 @@ class Retriever(Agent):
                     prompt += (f"\n\nYour query:\n{sql}\nreturned 0 rows. A filter value probably does not exist; "
                                "use only values the catalog lists, exactly as written, and reply with the corrected JSON.")
                     continue
-                evidence.append({**sub, "sql": sql, "rows": rows, "attempts": attempt + 1})
+                evidence.append({**sub, "sql": sql, "rows": rows, "truncated": truncated, "attempts": attempt + 1})
                 break
         if not evidence:
             raise AgentError(self.name, "no_evidence", "no sub-question could be answered from the data")
@@ -246,7 +251,8 @@ class ReportWriter(Agent):
             self.log("write_report", model=OFFLINE_MODEL, output_summary=draft, target_agent="InsightCriticAgent")
             return draft
         payload = {"question": query, "results": [{"query": e["id"], "sub_question": e["question"], "sql": e["sql"],
-                                                   "rows": e["rows"]} for e in evidence],
+                                                   "rows": e["rows"], "truncated_at_30_rows": e.get("truncated", False)}
+                                                  for e in evidence],
                    "source_conflicts": conflicts.get("assessments", [])}
         prompt = json.dumps(payload, indent=1, default=str)
         if objections:
@@ -312,7 +318,7 @@ def explain(ctx, query: str, catalog: list[dict], conflicts: dict, *, max_rounds
     critic.remember([entity_observation("finding", c["text"][:120], source=critic.source(),
                                         attributes={"evidence": c["evidence"]}, contexts=[("run", ctx.run_id)])
                      for c in verified], "verified findings")
-    return {"sub_questions": subs, "evidence": [{k: e[k] for k in ("id", "question", "sql", "rows", "attempts")}
-                                                for e in evidence],
+    return {"sub_questions": subs, "evidence": [{k: e.get(k) for k in ("id", "question", "sql", "rows", "truncated",
+                                                                       "attempts")} for e in evidence],
             "headline": draft.get("headline", ""), "claims": verified, "dropped_claims": dropped,
             "critique_rounds": rounds, "objections": history}
