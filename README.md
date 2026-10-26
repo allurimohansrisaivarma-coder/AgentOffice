@@ -24,9 +24,13 @@ AgentOffice is a desktop app with a team of AI agents behind it. It lives at the
 | "Where is the finance team losing time, and what should we automate first?" | Finds where the hours go, explains why with cited rows, ranks what to automate, then builds and tests it |
 | "Who are the AP clerks in finance?" or "Draft an email to the finance team about last week's hours" | Looks it up with Zetaris SQL, answers or drafts the email from those rows only, and a critic checks every number and person against the data. Drafts are never sent; you copy them. Needs the model (not sample mode) |
 
-| The team at work | Plan, QA and preview | Approved and done |
-|---|---|---|
-| ![Each agent step streams into the chat](docs/images/ui-team-at-work.png) | ![The plan in plain steps with QA checks](docs/images/ui-plan-and-qa.png) | ![Filled spreadsheet ready to download](docs/images/ui-done.png) |
+![The team at work: each agent step streams into the chat while the Team pane lights up every agent and handoff](docs/images/ui-split-at-work.png)
+
+| Plan, QA and your approval | Approved and done |
+|---|---|
+| ![The plan in plain steps, QA checks and a preview; the Approval node waits on the code hash](docs/images/ui-split-approval.png) | ![The filled file to download; the Sheet pane shows each changed cell with its plan step and source](docs/images/ui-split-done.png) |
+
+*Screens from a live run of the expense-claims demo: Nemotron through Meterless Nightshift, data through Zetaris.*
 
 ### What makes it different
 

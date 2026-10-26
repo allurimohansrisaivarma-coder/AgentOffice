@@ -112,6 +112,7 @@ function setSide(open) {
   if (state.side) state.sideNews = false;
   store("agentoffice.side", state.side ? "1" : "0");
   render();
+  if (state.side) refitCaptions();
 }
 /** The Team/Sheet pane changed; flag it on the toggle when the pane is hidden. */
 function sideActivity() {
@@ -131,6 +132,7 @@ function expand() {
   state.expanded = true;
   render();
   setTimeout(() => input.focus(), 180);
+  setTimeout(refitCaptions, 600);   // after the panel's open transition, measure captions for real
 }
 function collapse() {
   if (!state.expanded) return;
@@ -644,7 +646,7 @@ const ANALYSIS_LAYOUT = {
     { id: "EngineerAgent", label: "Engineer", tag: "model", x: 16, y: 418, w: 100, h: 56 },
     { id: "QAAgent", label: "QA", tag: "reference runtime · model", x: 130, y: 418, w: 168, h: 56 },
     { id: "ManagerAgent", label: "Manager", tag: "model · rule gate", x: 310, y: 418, w: 100, h: 56 },
-    { id: "Human", label: "Approval", x: 150, y: 486, w: 100, h: 42 },
+    { id: "Human", label: "Approval", x: 310, y: 486, w: 100, h: 42 },
   ],
   edges: [
     ["SourceMapperAgent", "ReconcilerAgent"], ["ReconcilerAgent", "ConflictCriticAgent"],
@@ -766,21 +768,17 @@ function teamDraw() {
     });
     path.addEventListener("click", (ev) => { ev.stopPropagation(); teamShowEdge(key); });
     edgeLayer.appendChild(path);
-    // Short reason label sits near the loop arc midpoint.
+    // Short reason label sits next to the loop arc (placed when a critic fires, see setReasonLabel).
     let reasonLabel = null;
     if (loop) {
-      const ac = nodeCenter(A), bc = nodeCenter(B);
-      const lx = Math.max(A.x + A.w, B.x + B.w) + 8;
-      const ly = (ac.y + bc.y) / 2;
-      reasonLabel = svgEl("text", { class: "edge-reason", x: lx, y: ly, "data-edge": key, visibility: "hidden" });
+      reasonLabel = svgEl("text", { class: "edge-reason", "data-edge": key, visibility: "hidden" });
       reasonLabel.addEventListener("click", (ev) => { ev.stopPropagation(); teamShowEdge(key); });
       edgeLayer.appendChild(reasonLabel);
     }
     team.edges[key] = path;
-    team.edgeMeta[key] = team.edgeMeta[key] || { short: null, full: null, label: reasonLabel };
+    team.edgeMeta[key] = { short: null, full: null, ...team.edgeMeta[key], label: reasonLabel, ends: [A, B] };
     if (team.edgeMeta[key].short && reasonLabel) {
-      reasonLabel.textContent = team.edgeMeta[key].short.slice(0, 28);
-      reasonLabel.setAttribute("visibility", "visible");
+      setReasonLabel(team.edgeMeta[key]);
       path.classList.add("loop-fired", "has-reason");
     }
   }
@@ -799,15 +797,15 @@ function teamDraw() {
       g.appendChild(tag);
     }
     const modelLine = svgEl("text", { class: "node-sub", x: 8, y: n.tag ? 38 : 28, "data-model": "1" });
-    modelLine.textContent = teamModelCaption(n.id);
     g.appendChild(modelLine);
     const sub = svgEl("text", { class: "node-sub", x: 8, y: n.tag ? 48 : 38, "data-sub": "1" });
-    sub.textContent = "idle";
     g.appendChild(sub);
     g.appendChild(svgEl("rect", { class: "node-hit", width: n.w, height: n.h }));
     g.addEventListener("click", () => teamShowDetail(n.id));
     nodeLayer.appendChild(g);
     team.nodes[n.id] = { el: g, sub, modelLine, def: n };
+    fitSvgText(modelLine, teamModelCaption(n.id), n.w - 14);
+    fitSvgText(sub, "idle", n.w - 14);
   }
   $("agent-detail").hidden = true;
   challengesRender();
@@ -818,8 +816,58 @@ function teamSetNode(id, cls, subText) {
   if (!n) return;
   n.el.classList.remove("working", "done", "wait", "rejected");
   if (cls) n.el.classList.add(cls);
-  if (subText != null) n.sub.textContent = subText;
-  if (n.modelLine) n.modelLine.textContent = teamModelCaption(id);
+  if (subText != null) fitSvgText(n.sub, subText, n.def.w - 14);
+  if (n.modelLine) fitSvgText(n.modelLine, teamModelCaption(id), n.def.w - 14);
+}
+/** Set an SVG text, shortened with an ellipsis to fit maxW canvas units (estimated while the pane is hidden). */
+function fitSvgText(el, text, maxW) {
+  let s = String(text ?? "");
+  el.dataset.full = s;                           // kept so refitCaptions() can measure again once visible
+  el.textContent = s;
+  const fontPx = parseFloat(getComputedStyle(el).fontSize) || 9;
+  const measured = el.getComputedTextLength();
+  if (!measured) {                               // not laid out yet (pane hidden): a conservative estimate
+    el.textContent = shortText(s, Math.max(4, Math.floor(maxW / (fontPx * 0.62))));
+    return;
+  }
+  while (el.getComputedTextLength() > maxW && s.length > 4) {
+    s = s.slice(0, -1);
+    el.textContent = s.trimEnd() + "…";
+  }
+}
+/** Re-fit node captions to their measured width once the Team pane is visible again. */
+function refitCaptions() {
+  requestAnimationFrame(() => {
+    for (const n of Object.values(team.nodes)) {
+      for (const el of [n.modelLine, n.sub]) if (el && el.dataset.full != null) fitSvgText(el, el.dataset.full, n.def.w - 14);
+    }
+  });
+}
+/** Place a critic's reason beside its loop arc: inside the 440 x 540 canvas and clear of every node. */
+function setReasonLabel(meta) {
+  const label = meta.label;
+  if (!label || !meta.short || !meta.ends) return;
+  const [A, B] = meta.ends;
+  const ac = nodeCenter(A), bc = nodeCenter(B);
+  const text = shortText(meta.short, 24);
+  const est = text.length * 4.8;                 // 8.5px bold text, about 4.8 canvas units per character
+  const right = Math.max(A.x + A.w, B.x + B.w) + 8, left = Math.min(A.x, B.x) - 6, midY = (ac.y + bc.y) / 2;
+  const candidates = Math.abs(ac.x - bc.x) > Math.abs(ac.y - bc.y)
+    ? [[(ac.x + bc.x) / 2, Math.max(A.y + A.h, B.y + B.h) + 34, "middle"],   // side by side: under the arc,
+       [(ac.x + bc.x) / 2, Math.min(A.y, B.y) - 8, "middle"]]                // else above the pair
+    : [0, 14, -14].flatMap((dy) => [[right, midY + dy, "start"], [left, midY + dy, "end"]]);  // stacked: beside
+  const box = ([x, y, anchor]) => {
+    const x0 = anchor === "middle" ? x - est / 2 : anchor === "end" ? x - est : x;
+    return { x0, x1: x0 + est, y0: y - 9, y1: y + 2 };
+  };
+  const clear = (b) => b.x0 >= 2 && b.x1 <= 438 && b.y0 >= 0 && b.y1 <= 538 && layout().nodes.every(
+    (n) => b.x1 < n.x - 2 || b.x0 > n.x + n.w + 2 || b.y1 < n.y - 2 || b.y0 > n.y + n.h + 2);
+  const [x, y, anchor] = candidates.find((c) => clear(box(c))) || candidates[0];
+  label.textContent = text;
+  label.setAttribute("x", x);
+  label.setAttribute("y", y);
+  label.setAttribute("text-anchor", anchor);
+  label.setAttribute("visibility", "visible");
 }
 function shortModel(m) {
   let s = String(m || "");
@@ -832,7 +880,8 @@ function shortProvider(p) {
   return shortText(s, 28);
 }
 function teamModelCaption(id) {
-  const m = team.models[id];
+  // Node captions drop a model's size suffix (nemotron-3-ultra-550b-a55b -> nemotron-3-ultra); details keep it.
+  const m = team.models[id] && String(team.models[id]).replace(/-\d+(\.\d+)?b(-a\d+(\.\d+)?b)?$/i, "");
   const src = team.sources[id];
   const parts = [];
   if (m) parts.push(m);
@@ -854,10 +903,7 @@ function teamLitEdge(from, to, warn, reason) {
     const meta = team.edgeMeta[key] || (team.edgeMeta[key] = {});
     meta.short = reason.short;
     meta.full = reason.full;
-    if (meta.label) {
-      meta.label.textContent = reason.short.slice(0, 28);
-      meta.label.setAttribute("visibility", "visible");
-    }
+    setReasonLabel(meta);
   }
   if (!warn) setTimeout(() => path.classList.remove("lit"), 900);
 }
@@ -1404,6 +1450,7 @@ function selectSideTab(which) {
   sheetTab.tabIndex = isTeam ? -1 : 0;
   teamView.hidden = !isTeam;
   sheetView.hidden = isTeam;
+  if (isTeam) refitCaptions();
 }
 
 function toUiEvent(e) {
