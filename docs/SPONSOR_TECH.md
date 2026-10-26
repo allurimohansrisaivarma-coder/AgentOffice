@@ -12,7 +12,7 @@ AgentOffice is an AI office team you tell what to do: attach a spreadsheet, desc
 
 We implemented two **Meterless engines** from scratch: the **World Model** (shared state all agents read and write; its conflict records are the Conflict Critic's evidence) and **H-MEM** (cross-run memory: a human's approval lets the same automation run again without asking; a rejection changes what the team proposes next).
 
-The code was built with **Claude Code**.
+The code was built with **Claude Code**; the split-view Team and Sheet panes were built with **Cursor**.
 
 ## Full version
 
@@ -30,7 +30,7 @@ The code was built with **Claude Code**.
 ### Meterless Nightshift: the primary model provider (Power rule)
 - [`app/adapters/meterless.py`](../app/adapters/meterless.py) implements the published provider contract: provider `meterless` / "Meterless Runtime"; pasted URLs normalized to `<host>/v1` and the `rt-local` placeholder rejected; `meterless-app` on every request and `meterless-scope: user` on chat; status from `GET /v1/models`; auto-detect across ports 8088, 8090, 8787 and 11434; connect links (`/connect#k=`); a 180-second timeout.
 - **Test Connection:** `GET /providers/meterless` and `scripts/check_connections.py --detect`.
-- **One seam for every agent.** Every agent calls the model through one injected generator ([`app/llm.py`](../app/llm.py)), so Nightshift serves all of them: the front desk, PM, engineer, QA, manager and memory keeper in task mode, and the thirteen analysis agents.
+- **One seam for every agent.** Every agent calls the model through one injected generator ([`app/llm.py`](../app/llm.py)), so Nightshift serves all of them: the front desk, PM, engineer, QA, manager and memory keeper in task mode, the thirteen analysis agents, and the Assistant that answers workspace questions and drafts emails from Zetaris rows.
 - **Reasoning models handled properly.** Nemotron thinks before answering; we strip the reasoning (including replies with only a closing `</think>`), give a larger token budget, detect replies cut off at the length limit (`finish_reason: length`) and ask for a compact retry.
 - **Live runs (25 Oct 2026):** all three analysis examples and the three spreadsheet tasks ran in default mode; traces in `output_examples/*.trace.jsonl` show `nvidia/nemotron-3-ultra-550b-a55b` answering through `meterless/deep`.
 
@@ -58,9 +58,11 @@ The code was built with **Claude Code**.
 - **Nemotron** (`nvidia/nemotron-3-ultra-550b-a55b`) is served through the Nightshift route `meterless/deep`, hosted, with no local GPU. It powers every agent's reasoning: routing, planning specs, SQL, code writing and revision, test design, code review, critique and the decision memo.
 
 ### AI coding tool
-- **We built the whole codebase with Claude Code (Anthropic)**, from an empty repository on 23 Oct 2026: scaffolding, adapters, both engines, the agents, the task mode, the chat UI and desktop island, tests and the Docker setup. The team reviewed and tested all generated code (180 tests).
-- **No Meterless or NVIDIA credentials** were ever given to the coding tool.
-- **If the form asks how Cursor was used:** we didn't use Cursor; Claude Code was our coding tool.
+- **We built most of the codebase with Claude Code (Anthropic)**, from an empty repository on 23 Oct 2026: scaffolding, adapters, both engines, the agents, the task mode, the chat UI and desktop island, tests and the Docker setup.
+- **Cursor** was used by one team member on 26 Oct 2026 to build the split-view **Team** and **Sheet** panes: the agent canvas and saved-run replay, the per-cell change events behind the Sheet grid, and the macOS sandbox fix. Those commits carry `Co-authored-by: Cursor`.
+- The team reviewed and tested all generated code (194 tests).
+- **No Meterless or NVIDIA credentials** were ever given to either coding tool.
+- **If the form asks how Cursor was used:** for the split-view Team and Sheet panes described above; the rest of the code was written with Claude Code.
 
 ### What's unique
 - **Your spreadsheet becomes a Zetaris table.** Uploads are profiled and joined with company data through the same Zetaris SQL path as everything else, with no copies or views.

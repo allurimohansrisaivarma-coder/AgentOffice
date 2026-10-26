@@ -63,42 +63,57 @@ class FrontDesk(Agent):
     SYSTEM = ("You are the front desk of AgentOffice, an AI office team. Route the user's message. intents: "
               "'task' = they want something done to a spreadsheet/CSV (fill, clean, match, look up, format, flag, "
               "dedupe, sort, total...); 'analysis' = they ask where their team's time goes, what to automate, why "
-              "something is slow (answered from the company's workforce data in Zetaris); 'reply' = anything else "
-              "(greetings, questions about AgentOffice). Reply with only JSON: {\"intent\": \"task|analysis|reply\", "
-              "\"reply\": <one or two friendly sentences to show the user now>}.")
+              "something is slow (answered from the company's workforce data in Zetaris); 'email' = they want an "
+              "email or message drafted or replied to; 'question' = a factual question about their company's "
+              "people, teams, tickets, emails or time, or about the attached file (who, how many, which, list...); "
+              "'reply' = anything else (greetings, questions about AgentOffice). Reply with only JSON: "
+              "{\"intent\": \"task|analysis|email|question|reply\", \"reply\": <one or two friendly sentences to show "
+              "the user now>}.")
+    INTENTS = ("task", "analysis", "email", "question", "reply")
 
     TASK_WORDS = ("fill", "clean", "tidy", "match", "look up", "lookup", "format", "flag", "dedupe", "duplicate",
                   "sort", "total", "sum", "split", "merge", "convert", "standardi", "spreadsheet", "sheet", "excel",
                   "csv", "column", "row")
     ANALYSIS_WORDS = ("where", "time", "hours", "automate", "bottleneck", "slow", "losing", "team", "why", "workload")
+    # Asking for a message to be written, not a mention of email ("check each lead ... by email" is a task).
+    EMAIL_ASK = re.compile(r"\b(draft|compose)\b|\b(write|send)\s+(an?\s+)?(e-?mail|message|note|reply)\b"
+                           r"|\b(e-?mail|reply|write)\s+to\b", re.I)
+    QUESTION_WORDS = ("who ", "how many", "which ", "list ", "what is", "what's", "show me", "tell me")
 
     def route(self, message: str, *, has_file: bool) -> dict:
         if self.offline:
             low = message.lower()
-            if has_file:
+            if self.EMAIL_ASK.search(message):
+                intent = "email"
+            elif has_file:
                 intent = "task"
             elif any(w in low for w in self.ANALYSIS_WORDS) and not any(w in low for w in self.TASK_WORDS):
                 intent = "analysis"
+            elif any(low.startswith(w) or f" {w}" in low for w in self.QUESTION_WORDS):
+                intent = "question"
             else:
                 intent = "reply"
             reply = {"task": "On it: the team will plan, build and test this automation on your file, then ask you "
                              "to approve it.",
                      "analysis": "Looking into it: the team will check the workforce data in Zetaris and report "
                                  "back with evidence.",
+                     "email": "Drafting it from your data; you get a draft to copy, nothing is sent.",
+                     "question": "Looking it up in the data.",
                      "reply": HELP_TEXT}[intent]
             self.log("route", model=OFFLINE_MODEL, input_summary=message, output_summary={"intent": intent})
             return {"intent": intent, "reply": reply}
         obj = self.chat_json(self.SYSTEM, f"Message: {message}\nA spreadsheet is attached: {'yes' if has_file else 'no'}",
-                             action="route", validate=lambda o: [] if isinstance(o, dict) and o.get("intent") in (
-                                 "task", "analysis", "reply") and isinstance(o.get("reply"), str)
-                             else ["reply must be {\"intent\": task|analysis|reply, \"reply\": str}"])
+                             action="route", validate=lambda o: [] if isinstance(o, dict) and o.get("intent") in
+                             self.INTENTS and isinstance(o.get("reply"), str)
+                             else [f"reply must be {{\"intent\": {'|'.join(self.INTENTS)}, \"reply\": str}}"])
         return {"intent": obj["intent"], "reply": obj["reply"].strip()[:600]}
 
 
 HELP_TEXT = ("Hi, I'm AgentOffice. Attach a spreadsheet (CSV or Excel) and tell me what to do with it: fill in "
              "columns from the staff directory, tidy text, standardise dates, flag rows, remove duplicates, add "
              "totals. My team plans it, writes the automation, tests it on your data and asks you to approve "
-             "before anything is produced. You can also ask where your team's time goes.")
+             "before anything is produced. You can also ask where your team's time goes, ask a question about "
+             "your company's data or your file, or have an email drafted from it (these two need the model).")
 
 
 class DataProfiler(Agent):
@@ -577,32 +592,27 @@ class Operator(Agent):
         # Emit cell-write events for the Sheet pane before touching the file so the
         # workbook bytes stay identical to a run that never emitted them.
         sheet_name = spec["input"]["sheet"]
-        cell_writes = _emit_cell_writes(self, sheet_name, rows, output["rows"], columns,
-                                        output.get("sheets") or {}, spec=spec,
-                                        code_hash=approval["code_hash"])
+        cell_writes, changed = _emit_cell_writes(self, sheet_name, rows, output["rows"], columns,
+                                                 output.get("sheets") or {}, record["reference"], spec=spec,
+                                                 code_hash=approval["code_hash"])
         written = store.write_outputs(task_id=record["task_id"], filename=record["filename"], fmt=record["format"],
                                       sheet_name=sheet_name, columns=columns, rows=output["rows"],
                                       sheets=output.get("sheets") or {}, provenance=provenance)
-        self.log("audit_sheet", audit_written=True,
-                 output_summary="AgentOffice audit sheet written")
-        changed = _changed_cells(rows, output["rows"], columns) if len(rows) == len(output["rows"]) else None
-        if changed is None:
-            changed = len(cell_writes)
+        self.log("audit_sheet", audit_written=True, output_summary="AgentOffice audit sheet written")
         self.log("run_automation", input_summary=f"{len(rows)} rows, code {approval['code_hash'][:12]}",
                  output_summary=f"{len(output['rows'])} rows written to {', '.join(f['file_id'] for f in written)}"
                  + (f"; {changed} cells changed or added" if changed is not None else ""),
                  approval_id=approval["approval_id"], cells_changed=changed)
         return {"files": written, "rows_in": len(rows), "rows_out": len(output["rows"]), "cells_changed": changed,
                 "sheets": sorted((output.get("sheets") or {}).keys()), "cell_writes": cell_writes,
+                "sheet_layout": {"sheet": sheet_name, "rows": len(output["rows"])},
                 "execution_run_id": self.ctx.run_id}
 
 
 _CELL_WRITE_BATCH = 80
-
-
-def _changed_cells(before: list[dict], after: list[dict], columns: list[str]) -> int:
-    return sum(1 for b, a in zip(before, after) for c in columns
-               if not (is_blank(b.get(c)) and is_blank(a.get(c))) and b.get(c) != a.get(c))
+SHEET_PREVIEW_ROWS = 200        # input rows the Sheet pane holds (run.py's upload view); moved rows are drawn there
+_REORDER_OPS = ("filter", "dedupe", "sort")
+_ORIGIN = "\x00origin"          # row tag for _row_origins; cannot clash with a spreadsheet header
 
 
 def _step_writers(spec: dict) -> tuple[dict[str, tuple[int, dict]], dict[str, tuple[int, dict]]]:
@@ -633,37 +643,34 @@ def _step_writers(spec: dict) -> tuple[dict[str, tuple[int, dict]], dict[str, tu
 def _lookup_source(spec: dict, step: dict) -> Optional[str]:
     ref = (spec.get("references") or {}).get(step.get("reference")) or {}
     if ref.get("source") == "zetaris":
-        sql = " ".join(str(ref.get("sql") or "").split())
-        # Prefer the table name judges recognise from the expense-claims demo.
-        m = re.search(r"\bfrom\s+([\w.]+)", sql, flags=re.I)
-        table = m.group(1) if m else "workforce"
-        return f"Zetaris SQL on {table}"
+        m = re.search(r"\bfrom\s+([\w.]+)", " ".join(str(ref.get("sql") or "").split()), flags=re.I)
+        return f"Zetaris SQL on {m.group(1)}" if m else "Zetaris SQL"
     if ref.get("sheet"):
         return f"sheet {ref['sheet']}"
     return None
 
 
 def _summarize_source(step: dict) -> str:
-    groups = step.get("group_by") or []
-    if groups == ["Team"] or (len(groups) == 1 and str(groups[0]).lower() == "team"):
-        return "SUM by team"
-    aggs = ", ".join(f"{v.get('agg')}({v.get('column')})" for v in (step.get("values") or [])[:2])
-    by = ", ".join(str(g) for g in groups) or "?"
-    return f"{aggs} by {by}" if aggs else f"summarize by {by}"
+    """What the summarize step computed, from the step itself: e.g. 'sum(Amount), count(Claim ID) by Team'."""
+    aggs = ", ".join(f"{v.get('agg')}({v.get('column')})" for v in step.get("values") or [])
+    by = ", ".join(str(g) for g in step.get("group_by") or []) or "?"
+    return f"{aggs} by {by}" if aggs else f"grouped by {by}"
 
 
 _STEP_PLAIN = {
     "clean_text": "tidy text", "fill_blank": "fill blanks", "map_values": "map values",
-    "lookup": "directory lookup", "compute": "compute", "concat": "join text", "split": "split text",
+    "lookup": "look up values", "compute": "compute", "concat": "join text", "split": "split text",
     "format_date": "fix dates", "flag": "flag rows", "filter": "filter rows", "dedupe": "remove duplicates",
-    "sort": "sort rows", "summarize": "group totals",
+    "sort": "sort rows", "summarize": "summarize by group",
 }
 
 
 def _annotate_cell(row: int, col: str, old: Any, value: Any, *, step_i: Optional[int], step: Optional[dict],
-                   source: Optional[str] = None, note: Optional[str] = None,
+                   source: Optional[str] = None, note: Optional[str] = None, source_row: Optional[int] = None,
                    kind: str = "changed", code_hash: Optional[str] = None) -> dict:
     cell = {"row": row, "col": col, "old": old, "value": value, "kind": kind}
+    if source_row is not None and source_row != row:
+        cell["source_row"] = source_row
     if step_i is not None and step is not None:
         cell["step"] = step_i
         cell["step_op"] = step.get("op")
@@ -678,87 +685,132 @@ def _annotate_cell(row: int, col: str, old: Any, value: Any, *, step_i: Optional
     return cell
 
 
-def _diff_cells(before: list[dict], after: list[dict], columns: list[str], *,
-                col_writer: dict, spec: dict, code_hash: Optional[str]) -> list[dict]:
-    """Per-cell changes with old value + plan step; used only for UI events."""
-    cells: list[dict] = []
-    for r_i, a in enumerate(after):
-        b = before[r_i] if r_i < len(before) else {}
+def _row_origins(spec: dict, before: list[dict], after: list[dict], reference: dict) -> Optional[list[int]]:
+    """The input row (0-based) behind each output row, or None when that cannot be shown.
+
+    filter, dedupe and sort move rows, so output row j is not input row j. The reference runtime (the oracle QA
+    checked the approved code against, on this whole file) is re-run with each row tagged; its lineage is trusted
+    only if it reproduces the code's output exactly."""
+    if not any(s.get("op") in _REORDER_OPS for s in spec.get("steps") or []):
+        return list(range(len(after))) if len(before) == len(after) else None
+    columns = runtime.output_columns(spec, list(before[0]) if before else spec["input"]["columns"])
+    tagged = [{**row, _ORIGIN: i} for i, row in enumerate(before)]
+    try:
+        out = runtime.execute({**spec, "output_columns": columns + [_ORIGIN]}, tagged, reference)["rows"]
+    except Exception:   # the oracle disagreeing with approved code is a lineage gap, not a reason to fail the run
+        return None
+    replayed = json.loads(json.dumps([{c: r.get(c) for c in columns} for r in out], default=str))
+    return [r[_ORIGIN] for r in out] if replayed == after else None
+
+
+def _diff_cells(before: list[dict], after: list[dict], columns: list[str], origins: Optional[list[int]], *,
+                col_writer: dict, spec: dict, code_hash: Optional[str]) -> dict[tuple[int, str], dict]:
+    """Each output cell whose value differs from its own input row's, keyed (row, col), plus the cells needed
+    to draw the output order in the Sheet pane (rows moved or removed by filter/dedupe/sort)."""
+    cells: dict[tuple[int, str], dict] = {}
+    moved_by = " and ".join(_STEP_PLAIN[s["op"]] for s in spec.get("steps") or [] if s.get("op") in _REORDER_OPS)
+    for j, a in enumerate(after):
+        i = origins[j] if origins is not None else None
+        b = before[i] if i is not None else None
+        shown = before[j] if j < len(before) else {}   # what the grid shows at this position before the run
         for c in columns:
-            bv, av = b.get(c), a.get(c)
-            if r_i < len(before) and ((is_blank(bv) and is_blank(av)) or bv == av):
-                continue
+            av = a.get(c)
             step_i, step = col_writer.get(c, (None, None))
             source = _lookup_source(spec, step) if step and step.get("op") == "lookup" else None
-            cells.append(_annotate_cell(r_i + 1, c, bv, av, step_i=step_i, step=step,
-                                        source=source, code_hash=code_hash))
+            if b is not None and not ((is_blank(b.get(c)) and is_blank(av)) or b.get(c) == av):
+                cells[(j + 1, c)] = _annotate_cell(j + 1, c, b.get(c), av, step_i=step_i, step=step, source=source,
+                                                   source_row=i + 1, code_hash=code_hash)
+            elif j >= SHEET_PREVIEW_ROWS or shown.get(c) == av:
+                continue
+            elif b is not None:
+                cells[(j + 1, c)] = _annotate_cell(j + 1, c, b.get(c), av, step_i=None, step=None, kind="moved",
+                                                   source_row=i + 1, code_hash=code_hash,
+                                                   note=f"unchanged; row {i + 1} of your file, moved here by "
+                                                        f"{moved_by}")
+            else:
+                cells[(j + 1, c)] = _annotate_cell(j + 1, c, None, av, step_i=step_i, step=step, source=source,
+                                                   kind="written", code_hash=code_hash,
+                                                   note=f"rows were moved by {moved_by}; the input row behind "
+                                                        "this one could not be verified")
     return cells
 
 
-def _blank_by_design(before: list[dict], after: list[dict], *, spec: dict,
-                     code_hash: Optional[str]) -> list[dict]:
+def _blank_by_design(before: list[dict], after: list[dict], origins: Optional[list[int]], *, spec: dict,
+                     code_hash: Optional[str]) -> dict[tuple[int, str], dict]:
     """Intentional blanks (lookup miss, blank compute input) so the Sheet pane can highlight them."""
-    cells: list[dict] = []
+    cells: dict[tuple[int, str], dict] = {}
+
+    def old(j: int, c: str) -> Any:
+        return before[origins[j]].get(c) if origins is not None else None
+
     for i, step in enumerate(spec.get("steps") or [], start=1):
         if step.get("op") == "lookup":
             status_col = step.get("status_column")
             not_found = (step.get("statuses") or {}).get("not_found", "not_found")
             source = _lookup_source(spec, step)
-            note = f"{not_found}, left blank by design"
-            fields = list(step.get("fields") or {})
-            for r_i, a in enumerate(after):
+            for j, a in enumerate(after):
                 if status_col and a.get(status_col) != not_found:
                     continue
-                b = before[r_i] if r_i < len(before) else {}
-                for c in fields:
-                    if not is_blank(a.get(c)):
-                        continue
-                    cells.append(_annotate_cell(r_i + 1, c, b.get(c), a.get(c), step_i=i, step=step,
-                                                source=source, note=note, kind="blank_by_design",
-                                                code_hash=code_hash))
-        elif step.get("op") == "compute":
-            col = step.get("column")
-            if not col:
-                continue
+                for c in step.get("fields") or {}:
+                    if is_blank(a.get(c)):
+                        cells[(j + 1, c)] = _annotate_cell(j + 1, c, old(j, c), a.get(c), step_i=i, step=step,
+                                                           source=source, note=f"{not_found}, left blank by design",
+                                                           kind="blank_by_design", code_hash=code_hash)
+        elif step.get("op") == "compute" and step.get("column"):
+            col = step["column"]
             refs = runtime.expression_columns(str(step.get("expression") or ""))
-            for r_i, a in enumerate(after):
-                if not is_blank(a.get(col)):
-                    continue
-                b = before[r_i] if r_i < len(before) else {}
-                if not refs or not any(is_blank(b.get(c)) for c in refs):
-                    continue
-                cells.append(_annotate_cell(r_i + 1, col, b.get(col), a.get(col), step_i=i, step=step,
-                                            note="input was blank, left blank by design",
-                                            kind="blank_by_design", code_hash=code_hash))
+            for j, a in enumerate(after):
+                if refs and is_blank(a.get(col)) and any(is_blank(a.get(c)) for c in refs):
+                    cells[(j + 1, col)] = _annotate_cell(j + 1, col, old(j, col), a.get(col), step_i=i, step=step,
+                                                         note="input was blank, left blank by design",
+                                                         kind="blank_by_design", code_hash=code_hash)
     return cells
 
 
+def _personal_columns(columns: list[str], records: list[dict]) -> set[str]:
+    return {c for c in columns if _personal(c, [r.get(c) for r in records[:20]])}
+
+
+def _trace_value(col: str, value: Any, personal: set[str]) -> Any:
+    """Cell values in trace events keep their shape, not their content, in personal-looking columns."""
+    if col in personal and value is not None and not (isinstance(value, str) and _EMAIL.match(value)):
+        return re.sub(r"[A-Za-z]", "x", re.sub(r"\d", "9", text(value)))
+    return _mask(col, value)
+
+
+def _log_cells(agent: "Operator", sheet: str, cells: list[dict], personal: set[str], code_hash: Optional[str],
+               **extra: Any) -> None:
+    for i in range(0, len(cells), _CELL_WRITE_BATCH):
+        batch = [{**c, "old": _trace_value(c["col"], c["old"], personal),
+                  "value": _trace_value(c["col"], c["value"], personal),
+                  **({"masked": True} if c["col"] in personal else {})} for c in cells[i:i + _CELL_WRITE_BATCH]]
+        agent.log("cell_writes", sheet=sheet, cells=batch, code_hash=(code_hash or "")[:12],
+                  input_summary=f"{len(batch)} cells on {sheet}", output_summary=f"wrote {len(batch)} cells on {sheet}",
+                  **extra)
+
+
 def _emit_cell_writes(agent: "Operator", sheet_name: str, before: list[dict], after: list[dict],
-                      columns: list[str], extra_sheets: dict, *, spec: dict,
-                      code_hash: Optional[str] = None) -> list[dict]:
+                      columns: list[str], extra_sheets: dict, reference: dict, *, spec: dict,
+                      code_hash: Optional[str] = None) -> tuple[list[dict], Optional[int]]:
+    """Log the cell changes for the Sheet pane and return (cells with real values, cells changed or added).
+
+    The count is None when the input row behind each output row cannot be verified. Trace events mask
+    personal-looking columns; the returned cells keep the real values, like the output workbook."""
     col_writer, sheet_writer = _step_writers(spec)
-    all_cells: list[dict] = []
-    primary = _diff_cells(before, after, columns, col_writer=col_writer, spec=spec, code_hash=code_hash)
-    primary += _blank_by_design(before, after, spec=spec, code_hash=code_hash)
-    for i in range(0, len(primary), _CELL_WRITE_BATCH):
-        batch = primary[i:i + _CELL_WRITE_BATCH]
-        agent.log("cell_writes", sheet=sheet_name, cells=batch, code_hash=(code_hash or "")[:12],
-                  input_summary=f"{len(batch)} cells on {sheet_name}",
-                  output_summary=f"wrote {len(batch)} cells on {sheet_name}")
-        all_cells.extend({"sheet": sheet_name, **c} for c in batch)
+    origins = _row_origins(spec, before, after, reference)
+    cells = _diff_cells(before, after, columns, origins, col_writer=col_writer, spec=spec, code_hash=code_hash)
+    changed = sum(1 for c in cells.values() if c["kind"] == "changed") if origins is not None else None
+    cells.update(_blank_by_design(before, after, origins, spec=spec, code_hash=code_hash))
+    primary = list(cells.values())
+    personal = _personal_columns(columns, before + after)
+    _log_cells(agent, sheet_name, primary, personal, code_hash, rows_out=len(after))
+    all_cells = [{"sheet": sheet_name, **c} for c in primary]
     for name, records in extra_sheets.items():
         cols = list(records[0]) if records else []
         step_i, step = sheet_writer.get(name, (None, None))
         source = _summarize_source(step) if step else None
-        fresh = []
-        for r_i, rec in enumerate(records):
-            for c in cols:
-                fresh.append(_annotate_cell(r_i + 1, c, None, rec.get(c), step_i=step_i, step=step,
-                                            source=source, code_hash=code_hash))
-        for i in range(0, len(fresh), _CELL_WRITE_BATCH):
-            batch = fresh[i:i + _CELL_WRITE_BATCH]
-            agent.log("cell_writes", sheet=name, cells=batch, code_hash=(code_hash or "")[:12],
-                      input_summary=f"{len(batch)} cells on {name}",
-                      output_summary=f"wrote {len(batch)} cells on {name}")
-            all_cells.extend({"sheet": name, **c} for c in batch)
-    return all_cells
+        fresh = [_annotate_cell(r_i + 1, c, None, rec.get(c), step_i=step_i, step=step, source=source,
+                                kind="added", code_hash=code_hash) for r_i, rec in enumerate(records) for c in cols]
+        _log_cells(agent, name, fresh, _personal_columns(cols, records), code_hash, rows_out=len(records))
+        all_cells.extend({"sheet": name, **c} for c in fresh)
+    return all_cells, changed

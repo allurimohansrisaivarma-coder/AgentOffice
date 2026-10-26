@@ -2,6 +2,8 @@
 
     task      (a spreadsheet is attached)  app/tasks/pipeline.py: plan, build, test, ask for approval
     analysis  (where does the time go?)     app/pipeline.py: discover, explain, build (the original pipeline)
+    question  (who / how many / which ...)  app/assistant.py: look it up in the data, answer, check every number
+    email     (draft an email to ...)       app/assistant.py: the same, as an email draft the user copies
     reply     (anything else)               the front desk answers
 
 Every job has its own trace file; the UI follows it live through the job's events.
@@ -14,6 +16,7 @@ from typing import Optional
 from app.adapters.http import AdapterError
 from app.agents.base import AgentError, RunContext
 from app.approvals import ApprovalLedger
+from app.assistant import assist
 from app.jobs import Job
 from app.llm import build_generator
 from app.pipeline import run_pipeline
@@ -88,6 +91,12 @@ def start_chat(services: Services, message: str, *, upload_id: Optional[str], sa
             tracer.event("Orchestrator", "run_completed", output_summary=result["result"]["summary"],
                          confidence=result["result"]["confidence"])
             return {"type": "analysis", "reply": routed["reply"], "analysis": result}
+        if routed["intent"] in ("question", "email"):
+            result = assist(routed["intent"], message, upload_id, settings=settings, tracer=tracer,
+                            generator=generator, sample_mode=sample_mode, store=store, pipeline=pipeline,
+                            builder=builder, uploads=services.uploads)
+            tracer.event("Orchestrator", "run_completed", output_summary=f"{routed['intent']} drafted")
+            return {"type": "assist", "reply": routed["reply"], "assist": result}
         tracer.event("Orchestrator", "run_completed", output_summary="replied")
         return {"type": "reply", "text": routed["reply"]}
 

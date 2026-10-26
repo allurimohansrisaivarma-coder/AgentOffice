@@ -103,6 +103,7 @@ kbd {
   border-radius: var(--radius-panel);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
 }
+.island[data-state="expanded"][data-side="closed"] { width: min(480px, calc(100vw - 20px)); }
 .island[data-state="expanded"][data-size="large"] {
   top: 10px; left: 50%;
   width: calc(100vw - 20px);
@@ -178,6 +179,16 @@ kbd {
   display: flex; flex-direction: column;
   background: var(--isl-bg);
 }
+.island[data-side="closed"] .panel-body { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.island[data-side="closed"] .pane-side { display: none; }
+.island[data-side="closed"] .pane-chat { border-right: 0; border-bottom: 0; }
+#side-toggle { position: relative; }
+.island[data-side="closed"] #side-toggle .side-fill { opacity: 0; }
+#side-toggle .news-dot {
+  position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); display: none;
+}
+#side-toggle.news .news-dot { display: block; }
 
 .panel-head {
   display: flex; align-items: center; gap: 10px;
@@ -283,6 +294,14 @@ details.code pre {
 
 .memo { margin-top: 10px; font-size: 13px; line-height: 1.5; }
 .memo ul { margin: 4px 0 0; padding-left: 18px; color: var(--isl-muted); }
+.memo.warn { padding: 10px 12px; border-radius: 12px; background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.24); }
+
+/* answer and email-draft cards (app/assistant.py) */
+.answer { margin: 0; font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+.email { display: grid; gap: 4px; font-size: 13px; padding: 10px 12px; border-radius: 12px; background: var(--isl-bg); border: 1px solid var(--isl-line); }
+.email-body { margin-top: 6px; white-space: pre-wrap; line-height: 1.55; max-height: 320px; overflow: auto; }
+.card .approve-row { margin-top: 10px; }
+.plan li pre { margin: 4px 0 0; white-space: pre-wrap; font-family: var(--mono); font-size: 11.5px; color: var(--isl-muted); }
 
 .approve { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--isl-line); display: grid; gap: 8px; }
 .approve-row { display: flex; gap: 8px; align-items: center; }

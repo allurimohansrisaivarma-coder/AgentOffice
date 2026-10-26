@@ -47,8 +47,8 @@
       "how": "Served through Meterless Nightshift (route meterless/deep), hosted, no local GPU; powers routing, planning, SQL, code writing and revision, test design, review, critique and decision memos."
     }
   },
-  "ai_coding_tool": "Claude Code (Anthropic)",
+  "ai_coding_tool": "Claude Code (Anthropic) for most of the code; Cursor for the split-view Team and Sheet panes",
   "pre_existing_components": "none",
   "data": "Synthetic only (scripts/generate_workforce_data.py, scripts/generate_task_samples.py); example.com / example.org emails.",
-  "tests": 180
+  "tests": 194
 }

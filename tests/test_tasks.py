@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.automation.sandbox import policy_violations
 from app.tasks import files, qa, runtime
-from app.tasks.agents import _mask, critique
+from app.tasks.agents import _emit_cell_writes, _mask, _summarize_source, critique
 from app.tasks.spec import DEMO_SPECS, describe, demo_spec_for, validate_spec
 from run import create_app
 
@@ -149,6 +149,7 @@ def test_desktop_app_reads_the_page_state_from_the_window_title():
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
     import island
     assert island.parse_title("AgentOffice · panel · 36") == ("panel", 36)
+    assert island.parse_title("AgentOffice · chat · 36") == ("chat", 36)
     assert island.parse_title("AgentOffice · quit · 36") == ("quit", 36)
     assert island.parse_title("AgentOffice · whatever") == ("island", 0)
 
@@ -201,6 +202,74 @@ def test_nightshift_chat_is_streamed_and_reassembled(make_settings):
     assert result.model == "nvidia/nemotron" and result.usage == {"total_tokens": 42}
 
 
+# ------------------------------------------------------------------ Sheet pane cell events
+
+class _Logger:
+    def __init__(self):
+        self.events = []
+
+    def log(self, action, **fields):
+        self.events.append({"action": action, **fields})
+
+
+def _cell_events(spec, data, reference=None, after=None):
+    reference = reference or {}
+    out = runtime.execute(spec, data, reference)
+    columns = runtime.output_columns(spec, list(data[0]))
+    agent = _Logger()
+    cells, changed = _emit_cell_writes(agent, "S", data, out["rows"] if after is None else after, columns,
+                                       out["sheets"], reference, spec=spec, code_hash="f" * 64)
+    return cells, changed, agent.events
+
+
+def test_cell_writes_follow_rows_that_dedupe_and_sort_move():
+    spec = {"input": {"columns": ["id", "due", "status"]}, "steps": [
+        {"op": "dedupe", "columns": ["id"], "normalize": ["strip", "upper"]},
+        {"op": "fill_blank", "column": "status", "value": "Pending"},
+        {"op": "sort", "by": [{"column": "due"}]}]}
+    data = rows({"id": "b", "due": "2026-10-03", "status": "Paid"}, {"id": "a", "due": "2026-10-01", "status": None},
+                {"id": " B ", "due": "2026-10-02", "status": None})
+    cells, changed, events = _cell_events(spec, data)
+    # output: a (input row 2, status filled), b (input row 1, unchanged)
+    real = [c for c in cells if c["kind"] == "changed"]
+    assert changed == 1 and [(c["row"], c["col"], c["old"], c["value"], c["source_row"]) for c in real] == [
+        (1, "status", None, "Pending", 2)]
+    assert real[0]["step_label"] == "Plan step 2: fill blanks"
+    moved = {(c["row"], c["col"]) for c in cells if c["kind"] == "moved"}
+    assert moved == {(1, "id"), (1, "due"), (2, "id"), (2, "due"), (2, "status")}
+    assert all("remove duplicates and sort rows" in c["note"] for c in cells if c["kind"] == "moved")
+    assert {e["rows_out"] for e in events} == {2}
+
+
+def test_cell_writes_report_no_count_when_lineage_cannot_be_shown():
+    spec = {"input": {"columns": ["id"]}, "steps": [{"op": "sort", "by": [{"column": "id"}]}]}
+    data = rows({"id": "b"}, {"id": "a"})
+    cells, changed, _ = _cell_events(spec, data, after=rows({"id": "a"}, {"id": "zz"}))   # not the oracle's output
+    assert changed is None and {c["kind"] for c in cells} == {"written"}
+
+
+def test_cell_events_mask_personal_columns_but_the_result_keeps_values():
+    spec = {"input": {"columns": ["Employee Name", "email"]}, "references": {"staff": {"fields": ["email", "team"]}},
+            "steps": [{"op": "lookup", "key": "email", "reference": "staff", "reference_key": "email",
+                       "fields": {"team": "team"}},
+                      {"op": "summarize", "sheet": "By person", "group_by": ["Employee Name"],
+                       "values": [{"column": "team", "agg": "count", "as": "n"}]}]}
+    data = rows({"Employee Name": "Ada Lovelace", "email": "ada@example.com"})
+    cells, changed, events = _cell_events(spec, data, {"staff": [{"email": "ada@example.com", "team": "Ops"}]})
+    assert changed == 1 and any(c["value"] == "Ada Lovelace" for c in cells)
+    logged = [c for e in events for c in e["cells"]]
+    assert {c["value"] for c in logged if c["col"] == "Employee Name"} == {"xxx xxxxxxxx"}
+    assert all(c["masked"] for c in logged if c["col"] == "Employee Name")
+    assert {c["value"] for c in logged if c["col"] == "team"} == {"Ops"}
+    assert "Ada" not in str(events) and "ada@example.com" not in str(events)
+
+
+def test_summarize_label_names_the_aggregation_it_ran():
+    step = {"op": "summarize", "sheet": "T", "group_by": ["Team"],
+            "values": [{"column": "Claim ID", "agg": "count", "as": "Claims"}, {"column": "Amount", "agg": "avg", "as": "Avg"}]}
+    assert _summarize_source(step) == "count(Claim ID), avg(Amount) by Team"
+
+
 # ------------------------------------------------------------------ API flow (sample mode)
 
 def _wait(client, job_id, timeout=60):
@@ -232,6 +301,10 @@ def test_chat_task_needs_approval_before_any_file_is_written(make_settings):
     done = client.post(f"/tasks/{task['task_id']}/decision",
                        json={"decision": "approve", "approver": "tester", "code_hash": task["code_hash"]}).json()
     assert done["status"] == "completed" and done["outputs"]["rows_out"] == 30
+    # dedupe + sort move rows; the count still compares each output row with its own input row
+    assert done["outputs"]["sheet_layout"] == {"sheet": task["spec"]["input"]["sheet"], "rows": 30}
+    real = [c for c in done["outputs"]["cell_writes"] if c["kind"] == "changed"]
+    assert done["outputs"]["cells_changed"] == len(real) > 0
     formats = {f["format"] for f in done["outputs"]["files"]}
     assert formats == {"xlsx", "csv"}
     download = client.get(f"/files/{done['outputs']['files'][0]['file_id']}")

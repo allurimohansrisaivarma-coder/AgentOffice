@@ -87,3 +87,9 @@ def test_live_replay_keeps_nightshift_and_zetaris_fields(make_settings):
     assert query.get("executed_sql")
     model_ev = next(e for e in body["events"] if e.get("model") and "nemotron" in e["model"].lower())
     assert model_ev.get("provider") and "meterless" in model_ev["provider"]
+
+
+def test_sample_replay_claims_no_sponsor_call_it_skipped(make_settings):
+    body = TestClient(create_app(make_settings(sample_mode=True))).get("/demos/replays/analysis_finance_sample").json()
+    assert any(e["target_agent"] == "Zetaris" and e["status"] == "skipped" for e in body["events"])
+    assert body["sponsors"] == {"models": ["offline-fallback"], "zetaris": False, "meterless": False}

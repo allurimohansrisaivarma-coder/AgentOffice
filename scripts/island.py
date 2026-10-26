@@ -11,8 +11,8 @@ How it works (standard library only, through ctypes):
   * The window loses its title bar and taskbar button, stays on top, and is clipped to a pill (collapsed) or a
     rounded panel (open), centred at the top of the main screen like a dynamic island.
   * A global hotkey (Ctrl+Shift+Space) focuses the window, which opens the panel; pressing it again, Esc, or
-    clicking elsewhere folds it back. The page reports its state in the window title ("... · island" or
-    "... · panel"), and this script resizes the window to match.
+    clicking elsewhere folds it back. The page reports its state in the window title ("... · island",
+    "... · panel", or "... · chat" with the Team/Sheet pane hidden), and this script resizes the window to match.
 Quit with the power button in the panel (the page titles itself "... · quit"), Ctrl+C here, or Alt+F4;
 quitting also stops a service this script started. A second launch only opens the running island.
 """
@@ -33,6 +33,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ISLAND = (300, 44)            # CSS pixels
 PANEL = (960, 760)            # split view: chat + Team/Sheet
+CHAT = (480, 760)             # the panel with the Team/Sheet pane hidden
 TOP_MARGIN = 10
 TITLE_PREFIX = "AgentOffice ·"
 
@@ -179,8 +180,8 @@ class Island:
         if mode == self.mode and frame == self.frame:
             return
         self.mode, self.frame = mode, frame
-        target = self.px(PANEL if mode == "panel" else ISLAND)
-        radius = int((28 if mode == "panel" else ISLAND[1] / 2) * self.scale)
+        target = self.px({"panel": PANEL, "chat": CHAT}.get(mode, ISLAND))
+        radius = int((28 if mode in ("panel", "chat") else ISLAND[1] / 2) * self.scale)
         start = self.size if animate and self.size != (0, 0) else target
         frames = 9 if animate and start != target else 1
         for i in range(1, frames + 1):
@@ -215,9 +216,10 @@ class Island:
 
 
 def parse_title(title: str) -> tuple[str, int]:
-    """"AgentOffice · panel · 33" -> ("panel", 33): the page's state and the browser title-bar height."""
+    """"AgentOffice · panel · 33" -> ("panel", 33): the page's state and the browser title-bar height.
+    "chat" is the open panel with the Team/Sheet pane hidden."""
     parts = [p.strip() for p in title.split("·")]
-    mode = parts[1] if len(parts) > 1 and parts[1] in ("panel", "quit") else "island"
+    mode = parts[1] if len(parts) > 1 and parts[1] in ("panel", "chat", "quit") else "island"
     frame = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
     return mode, min(frame, 120)
 

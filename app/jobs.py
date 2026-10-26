@@ -45,7 +45,7 @@ class Job:
                     "summary": summary[:240], "input": inp[:240],
                     "retry": event.get("retry_count", 0), "confidence": event.get("confidence")}
             # Additive extras the Team/Sheet panes use; omit when absent so older clients stay fine.
-            for key in ("cells", "sheet", "cases", "cases_matched", "audit_written", "code_hash",
+            for key in ("cells", "sheet", "rows_out", "cells_changed", "cases", "cases_matched", "audit_written", "code_hash",
                         "provider", "data_source", "purpose", "executed_sql"):
                 if key in event:
                     view[key] = event[key]

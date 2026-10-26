@@ -41,6 +41,7 @@ from app.llm import build_generator
 from app.pipeline import STAGES, run_pipeline
 from app.services import Services
 from app.tasks import files
+from app.tasks.agents import SHEET_PREVIEW_ROWS
 from app.tasks.pipeline import execute_task
 from app.tracing import Tracer, new_run_id
 
@@ -179,7 +180,7 @@ def create_app(settings: Settings) -> FastAPI:
             "label": "Analysis · finance (sample mode)",
             "mode": "analysis",
             "path": ROOT / "output_examples" / "sample_mode" / "example_1.trace.jsonl",
-            "blurb": "Full 13-agent pipeline offline",
+            "blurb": "All 13 analysis agents in sample mode: no model, Zetaris calls logged as skipped",
         },
         "task_expense_live": {
             "label": "Task · expense (Nightshift + Zetaris)",
@@ -207,19 +208,19 @@ def create_app(settings: Settings) -> FastAPI:
                 events.append({k: e.get(k) for k in (
                     "timestamp", "run_id", "agent_name", "action", "status", "target_agent", "model",
                     "input_summary", "output_summary", "retry_count", "confidence", "cases",
-                    "cases_matched", "cells", "sheet", "code_hash", "audit_written",
+                    "cases_matched", "cells", "sheet", "rows_out", "cells_changed", "code_hash", "audit_written",
                     "provider", "data_source", "purpose", "executed_sql")})
                 events[-1]["i"] = i
         run_id = events[0]["run_id"] if events else replay_id
         models = sorted({e.get("model") for e in events if e.get("model")})
-        used_zetaris = any(e.get("target_agent") == "Zetaris" or e.get("data_source") == "zetaris"
-                           or (isinstance(e.get("data_source"), str) and "zetaris" in e["data_source"].lower())
-                           for e in events)
+        # Sponsor badges count only calls that happened: sample mode logs its Zetaris calls as "skipped".
+        used_zetaris = any(e.get("status") != "skipped" and (
+            e.get("target_agent") == "Zetaris" or "zetaris" in str(e.get("data_source") or "").lower())
+            for e in events)
+        used_meterless = any("meterless" in str(e.get("provider") or "").lower() for e in events)
         return {"id": replay_id, "label": meta["label"], "mode": meta["mode"], "blurb": meta["blurb"],
                 "run_id": run_id, "replay": True, "events": events, "count": len(events),
-                "sponsors": {"models": models, "zetaris": used_zetaris,
-                             "meterless": any(isinstance(m, str) and ("nemotron" in m.lower()
-                                            or m.startswith("meterless/")) for m in models)}}
+                "sponsors": {"models": models, "zetaris": used_zetaris, "meterless": used_meterless}}
 
     @app.get("/providers/meterless")
     def meterless_status() -> dict:
@@ -275,7 +276,7 @@ def create_app(settings: Settings) -> FastAPI:
         # preview stays short for the chip; rows (capped) feeds the Sheet pane
         return {**meta, "preview": {s["name"]: s["rows"][:6] for s in parsed["sheets"]},
                 "columns": {s["name"]: s["columns"] for s in parsed["sheets"]},
-                "rows": {s["name"]: s["rows"][:200] for s in parsed["sheets"]},
+                "rows": {s["name"]: s["rows"][:SHEET_PREVIEW_ROWS] for s in parsed["sheets"]},
                 "row_totals": {s["name"]: len(s["rows"]) for s in parsed["sheets"]},
                 "suggested_prompt": DEMO_PROMPTS.get(upload_id)}
 

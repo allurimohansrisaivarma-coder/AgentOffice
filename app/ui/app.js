@@ -8,8 +8,8 @@ const messages = $("messages"), input = $("input"), form = $("composer"), fileIn
 const attachmentEl = $("attachment"), drop = $("drop"), sendBtn = $("send");
 
 const desktop = new URLSearchParams(location.search).get("shell") === "desktop";
-const state = { expanded: false, large: false, run: "idle", config: null, samples: [], attachment: null, busy: false,
-                pickingFile: false, quitting: false };
+const state = { expanded: false, large: false, side: store("agentoffice.side") !== "0", sideNews: false, run: "idle",
+                config: null, samples: [], attachment: null, busy: false, pickingFile: false, quitting: false };
 
 const AGENTS = {
   Orchestrator: "Orchestrator", FrontDeskAgent: "Front desk", DataProfilerAgent: "Data profiler", PMAgent: "PM",
@@ -17,7 +17,7 @@ const AGENTS = {
   ManagerAgent: "Manager", MemoryKeeperAgent: "Memory keeper", OperatorAgent: "Operator",
   SourceMapperAgent: "Source mapper", ReconcilerAgent: "Reconciler", ConflictCriticAgent: "Conflict critic",
   ResearchPlannerAgent: "Research planner", ReportWriterAgent: "Report writer", InsightCriticAgent: "Insight critic",
-  PriorityCritic: "Priority critic",
+  PriorityCritic: "Priority critic", AssistantAgent: "Assistant", GroundingCritic: "Grounding critic",
 };
 const ACTIONS = {
   run_started: "Started", route: "Read your request", plan_run: "Planned the run", profile_file: "Profiled your file",
@@ -34,6 +34,9 @@ const ACTIONS = {
   review_conflicts: "Checked for conflicts", plan_research: "Planned the research", write_report: "Wrote the report",
   critique_report: "Checked the report", critique_claims: "Checked the claims",
   critique_sources: "Judged source conflicts", cell_writes: "Wrote cells", audit_sheet: "Wrote audit sheet",
+  plan_help: "Worked out what to look up", write_sql: "Wrote the query", fix_sql: "Fixed the query",
+  write_answer: "Wrote the answer", revise_answer: "Revised the answer", write_email: "Drafted the email",
+  revise_email: "Revised the draft", critique_grounding: "Checked every fact", assist_done: "Draft ready",
 };
 const HIDDEN = new Set(["zetaris_query"]);
 
@@ -85,8 +88,14 @@ function render() {
     // Desktop shell already fills the viewport; enlarge is a browser-only control.
     enlargeBtn.hidden = desktop;
   }
+  island.dataset.side = state.side ? "open" : "closed";
+  const sideBtn = $("side-toggle");
+  sideBtn.setAttribute("aria-pressed", String(state.side));
+  sideBtn.title = state.side ? "Hide Team and Sheet" : "Show Team and Sheet";
+  sideBtn.setAttribute("aria-label", sideBtn.title + (state.sideNews ? " (new activity)" : ""));
+  sideBtn.classList.toggle("news", state.sideNews && !state.side);
   // Desktop shell: scripts/island.py reads the state and the browser's own title-bar height from the title.
-  const mode = state.quitting ? "quit" : state.expanded ? "panel" : "island";
+  const mode = state.quitting ? "quit" : !state.expanded ? "island" : state.side ? "panel" : "chat";
   document.title = desktop
     ? `AgentOffice · ${mode} · ${Math.max(0, window.outerHeight - window.innerHeight)}`
     : "AgentOffice";
@@ -97,6 +106,18 @@ function setLarge(on) {
   render();
 }
 function toggleLarge() { setLarge(!state.large); }
+function setSide(open) {
+  state.side = !!open;
+  if (state.side) state.sideNews = false;
+  store("agentoffice.side", state.side ? "1" : "0");
+  render();
+}
+/** The Team/Sheet pane changed; flag it on the toggle when the pane is hidden. */
+function sideActivity() {
+  if (state.side || state.sideNews) return;
+  state.sideNews = true;
+  render();
+}
 function setRun(run, text, badge) {
   state.run = run;
   pillText.textContent = text || "AgentOffice";
@@ -121,6 +142,7 @@ function toggle() { state.expanded ? collapse() : expand(); }
 pill.addEventListener("click", expand);
 $("collapse").addEventListener("click", collapse);
 $("enlarge").addEventListener("click", toggleLarge);
+$("side-toggle").addEventListener("click", () => setSide(!state.side));
 document.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if ((e.ctrlKey && e.shiftKey && (k === " " || e.code === "Space")) || (e.ctrlKey && !e.shiftKey && k === "k")) {
@@ -211,7 +233,8 @@ function user(text, meta) {
 function welcome() {
   const w = bot(`<div class="welcome"><h2>What should the team do?</h2><p>Attach a spreadsheet and describe the
     repetitive work: filling columns, tidying text, fixing dates, flagging rows, removing duplicates, totals.
-    Or ask where your team's time goes.</p><div class="samples"></div></div>`);
+    Or ask where your team's time goes, ask a question about your data, or have an email drafted from it.</p>
+    <div class="samples"></div></div>`);
   const box = w.querySelector(".samples");
   for (const s of state.samples) {
     const b = el("button", "sample-card", `<b>Try: ${esc(s.filename)}</b><span>${esc(s.suggested_prompt || "")}</span>`);
@@ -226,6 +249,13 @@ function welcome() {
     input.value = "Where is the finance team losing time, and what should we automate first?"; autosize(); input.focus();
   });
   box.appendChild(q);
+  const d = el("button", "sample-card", `<b>Draft: an email to the finance team</b><span>Grounded in the workforce data; every number is checked. Needs the model (not sample mode).</span>`);
+  d.type = "button";
+  d.addEventListener("click", () => {
+    setAttachment(null); teamSetMode("assist");
+    input.value = "Draft an email to the finance team summarising which task categories took the most hours per week."; autosize(); input.focus();
+  });
+  box.appendChild(d);
 }
 
 // ------------------------------------------------------------------ sending + live runs
@@ -342,13 +372,16 @@ function showResult(result, traceId) {
     setRun("idle", "AgentOffice");
   } else if (result.type === "task") {
     if (result.task.status === "completed" && result.task.outputs?.cell_writes) {
-      sheetReplay(result.task.outputs.cell_writes, result.task.outputs.execution_run_id || traceId,
-                  result.task.outputs.cells_changed);
+      sheetShowOutput(result.task.outputs.cell_writes, result.task.outputs.execution_run_id || traceId,
+                      result.task.outputs.cells_changed, result.task.outputs.sheet_layout);
     }
     taskCard(result.task, traceId);
   } else if (result.type === "analysis") {
     teamSetMode("analysis");
     analysisCard(result.analysis, traceId);
+  } else if (result.type === "assist") {
+    teamSetMode("assist");
+    assistCard(result.assist, traceId);
   }
 }
 
@@ -457,8 +490,8 @@ function approvalBox(slot, task) {
       if (done.status === "completed") {
         teamApprove(done.code_hash);
         if (done.outputs?.cell_writes) {
-          sheetReplay(done.outputs.cell_writes, done.outputs.execution_run_id || done.execution_run_id,
-                      done.outputs.cells_changed);
+          sheetShowOutput(done.outputs.cell_writes, done.outputs.execution_run_id || done.execution_run_id,
+                          done.outputs.cells_changed, done.outputs.sheet_layout);
         }
         slot.innerHTML = resultBlock(done) + `<p class="muted">Saved to memory: next time this exact automation can run without asking.</p>`;
         setRun("done", "Your file is ready", "done");
@@ -517,6 +550,55 @@ function analysisCard(a, traceId) {
   scrollDown();
 }
 
+// ------------------------------------------------------------------ answer / email card
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (_) { /* fall back below */ }
+  const t = el("textarea");
+  t.value = text; t.setAttribute("readonly", ""); t.style.position = "fixed"; t.style.opacity = "0";
+  document.body.appendChild(t); t.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (_) { ok = false; }
+  t.remove();
+  return ok;
+}
+function assistCard(a, traceId) {
+  const g = a.grounding || {};
+  const rows = (a.evidence || []).reduce((n, e) => n + e.rows, 0);
+  const checked = g.verified
+    ? `<p class="muted">✓ Grounding critic: every number and person traces to the data or your request${g.rounds ? ` (after ${g.rounds} revision${g.rounds > 1 ? "s" : ""})` : ""}.</p>`
+    : `<div class="memo warn"><b>Check before using:</b> the grounding critic still objects after ${esc(g.rounds)} revisions: ${(g.objections || []).map(esc).join("; ")}</div>`;
+  const evidence = (a.evidence || []).length
+    ? `<details class="code"><summary>Based on ${a.evidence.length} ${a.evidence.length === 1 ? "query" : "queries"} (${rows} rows) on ${esc(a.data_source)}</summary><ul class="plan">${a.evidence.map((e) => `<li>${esc(e.question)} · ${e.rows} rows<pre>${esc(e.sql)}</pre></li>`).join("")}</ul></details>`
+    : `<p class="muted">No company data was needed or found for this.</p>`;
+  const card = el("div", "card msg");
+  if (a.kind === "email") {
+    card.innerHTML = `
+      <div class="section-label">Email draft</div>
+      <div class="email">
+        <div><b>To:</b> ${esc((a.to || []).join(", ") || "(add recipients)")}</div>
+        <div><b>Subject:</b> ${esc(a.subject)}</div>
+        <div class="email-body">${esc(a.body)}</div>
+      </div>
+      <div class="approve-row"><button class="btn primary" type="button" data-copy>Copy email</button></div>
+      ${checked}${evidence}
+      <p class="muted">Draft only: AgentOffice never sends email. ${esc(a.model)} · ${a.personal_values_masked} personal values masked from the model · trace ${esc(traceId)}</p>`;
+    const btn = card.querySelector("[data-copy]");
+    btn.addEventListener("click", async () => {
+      const ok = await copyText(`Subject: ${a.subject}\n\n${a.body}`);
+      btn.textContent = ok ? "Copied" : "Copy failed: select the text";
+    });
+  } else {
+    card.innerHTML = `
+      <p class="answer">${esc(a.answer)}</p>
+      ${checked}${evidence}
+      <p class="muted">${esc(a.model)} · ${a.personal_values_masked} personal values masked from the model · trace ${esc(traceId)}</p>`;
+  }
+  messages.appendChild(card);
+  setRun("done", a.kind === "email" ? "Draft ready" : "Answer ready", "done");
+  scrollDown();
+}
+
 // ------------------------------------------------------------------ Team canvas + Sheet pane
 
 const NS = "http://www.w3.org/2000/svg";
@@ -525,12 +607,12 @@ const TASK_LAYOUT = {
   nodes: [
     { id: "DataProfilerAgent", label: "Data profiler", tag: "Zetaris SQL", x: 24, y: 44, w: 118, h: 58 },
     { id: "RetrieverAgent", label: "Retriever", tag: "Zetaris SQL", x: 156, y: 44, w: 100, h: 58 },
-    { id: "PMAgent", label: "PM", tag: "Nemotron", x: 290, y: 44, w: 88, h: 58 },
+    { id: "PMAgent", label: "PM", tag: "model", x: 290, y: 44, w: 88, h: 58 },
     { id: "MemoryKeeperAgent", label: "Memory keeper", tag: "H-MEM", x: 24, y: 122, w: 124, h: 58 },
-    { id: "SpecCritic", label: "Spec critic", tag: "Nemotron", x: 274, y: 122, w: 114, h: 58 },
-    { id: "EngineerAgent", label: "Engineer", tag: "Nemotron", x: 70, y: 250, w: 110, h: 58 },
-    { id: "QAAgent", label: "QA", tag: "no model · reference runtime", x: 210, y: 250, w: 168, h: 58 },
-    { id: "ManagerAgent", label: "Manager", tag: "Nemotron", x: 80, y: 430, w: 110, h: 58 },
+    { id: "SpecCritic", label: "Spec critic", tag: "rules", x: 274, y: 122, w: 114, h: 58 },
+    { id: "EngineerAgent", label: "Engineer", tag: "model", x: 70, y: 250, w: 110, h: 58 },
+    { id: "QAAgent", label: "QA", tag: "reference runtime · model", x: 210, y: 250, w: 168, h: 58 },
+    { id: "ManagerAgent", label: "Manager", tag: "model · rule gate", x: 80, y: 430, w: 110, h: 58 },
     { id: "Human", label: "Approval", x: 250, y: 430, w: 110, h: 58 },
   ],
   edges: [
@@ -549,16 +631,16 @@ const ANALYSIS_LAYOUT = {
     { id: "SourceMapperAgent", label: "Source mapper", tag: "Zetaris", x: 16, y: 40, w: 118, h: 56 },
     { id: "ReconcilerAgent", label: "Reconciler", tag: "World Model", x: 150, y: 40, w: 108, h: 56 },
     { id: "ConflictCriticAgent", label: "Conflict critic", tag: "World Model", x: 274, y: 40, w: 124, h: 56 },
-    { id: "ResearchPlannerAgent", label: "Research planner", tag: "Nemotron", x: 16, y: 188, w: 124, h: 56 },
-    { id: "RetrieverAgent", label: "Retriever", tag: "Zetaris", x: 156, y: 188, w: 100, h: 56 },
-    { id: "ReportWriterAgent", label: "Report writer", tag: "Nemotron", x: 274, y: 188, w: 118, h: 56 },
-    { id: "InsightCriticAgent", label: "Insight critic", tag: "Nemotron", x: 274, y: 256, w: 118, h: 56 },
+    { id: "ResearchPlannerAgent", label: "Research planner", tag: "model", x: 16, y: 188, w: 124, h: 56 },
+    { id: "RetrieverAgent", label: "Retriever", tag: "model · Zetaris", x: 156, y: 188, w: 100, h: 56 },
+    { id: "ReportWriterAgent", label: "Report writer", tag: "model", x: 274, y: 188, w: 118, h: 56 },
+    { id: "InsightCriticAgent", label: "Insight critic", tag: "model", x: 274, y: 256, w: 118, h: 56 },
     { id: "MemoryKeeperAgent", label: "Memory keeper", tag: "H-MEM", x: 10, y: 348, w: 118, h: 56 },
-    { id: "PMAgent", label: "PM", tag: "Nemotron", x: 140, y: 348, w: 78, h: 56 },
-    { id: "PriorityCritic", label: "Priority critic", tag: "Nemotron", x: 236, y: 348, w: 118, h: 56 },
-    { id: "EngineerAgent", label: "Engineer", tag: "Nemotron", x: 16, y: 418, w: 100, h: 56 },
-    { id: "QAAgent", label: "QA", tag: "no model · reference runtime", x: 130, y: 418, w: 168, h: 56 },
-    { id: "ManagerAgent", label: "Manager", tag: "Nemotron", x: 310, y: 418, w: 100, h: 56 },
+    { id: "PMAgent", label: "PM", tag: "model", x: 140, y: 348, w: 78, h: 56 },
+    { id: "PriorityCritic", label: "Priority critic", tag: "rules", x: 236, y: 348, w: 118, h: 56 },
+    { id: "EngineerAgent", label: "Engineer", tag: "model", x: 16, y: 418, w: 100, h: 56 },
+    { id: "QAAgent", label: "QA", tag: "reference runtime · model", x: 130, y: 418, w: 168, h: 56 },
+    { id: "ManagerAgent", label: "Manager", tag: "model · rule gate", x: 310, y: 418, w: 100, h: 56 },
     { id: "Human", label: "Approval", x: 150, y: 486, w: 100, h: 42 },
   ],
   edges: [
@@ -572,7 +654,22 @@ const ANALYSIS_LAYOUT = {
   ],
   loops: new Set(["InsightCriticAgent→ReportWriterAgent", "PriorityCritic→PMAgent", "QAAgent→EngineerAgent"]),
 };
-const CRITIC_ACTIONS = new Set(["critique_spec", "critique_output", "critique_priority", "critique_claims", "critique_sources"]);
+const ASSIST_LAYOUT = {
+  stages: [{ label: "Look it up", y: 24 }, { label: "Write and check", y: 220 }],
+  nodes: [
+    { id: "FrontDeskAgent", label: "Front desk", tag: "model", x: 24, y: 44, w: 118, h: 58 },
+    { id: "AssistantAgent", label: "Assistant", tag: "model", x: 160, y: 44, w: 118, h: 58 },
+    { id: "RetrieverAgent", label: "Retriever", tag: "model · Zetaris", x: 296, y: 44, w: 128, h: 58 },
+    { id: "GroundingCritic", label: "Grounding critic", tag: "rules", x: 160, y: 250, w: 140, h: 58 },
+  ],
+  edges: [
+    ["FrontDeskAgent", "AssistantAgent"], ["AssistantAgent", "RetrieverAgent"], ["RetrieverAgent", "AssistantAgent"],
+    ["AssistantAgent", "GroundingCritic"], ["GroundingCritic", "AssistantAgent"],
+  ],
+  loops: new Set(["RetrieverAgent→AssistantAgent", "GroundingCritic→AssistantAgent"]),
+};
+const CRITIC_ACTIONS = new Set(["critique_spec", "critique_output", "critique_priority", "critique_claims",
+                                "critique_sources", "critique_grounding"]);
 
 const team = {
   mode: "task", runId: null, nodes: {}, edges: {}, edgeMeta: {}, attempts: {}, last: {},
@@ -590,7 +687,8 @@ function svgEl(tag, attrs) {
   for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
   return n;
 }
-function layout() { return team.mode === "analysis" ? ANALYSIS_LAYOUT : TASK_LAYOUT; }
+const LAYOUTS = { task: TASK_LAYOUT, analysis: ANALYSIS_LAYOUT, assist: ASSIST_LAYOUT };
+function layout() { return LAYOUTS[team.mode] || TASK_LAYOUT; }
 function nodeCenter(n) { return { x: n.x + n.w / 2, y: n.y + n.h / 2 }; }
 /** Where the ray from n's center toward (tx, ty) hits n's border (inset keeps arrow outside the box). */
 function borderPoint(n, tx, ty, inset) {
@@ -827,6 +925,11 @@ function challengeFromEvent(ev) {
              edge: "QAAgent→EngineerAgent",
              reason: { short: shortText(fail, 24), full } };
   }
+  if (ev.action === "critique_grounding" && ev.status === "needs_revision") {
+    return { ok: false, line: `Grounding Critic: ${shortText(full, 80)} → Assistant revised`, full,
+             edge: "GroundingCritic→AssistantAgent",
+             reason: { short: shortText(full, 24), full } };
+  }
   if (ev.action === "critique_spec" && ev.status === "needs_revision") {
     return { ok: false, line: `Spec Critic: ${shortText(full, 80)} → PM revised`, full,
              edge: "SpecCritic→PMAgent",
@@ -881,8 +984,12 @@ function teamCaptureEvidence(ev) {
 }
 function teamOnEvent(ev, replay) {
   if (!ev || !ev.agent) return;
+  sideActivity();
   if (ev.agent === "SourceMapperAgent" || ev.agent === "ResearchPlannerAgent" || ev.agent === "ConflictCriticAgent") {
     teamSetMode("analysis");
+  } else if (ev.agent === "AssistantAgent" || ev.agent === "GroundingCritic"
+             || (ev.action === "route" && /"?intent"?\s*[:=]\s*"?'?(email|question)/.test(String(ev.summary || "")))) {
+    teamSetMode("assist");
   }
   if (ev.model && ev.model !== "offline-fallback") {
     team.models[ev.agent] = shortModel(ev.model);
@@ -960,11 +1067,11 @@ function teamFinish() {
 }
 function teamSetMode(mode) {
   if (team.mode === mode && Object.keys(team.nodes).length) return;
-  team.mode = mode === "analysis" ? "analysis" : "task";
+  team.mode = LAYOUTS[mode] ? mode : "task";
   teamDraw();
 }
 function teamReset(mode) {
-  team.mode = mode === "analysis" ? "analysis" : "task";
+  team.mode = LAYOUTS[mode] ? mode : "task";
   team.runId = null; team.attempts = {}; team.last = {}; team.working = null; team.codeHash = null;
   team.models = {}; team.providers = {}; team.sources = {}; team.challenges = []; team.edgeMeta = {};
   team.evidence = { claims: [], conflicts: [] };
@@ -1033,7 +1140,7 @@ function teamShowDetail(id) {
   const title = id === "Human" ? "Approval" : agentName(id);
   const attempt = teamAttemptLine(id === "Human" ? "EngineerAgent" : id);
   const model = team.models[id] || (ev?.model ? shortModel(ev.model) : null)
-    || (id === "QAAgent" ? "no model, reference runtime" : "—");
+    || (id === "QAAgent" ? "reference runtime" : "—");
   const provider = team.providers[id] || (ev?.provider ? shortProvider(ev.provider) : null);
   const source = team.sources[id] || (ev?.data_source === "zetaris" || ev?.target === "Zetaris" ? "Zetaris" : null);
   const sql = ev?.executed_sql ? shortText(ev.executed_sql, 220) : null;
@@ -1083,7 +1190,7 @@ function sheetStatus() {
   const el = $("sheet-status");
   if (!el) return;
   const parts = [];
-  if (sheet.changed) parts.push(`${sheet.changed} cells changed`);
+  if (sheet.changed) parts.push(`${sheet.changed} cells changed or added`);
   if (sheet.audit) parts.push("audit sheet written");
   el.textContent = parts.join(" · ") || (sheet.meta ? "original preview" : "No sheet attached");
 }
@@ -1109,8 +1216,12 @@ function sheetShowPop(key, anchor) {
   if (!pop || !meta) return;
   const oldText = meta.old === undefined || meta.old === null || meta.old === "" ? "∅" : fmt(meta.old);
   const newText = meta.value === undefined || meta.value === null || meta.value === "" ? "∅" : fmt(meta.value);
-  pop.innerHTML = `<button type="button" class="pop-close" aria-label="Close">✕</button>` +
-    `<b>Change</b><div class="pop-change">${esc(oldText)} → ${esc(newText)}</div>` +
+  // "moved" cells only redraw the output's row order; "written"/"added" cells have no input value to compare.
+  const change = meta.kind === "moved" ? `<b>Moved</b><div class="pop-change">${esc(newText)}</div>`
+    : meta.kind === "written" || meta.kind === "added" ? `<b>Written</b><div class="pop-change">${esc(newText)}</div>`
+    : `<b>Change</b><div class="pop-change">${esc(oldText)} → ${esc(newText)}</div>`;
+  pop.innerHTML = `<button type="button" class="pop-close" aria-label="Close">✕</button>` + change +
+    (meta.source_row && meta.kind !== "moved" ? `<b>Row</b><div>row ${esc(meta.source_row)} of your file</div>` : "") +
     (meta.step_label || meta.step ? `<b>Plan</b><div>${esc(meta.step_label || ("Plan step " + meta.step + (meta.step_op ? ": " + meta.step_op : "")))}</div>` : "") +
     (meta.source ? `<b>Source</b><div>${esc(meta.source)}</div>` : "") +
     (meta.note ? `<b>Note</b><div class="pop-note">${esc(meta.note)}</div>` : "") +
@@ -1191,6 +1302,7 @@ function sheetLoad(meta) {
 }
 function sheetApplyCells(cells, flash) {
   if (!cells || !cells.length) return;
+  sideActivity();
   for (const c of cells) {
     const sheetName = c.sheet || sheet.active;
     if (!sheetName) continue;
@@ -1205,12 +1317,9 @@ function sheetApplyCells(cells, flash) {
     sheet.data[sheetName][idx][c.col] = c.value;
     const key = `${sheetName}|${c.row}|${c.col}`;
     sheet.cellMeta[key] = { ...sheet.cellMeta[key], ...c, sheet: sheetName };
-    if (c.kind !== "blank_by_design" && !sheet.cellMap[key]) {
-      sheet.cellMap[key] = true;
-      sheet.changed += 1;
-    } else if (c.kind === "blank_by_design") {
-      sheet.cellMap[key] = true; // mark as touched for styling hooks
-    }
+    // Live tally until run_automation reports the authoritative count; only real edits count.
+    if (c.kind === "changed" && !sheet.cellMap[key]) sheet.changed += 1;
+    if (c.kind !== "moved") sheet.cellMap[key] = true;
   }
   const stay = sheet.active;
   sheetRender();
@@ -1219,7 +1328,7 @@ function sheetApplyCells(cells, flash) {
     for (const c of cells) {
       const key = `${c.sheet || sheet.active}|${c.row}|${c.col}`;
       const td = $("sheet-grid")?.querySelector(`[data-cell="${CSS.escape(key)}"]`);
-      if (td) {
+      if (td && c.kind !== "moved") {
         td.classList.add("flash");
         if (c.kind === "blank_by_design") td.classList.add("blank-design");
         else td.classList.add("changed");
@@ -1228,9 +1337,17 @@ function sheetApplyCells(cells, flash) {
   }
   sheetStatus();
 }
+function sheetSetRows(name, rows) {
+  // filter/dedupe can leave fewer output rows than the file had.
+  if (!name || rows == null) return;
+  if (!sheet.data[name]) { sheet.data[name] = []; sheet.columns[name] = sheet.columns[name] || []; }
+  if (sheet.data[name].length > rows) sheet.data[name].length = rows;
+  sheet.totals[name] = rows;
+}
 function sheetOnEvent(ev, replay) {
   if (!ev) return;
   if (ev.action === "cell_writes" && ev.cells) {
+    sheetSetRows(ev.sheet, ev.rows_out);
     const cells = ev.cells.map((c) => ({ ...c, sheet: c.sheet || ev.sheet }));
     sheetApplyCells(cells, !replay);
     if (ev.sheet && sheet.data[ev.sheet]) sheet.active = ev.sheet;
@@ -1239,18 +1356,20 @@ function sheetOnEvent(ev, replay) {
     sheet.audit = true; sheetStatus();
   }
   if (ev.action === "run_automation" && ev.cells_changed != null) {
-    sheet.changed = Math.max(sheet.changed, ev.cells_changed);
+    sheet.changed = ev.cells_changed;
     sheetStatus();
   }
 }
-function sheetReplay(writes, runId, cellsChanged) {
-  sheet.replay = true;
+function sheetShowOutput(writes, runId, cellsChanged, layout) {
+  // The finished run's cells with real values (trace events mask personal-looking columns).
+  sheet.replay = false;
   const banner = $("sheet-replay");
   if (banner) {
     banner.hidden = false;
-    banner.textContent = `Replay of run ${runId || "unknown"}`;
+    banner.textContent = `Output of run ${runId || "unknown"}`;
   }
   selectSideTab("sheet");
+  if (layout) sheetSetRows(layout.sheet, layout.rows);
   if (Array.isArray(writes) && writes.length) {
     // Animate in small batches so the flash is visible even on a sync response.
     let i = 0;
@@ -1297,6 +1416,7 @@ function toUiEvent(e) {
     input: typeof input === "string" ? input : (input == null ? "" : JSON.stringify(input)),
     retry: e.retry != null ? e.retry : (e.retry_count || 0), confidence: e.confidence,
     cases: e.cases, cases_matched: e.cases_matched, cells: e.cells, sheet: e.sheet,
+    rows_out: e.rows_out, cells_changed: e.cells_changed,
     code_hash: e.code_hash, audit_written: e.audit_written,
   };
 }

@@ -3,6 +3,7 @@
 - [The pieces](#the-pieces)
 - [Task mode: "do this to my spreadsheet"](#task-mode-do-this-to-my-spreadsheet)
 - [Analysis mode: "where is our time going?"](#analysis-mode-where-is-our-time-going)
+- [Questions and email drafts](#questions-and-email-drafts)
 - [Why QA can't simply agree with the code](#why-qa-cant-simply-agree-with-the-code)
 - [Sponsor technology inside](#sponsor-technology-inside)
 - [Sample mode and fallbacks](#sample-mode-and-fallbacks)
@@ -21,6 +22,9 @@ flowchart LR
   API --> FD{Front desk}
   FD --> TM[Task mode<br/>app/tasks]
   FD --> AM[Analysis mode<br/>app/pipeline.py]
+  FD --> AS[Questions and email drafts<br/>app/assistant.py]
+  AS --> ZT
+  AS --> NS
   TM & AM --> ZT[(Zetaris<br/>data layer)]
   TM & AM --> NS[Meterless Nightshift<br/>NVIDIA Nemotron]
   TM & AM --> WM[(World Model)]
@@ -29,8 +33,8 @@ flowchart LR
 ```
 
 - **The local service** ([`run.py`](../run.py)) is a FastAPI app on `0.0.0.0:$PORT`. It serves the chat UI and the [HTTP API](API.md). Each chat message becomes a background job ([`app/jobs.py`](../app/jobs.py)) whose agent events the UI streams live.
-- **The front desk** ([`app/chat.py`](../app/chat.py)) routes each message to task mode, the analysis pipeline or a plain reply.
-- **The desktop island** ([`scripts/island.py`](../scripts/island.py), started by [`AgentOffice.pyw`](../AgentOffice.pyw)) opens the same UI in Microsoft Edge or Google Chrome app mode, with its own profile under `state/island-browser`. It removes the window's frame and taskbar button, keeps it on top, and clips it to a pill or a rounded panel at the top of the screen. A global hotkey (Ctrl+Shift+Space) focuses it. It uses only Python's standard `ctypes`.
+- **The front desk** ([`app/chat.py`](../app/chat.py)) routes each message to task mode, the analysis pipeline, a question, an email draft or a plain reply.
+- **The desktop island** ([`scripts/island.py`](../scripts/island.py), started by [`AgentOffice.pyw`](../AgentOffice.pyw)) opens the same UI in Microsoft Edge or Google Chrome app mode, with its own profile under `state/island-browser`. It removes the window's frame and taskbar button, keeps it on top, and clips it to a pill or a rounded panel at the top of the screen. The panel is 960 px wide with the Team and Sheet pane beside the chat, or 480 px when you hide that pane (the button next to Enlarge; the choice is remembered). A global hotkey (Ctrl+Shift+Space) focuses it. It uses only Python's standard `ctypes`.
 - **Adapters** ([`app/adapters/`](../app/adapters/)) wrap every external call with a timeout, bounded retries and a structured error.
 
 ## Task mode: "do this to my spreadsheet"
@@ -116,6 +120,17 @@ The loops are real and capped:
 - model calls: at most 40 per run
 
 Every step is written to `logs/trace-<run_id>.jsonl`, a hash-chained log in which any edited or deleted line breaks the chain.
+
+## Questions and email drafts
+
+For the everyday asks around that work: *"Who are the AP clerks in finance?"*, *"How many invoices in my file are overdue?"*, *"Draft an email to the finance team about last week's hours"*. They follow the same rule as the rest of the product: every fact comes from Zetaris rows (or the attached file, through `upload_cells`) or from your own message, and a critic checks it ([`app/assistant.py`](../app/assistant.py)).
+
+1. **Plan.** The Assistant lists the facts the request needs as 0 to 3 sub-questions (0 for a general email that needs no data).
+2. **Look up.** The analysis Retriever writes one guarded, read-only SQL query per sub-question and runs it on Zetaris, fixing SQL errors in its capped loop.
+3. **Write.** The Assistant writes the answer or the email from those rows only. Personal values in the rows (names, emails, phones) reach the model as placeholders like `[[P1]]`, and are filled back in locally afterwards, so the model never sees them.
+4. **Check.** The Grounding Critic (rules, no model) objects to any number the rows or your message don't support, any placeholder that wasn't issued and any address that isn't in the data or your message. Objections go back to the Assistant (2 rounds); if any remain, the card says so instead of hiding them.
+
+**Nothing is sent.** An email is a draft with a Copy button. These two intents need the model, so in sample mode they return `agent_needs_model` rather than a canned reply.
 
 ## Why QA can't simply agree with the code
 
@@ -206,6 +221,7 @@ Nemotron runs through Nightshift lanes; no local GPU is used. The live runs pinn
   - The PM ranks by measured hours and uses a built-in spec template. In task mode it uses the built-in spec of a demo file, and refuses any other file with `agent_no_offline_plan`.
   - The Engineer compiles the spec. In task mode it embeds the reference runtime, so QA passes by construction; the trace says `compiled from the spec (offline)`.
   - The writer cites cells from fixed queries, and the front desk routes by keywords.
+  - Questions and email drafts have no offline fallback: they return `agent_needs_model`.
 - QA, the rule checks of the Priority and Insight Critics, the sandbox and the World Model run exactly as in default mode.
 
 Sample mode returns no saved answers.
@@ -216,6 +232,8 @@ All the bundled data is **synthetic** and generated by committed, deterministic 
 
 - In analysis mode, agents refer to people by `person_id` only, and a test checks that no name reaches any prompt.
 - In task mode the file is yours: values in personal-looking columns (names, emails, phones) are masked to their shape before any prompt, and the model only ever sees the profile, a masked example row and the spec.
+- The Sheet pane's cell events in the trace mask the same columns; the finished result shown in the UI keeps the real values, like the output workbook.
+- Questions and email drafts send personal values to the model only as `[[Pn]]` placeholders; a test checks that no name or address reaches a prompt.
 
 ## Design boundaries
 
@@ -227,6 +245,7 @@ All the bundled data is **synthetic** and generated by committed, deterministic 
 - **Confidence** comes from a stated heuristic formula (shown in each response), not from calibrated probabilities.
 - **Token budgets** use the `ceil(chars / 4)` heuristic.
 - **The Insight Critic** accepts a number only if it equals a cited value, or a ratio or percentage of two cited values. Integers up to 10 always pass. Other derived numbers must be computed in SQL.
+- **The Grounding Critic** accepts a number in an answer or email if it is written in any result cell or in your message (date parts included), or is a ratio or percentage of two numeric cells. Integers up to 10 always pass, so a small wrong count can slip through; it checks figures, not wording.
 - **World Model aliases** apply to mentions made after they're registered. Similar names become merge proposals and are never merged automatically.
 - **Agent SQL** must stay within a portable subset (documented in `app/data.py`) so it runs on both Zetaris and SQLite.
 - **H-MEM's semantic signal** is the cosine of hashed bag-of-words and bigram vectors, not a neural embedding, so no embedding model is needed. Paraphrases with no shared words score low.
@@ -249,7 +268,8 @@ app/tasks/          task mode: spec.py (step vocabulary), runtime.py (reference 
                     agents.py (front desk, profiler, PM, critic, retriever, engineer, QA, manager, operator),
                     pipeline.py (plan -> build -> test -> approve -> run)
 app/ui/             the chat island (index.html, style.css, app.js; no build step)
-app/chat.py         one chat message -> one background job, routed to task, analysis or reply
+app/assistant.py    questions and email drafts: plan, retrieve, write, Grounding Critic
+app/chat.py         one chat message -> one background job, routed to task, analysis, question, email or reply
 app/jobs.py         background jobs with live trace events for the UI
 app/services.py     stores shared by the API and the jobs
 app/analysis/       routine mining from the activity log

@@ -13,7 +13,7 @@ Everything the chat UI does is plain HTTP on the local service (`http://localhos
 | `GET /` | The chat UI (island and panel). `?shell=desktop` is the variant the desktop app loads. |
 | `POST /uploads?filename=<name>` | Upload a CSV or XLSX as the raw request body. Returns the `upload_id`, sheets, columns, row counts and a preview. `GET /uploads/{id}` returns the same. |
 | `GET /samples` | The three demo files (`demo_expense_claims`, `demo_vendor_invoices`, `demo_leads_and_contacts`), each with a suggested request. |
-| `POST /chat` | `{"message", "upload_id"?, "options": {"sample_mode"}}`. Starts a background job and returns `{job_id}`. The front desk routes the message to task mode, the analysis pipeline or a plain reply. |
+| `POST /chat` | `{"message", "upload_id"?, "options": {"sample_mode"}}`. Starts a background job and returns `{job_id}`. The front desk routes the message to task mode, the analysis pipeline, a question, an email draft or a plain reply. The finished job's `result.type` is `task`, `analysis`, `assist` (questions and email drafts: `result.assist` holds `kind`, `answer` or `to`/`subject`/`body`, `evidence` and `grounding`) or `reply`. |
 | `GET /jobs/{id}?after=<n>` | The job's live agent events from event `n` on, its `status` (`running`, `completed` or `failed`), and then its `result` (`type` is `task`, `analysis` or `reply`) or a structured `error`, plus the `trace_id`. |
 | `GET /tasks/{id}` | A spreadsheet task: request, understanding, spec, references, code and hash, QA checks and preview, the Manager's memo, approval and outputs. |
 | `GET /tasks/{id}/code` | The automation as a `.py` file. |
