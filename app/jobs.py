@@ -33,10 +33,22 @@ class Job:
         with self._lock:
             if len(self.events) >= MAX_EVENTS:
                 return
-            self.events.append({"i": len(self.events), "at": event["timestamp"], "agent": event["agent_name"],
-                                "action": event["action"], "status": event["status"],
-                                "target": event.get("target_agent"), "model": event.get("model"),
-                                "summary": event["output_summary"][:240]})
+            summary = event.get("output_summary") or ""
+            if not isinstance(summary, str):
+                summary = str(summary)
+            inp = event.get("input_summary") or ""
+            if not isinstance(inp, str):
+                inp = str(inp)
+            view = {"i": len(self.events), "at": event["timestamp"], "agent": event["agent_name"],
+                    "action": event["action"], "status": event["status"],
+                    "target": event.get("target_agent"), "model": event.get("model"),
+                    "summary": summary[:240], "input": inp[:240],
+                    "retry": event.get("retry_count", 0), "confidence": event.get("confidence")}
+            # Additive extras the Team/Sheet panes use; omit when absent so older clients stay fine.
+            for key in ("cells", "sheet", "cases", "cases_matched", "audit_written", "code_hash"):
+                if key in event:
+                    view[key] = event[key]
+            self.events.append(view)
 
     def view(self, after: int = 0) -> dict:
         with self._lock:

@@ -8,7 +8,7 @@ const messages = $("messages"), input = $("input"), form = $("composer"), fileIn
 const attachmentEl = $("attachment"), drop = $("drop"), sendBtn = $("send");
 
 const desktop = new URLSearchParams(location.search).get("shell") === "desktop";
-const state = { expanded: false, run: "idle", config: null, samples: [], attachment: null, busy: false,
+const state = { expanded: false, large: false, run: "idle", config: null, samples: [], attachment: null, busy: false,
                 pickingFile: false, quitting: false };
 
 const AGENTS = {
@@ -32,7 +32,8 @@ const ACTIONS = {
   propose_plan: "Ranked what to automate", critique_priority: "Checked the savings claims",
   memory_applied: "Applied a past decision", map_sources: "Mapped the sources", reconcile: "Linked the sources",
   review_conflicts: "Checked for conflicts", plan_research: "Planned the research", write_report: "Wrote the report",
-  critique_report: "Checked the report",
+  critique_report: "Checked the report", critique_claims: "Checked the claims",
+  critique_sources: "Judged source conflicts", cell_writes: "Wrote cells", audit_sheet: "Wrote audit sheet",
 };
 const HIDDEN = new Set(["zetaris_query"]);
 
@@ -73,13 +74,29 @@ function agentName(a) { return AGENTS[a] || a.replace(/Agent$/, ""); }
 
 function render() {
   island.dataset.state = state.expanded ? "expanded" : state.run;
+  if (state.large && state.expanded) island.dataset.size = "large";
+  else delete island.dataset.size;
   pill.setAttribute("aria-expanded", String(state.expanded));
+  const enlargeBtn = $("enlarge");
+  if (enlargeBtn) {
+    enlargeBtn.setAttribute("aria-pressed", String(state.large));
+    enlargeBtn.title = state.large ? "Shrink window" : "Enlarge window";
+    enlargeBtn.setAttribute("aria-label", enlargeBtn.title);
+    // Desktop shell already fills the viewport; enlarge is a browser-only control.
+    enlargeBtn.hidden = desktop;
+  }
   // Desktop shell: scripts/island.py reads the state and the browser's own title-bar height from the title.
   const mode = state.quitting ? "quit" : state.expanded ? "panel" : "island";
   document.title = desktop
     ? `AgentOffice · ${mode} · ${Math.max(0, window.outerHeight - window.innerHeight)}`
     : "AgentOffice";
 }
+function setLarge(on) {
+  state.large = !!on;
+  store("agentoffice.large", state.large ? "1" : "0");
+  render();
+}
+function toggleLarge() { setLarge(!state.large); }
 function setRun(run, text, badge) {
   state.run = run;
   pillText.textContent = text || "AgentOffice";
@@ -103,13 +120,15 @@ function toggle() { state.expanded ? collapse() : expand(); }
 
 pill.addEventListener("click", expand);
 $("collapse").addEventListener("click", collapse);
+$("enlarge").addEventListener("click", toggleLarge);
 document.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if ((e.ctrlKey && e.shiftKey && (k === " " || e.code === "Space")) || (e.ctrlKey && !e.shiftKey && k === "k")) {
     e.preventDefault();
     toggle();
   } else if (k === "escape" && state.expanded) {
-    collapse();
+    if (state.large) setLarge(false);
+    else collapse();
   }
 });
 if (desktop) {
@@ -129,16 +148,22 @@ if (desktop) {
 
 // ------------------------------------------------------------------ attachments
 
+async function loadUpload(meta) {
+  if (!meta) return null;
+  if (meta.rows && meta.columns) return meta;
+  try { return await api(`/uploads/${encodeURIComponent(meta.upload_id)}`); } catch (_) { return meta; }
+}
 function setAttachment(meta) {
   state.attachment = meta;
   attachmentEl.innerHTML = "";
   attachmentEl.hidden = !meta;
-  if (!meta) return;
+  if (!meta) { sheetLoad(null); return; }
   const rows = meta.sheets.map((s) => `${s.name}: ${s.rows} rows`).join(" · ");
   const chip = el("div", "file-chip", `<span aria-hidden="true">📄</span><span class="name">${esc(meta.filename)}</span>` +
     `<span class="meta">${esc(rows)}</span><button type="button" aria-label="Remove attachment">✕</button>`);
   chip.querySelector("button").addEventListener("click", () => setAttachment(null));
   attachmentEl.appendChild(chip);
+  loadUpload(meta).then((full) => { state.attachment = full; sheetLoad(full); });
 }
 async function uploadFile(file) {
   if (!file) return;
@@ -196,7 +221,10 @@ function welcome() {
   }
   const q = el("button", "sample-card", `<b>Ask: where is the finance team losing time?</b><span>Runs the full analysis on the workforce data in Zetaris.</span>`);
   q.type = "button";
-  q.addEventListener("click", () => { setAttachment(null); input.value = "Where is the finance team losing time, and what should we automate first?"; autosize(); input.focus(); });
+  q.addEventListener("click", () => {
+    setAttachment(null); teamSetMode("analysis");
+    input.value = "Where is the finance team losing time, and what should we automate first?"; autosize(); input.focus();
+  });
   box.appendChild(q);
 }
 
@@ -213,7 +241,13 @@ form.addEventListener("submit", async (e) => {
   if (!text || state.busy) return;
   const attachment = state.attachment;
   user(text, attachment);
-  input.value = ""; autosize(); setAttachment(null);
+  input.value = ""; autosize();
+  // Keep the sheet preview for the right pane; clear only the composer chip.
+  state.attachment = null;
+  attachmentEl.innerHTML = "";
+  attachmentEl.hidden = true;
+  teamReset(attachment ? "task" : "analysis");
+  if (attachment) sheetLoad(attachment);
   state.busy = true; sendBtn.disabled = true;
   setRun("busy", "Front desk · reading your request", "working");
   try {
@@ -246,7 +280,9 @@ function stepDetail(ev) {
   return s;
 }
 function addStep(run, ev) {
-  if (HIDDEN.has(ev.action) || ev.action === "run_started") return;
+  teamOnEvent(ev, false);
+  sheetOnEvent(ev, false);
+  if (HIDDEN.has(ev.action) || ev.action === "run_started" || ev.action === "cell_writes" || ev.action === "audit_sheet") return;
   run.list.querySelectorAll(".step.live").forEach((n) => n.classList.remove("live"));
   const who = agentName(ev.agent);
   const what = ACTIONS[ev.action] || ev.action.replace(/_/g, " ");
@@ -271,14 +307,20 @@ function finishCard(run) {
 }
 
 async function follow(jobId) {
+  replayStop();
+  team.replay = false;
+  const banner = $("replay-label");
+  if (banner) banner.hidden = true;
   const run = runCard();
   let after = 0;
   for (;;) {
     const view = await api(`/jobs/${jobId}?after=${after}`);
+    if (view.trace_id) teamSetRunId(view.trace_id);
     view.events.forEach((ev) => addStep(run, ev));
     after = view.next;
     if (view.status !== "running") {
       finishCard(run);
+      teamFinish();
       if (view.status === "failed") {
         bot(`<p><b>The run stopped.</b> ${esc(view.error?.message)}</p><p class="muted">Error type: ${esc(view.error?.type)}. Trace: logs/trace-${esc(view.trace_id)}.jsonl</p>`, "error");
         setRun("error", "Run stopped", "error");
@@ -296,8 +338,13 @@ function showResult(result, traceId) {
     bot(`<p>${esc(result.text)}</p>`);
     setRun("idle", "AgentOffice");
   } else if (result.type === "task") {
+    if (result.task.status === "completed" && result.task.outputs?.cell_writes) {
+      sheetReplay(result.task.outputs.cell_writes, result.task.outputs.execution_run_id || traceId,
+                  result.task.outputs.cells_changed);
+    }
     taskCard(result.task, traceId);
   } else if (result.type === "analysis") {
+    teamSetMode("analysis");
     analysisCard(result.analysis, traceId);
   }
 }
@@ -378,6 +425,7 @@ function taskCard(task, traceId) {
     slot.innerHTML = resultBlock(task);
     setRun("done", "Your file is ready", "done");
   } else if (task.status === "awaiting_approval") {
+    teamAwaitApproval(task.code_hash);
     approvalBox(slot, task);
     setRun("attention", "Approval needed", "review");
   } else {
@@ -404,9 +452,15 @@ function approvalBox(slot, task) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision: b.dataset.d, approver, code_hash: task.code_hash }) });
       if (done.status === "completed") {
+        teamApprove(done.code_hash);
+        if (done.outputs?.cell_writes) {
+          sheetReplay(done.outputs.cell_writes, done.outputs.execution_run_id || done.execution_run_id,
+                      done.outputs.cells_changed);
+        }
         slot.innerHTML = resultBlock(done) + `<p class="muted">Saved to memory: next time this exact automation can run without asking.</p>`;
         setRun("done", "Your file is ready", "done");
       } else {
+        teamReject();
         slot.innerHTML = `<div class="result rejected"><b>Rejected.</b> <span class="muted">Recorded in the approval ledger and H-MEM; the team will not re-propose this code.</span></div>`;
         setRun("idle", "AgentOffice");
       }
@@ -437,6 +491,7 @@ function analysisCard(a, traceId) {
   const approval = a.approval;
   const slot = card.querySelector(".slot");
   if (approval && approval.status === "pending") {
+    teamAwaitApproval(approval.code_hash);
     slot.innerHTML = `<div class="approve"><div class="muted">The ${esc(approval.automation)} automation passed QA. Approve it to keep it for the team (code ${esc(approval.code_hash.slice(0, 12))}).</div>
       <div class="approve-row"><input type="text" aria-label="Your name" placeholder="Your name" value="${esc(store("agentoffice.approver") || "")}"><button class="btn primary" data-d="approve" type="button">Approve</button><button class="btn danger" data-d="reject" type="button">Reject</button></div></div>`;
     const name = slot.querySelector("input");
@@ -447,6 +502,7 @@ function analysisCard(a, traceId) {
       try {
         const d = await api(`/approvals/${approval.approval_id}`, { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ decision: b.dataset.d, approver, code_hash: approval.code_hash }) });
+        if (d.status === "approved") teamApprove(approval.code_hash); else teamReject();
         slot.innerHTML = `<div class="result ${d.status === "approved" ? "" : "rejected"}"><b>${esc(d.status)}.</b> <span class="muted">Saved to H-MEM (${esc(d.memory?.status)}); later runs respect it.</span></div>`;
         setRun("idle", "AgentOffice");
       } catch (err) { bot(`Could not record the decision: ${esc(err.message)}`, "error"); }
@@ -458,10 +514,887 @@ function analysisCard(a, traceId) {
   scrollDown();
 }
 
+// ------------------------------------------------------------------ Team canvas + Sheet pane
+
+const NS = "http://www.w3.org/2000/svg";
+const TASK_LAYOUT = {
+  stages: [{ label: "Plan", y: 24 }, { label: "Build", y: 220 }, { label: "Decide", y: 390 }],
+  nodes: [
+    { id: "DataProfilerAgent", label: "Data profiler", tag: "Zetaris SQL", x: 24, y: 44, w: 118, h: 58 },
+    { id: "RetrieverAgent", label: "Retriever", tag: "Zetaris SQL", x: 156, y: 44, w: 100, h: 58 },
+    { id: "PMAgent", label: "PM", tag: "Nemotron", x: 290, y: 44, w: 88, h: 58 },
+    { id: "MemoryKeeperAgent", label: "Memory keeper", tag: "H-MEM", x: 24, y: 122, w: 124, h: 58 },
+    { id: "SpecCritic", label: "Spec critic", tag: "Nemotron", x: 274, y: 122, w: 114, h: 58 },
+    { id: "EngineerAgent", label: "Engineer", tag: "Nemotron", x: 70, y: 250, w: 110, h: 58 },
+    { id: "QAAgent", label: "QA", tag: "no model · reference runtime", x: 210, y: 250, w: 168, h: 58 },
+    { id: "ManagerAgent", label: "Manager", tag: "Nemotron", x: 80, y: 430, w: 110, h: 58 },
+    { id: "Human", label: "Approval", x: 250, y: 430, w: 110, h: 58 },
+  ],
+  edges: [
+    ["DataProfilerAgent", "PMAgent"], ["MemoryKeeperAgent", "PMAgent"],
+    ["PMAgent", "RetrieverAgent"], ["PMAgent", "SpecCritic"], ["SpecCritic", "PMAgent"],
+    ["PMAgent", "EngineerAgent"], ["EngineerAgent", "QAAgent"], ["QAAgent", "EngineerAgent"],
+    ["QAAgent", "ManagerAgent"], ["ManagerAgent", "Human"],
+  ],
+  loops: new Set(["SpecCritic→PMAgent", "QAAgent→EngineerAgent"]),
+};
+const ANALYSIS_LAYOUT = {
+  stages: [
+    { label: "1 Discover · World Model", y: 20 }, { label: "2 Explain", y: 170 }, { label: "3 Decide & build", y: 320 },
+  ],
+  nodes: [
+    { id: "SourceMapperAgent", label: "Source mapper", tag: "Zetaris", x: 16, y: 40, w: 118, h: 56 },
+    { id: "ReconcilerAgent", label: "Reconciler", tag: "World Model", x: 150, y: 40, w: 108, h: 56 },
+    { id: "ConflictCriticAgent", label: "Conflict critic", tag: "World Model", x: 274, y: 40, w: 124, h: 56 },
+    { id: "ResearchPlannerAgent", label: "Research planner", tag: "Nemotron", x: 16, y: 188, w: 124, h: 56 },
+    { id: "RetrieverAgent", label: "Retriever", tag: "Zetaris", x: 156, y: 188, w: 100, h: 56 },
+    { id: "ReportWriterAgent", label: "Report writer", tag: "Nemotron", x: 274, y: 188, w: 118, h: 56 },
+    { id: "InsightCriticAgent", label: "Insight critic", tag: "Nemotron", x: 274, y: 256, w: 118, h: 56 },
+    { id: "MemoryKeeperAgent", label: "Memory keeper", tag: "H-MEM", x: 10, y: 348, w: 118, h: 56 },
+    { id: "PMAgent", label: "PM", tag: "Nemotron", x: 140, y: 348, w: 78, h: 56 },
+    { id: "PriorityCritic", label: "Priority critic", tag: "Nemotron", x: 236, y: 348, w: 118, h: 56 },
+    { id: "EngineerAgent", label: "Engineer", tag: "Nemotron", x: 16, y: 418, w: 100, h: 56 },
+    { id: "QAAgent", label: "QA", tag: "no model · reference runtime", x: 130, y: 418, w: 168, h: 56 },
+    { id: "ManagerAgent", label: "Manager", tag: "Nemotron", x: 310, y: 418, w: 100, h: 56 },
+    { id: "Human", label: "Approval", x: 150, y: 486, w: 100, h: 42 },
+  ],
+  edges: [
+    ["SourceMapperAgent", "ReconcilerAgent"], ["ReconcilerAgent", "ConflictCriticAgent"],
+    ["ConflictCriticAgent", "ResearchPlannerAgent"], ["ResearchPlannerAgent", "RetrieverAgent"],
+    ["RetrieverAgent", "ReportWriterAgent"], ["ReportWriterAgent", "InsightCriticAgent"],
+    ["InsightCriticAgent", "ReportWriterAgent"], ["InsightCriticAgent", "PMAgent"],
+    ["MemoryKeeperAgent", "PMAgent"], ["PMAgent", "PriorityCritic"], ["PriorityCritic", "PMAgent"],
+    ["PMAgent", "EngineerAgent"], ["EngineerAgent", "QAAgent"], ["QAAgent", "EngineerAgent"],
+    ["QAAgent", "ManagerAgent"], ["ManagerAgent", "Human"],
+  ],
+  loops: new Set(["InsightCriticAgent→ReportWriterAgent", "PriorityCritic→PMAgent", "QAAgent→EngineerAgent"]),
+};
+const CRITIC_ACTIONS = new Set(["critique_spec", "critique_output", "critique_priority", "critique_claims", "critique_sources"]);
+
+const team = {
+  mode: "task", runId: null, nodes: {}, edges: {}, edgeMeta: {}, attempts: {}, last: {},
+  models: {}, challenges: [], evidence: { claims: [], conflicts: [] },
+  working: null, codeHash: null, replay: false, replayTimer: null, replayEvents: [], replayIndex: -1,
+};
+const sheet = {
+  meta: null, active: null, data: {}, totals: {}, columns: {},
+  changed: 0, audit: false, replay: false, cellMap: {}, cellMeta: {},
+};
+
+function svgEl(tag, attrs) {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+  return n;
+}
+function layout() { return team.mode === "analysis" ? ANALYSIS_LAYOUT : TASK_LAYOUT; }
+function nodeCenter(n) { return { x: n.x + n.w / 2, y: n.y + n.h / 2 }; }
+/** Where the ray from n's center toward (tx, ty) hits n's border (inset keeps arrow outside the box). */
+function borderPoint(n, tx, ty, inset) {
+  const cx = n.x + n.w / 2, cy = n.y + n.h / 2;
+  const dx = tx - cx, dy = ty - cy;
+  if (dx === 0 && dy === 0) return { x: cx, y: cy };
+  const hw = n.w / 2 - (inset || 0), hh = n.h / 2 - (inset || 0);
+  const sx = Math.abs(dx) > 1e-6 ? hw / Math.abs(dx) : Infinity;
+  const sy = Math.abs(dy) > 1e-6 ? hh / Math.abs(dy) : Infinity;
+  const s = Math.min(sx, sy);
+  return { x: cx + dx * s, y: cy + dy * s };
+}
+function edgePath(A, B, loop) {
+  const ac = nodeCenter(A), bc = nodeCenter(B);
+  if (loop) {
+    // Critic loops arc around the side so they don't sit on the forward edge.
+    const vertical = Math.abs(ac.x - bc.x) <= Math.abs(ac.y - bc.y);
+    let p1, p2, mx, my;
+    if (vertical) {
+      p1 = { x: A.x + A.w, y: ac.y };
+      p2 = { x: B.x + B.w, y: bc.y };
+      mx = Math.max(A.x + A.w, B.x + B.w) + 34;
+      my = (p1.y + p2.y) / 2;
+    } else {
+      p1 = { x: ac.x, y: A.y + A.h };
+      p2 = { x: bc.x, y: B.y + B.h };
+      mx = (p1.x + p2.x) / 2;
+      my = Math.max(A.y + A.h, B.y + B.h) + 28;
+    }
+    return `M ${p1.x} ${p1.y} Q ${mx} ${my} ${p2.x} ${p2.y}`;
+  }
+  const p1 = borderPoint(A, bc.x, bc.y, 1);
+  // Pull the tip back so the arrowhead sits on the border, not over the label.
+  const p2 = borderPoint(B, ac.x, ac.y, 8);
+  return `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
+}
+
+function teamDraw() {
+  const svg = $("team-svg");
+  if (!svg) return;
+  svg.innerHTML = "";
+  const L = layout();
+  team.nodes = {}; team.edges = {};
+  for (const s of L.stages) {
+    const t = svgEl("text", { x: 16, y: s.y, class: "stage-label" });
+    t.textContent = s.label;
+    svg.appendChild(t);
+  }
+  const byId = Object.fromEntries(L.nodes.map((n) => [n.id, n]));
+  const defs = svgEl("defs");
+  const m = svgEl("marker", { id: "edge-arrow", viewBox: "0 0 10 10", refX: "8", refY: "5",
+    markerWidth: "7", markerHeight: "7", orient: "auto" });
+  m.appendChild(svgEl("path", { d: "M 0 1.2 L 8 5 L 0 8.8 z", fill: "rgba(220, 228, 240, 0.95)" }));
+  defs.appendChild(m);
+  const mw = svgEl("marker", { id: "edge-arrow-warn", viewBox: "0 0 10 10", refX: "8", refY: "5",
+    markerWidth: "7", markerHeight: "7", orient: "auto" });
+  mw.appendChild(svgEl("path", { d: "M 0 1.2 L 8 5 L 0 8.8 z", fill: "#fbbf24" }));
+  defs.appendChild(mw);
+  svg.appendChild(defs);
+
+  const edgeLayer = svgEl("g", { class: "edge-layer" });
+  svg.appendChild(edgeLayer);
+  for (const [a, b] of L.edges) {
+    const A = byId[a], B = byId[b];
+    if (!A || !B) continue;
+    const key = `${a}→${b}`;
+    const loop = L.loops.has(key);
+    const d = edgePath(A, B, loop);
+    const path = svgEl("path", {
+      d, class: "edge" + (loop ? " loop" : ""), "data-edge": key,
+      "marker-end": "url(#edge-arrow)",
+    });
+    path.addEventListener("click", (ev) => { ev.stopPropagation(); teamShowEdge(key); });
+    edgeLayer.appendChild(path);
+    // Short reason label sits near the loop arc midpoint.
+    let reasonLabel = null;
+    if (loop) {
+      const ac = nodeCenter(A), bc = nodeCenter(B);
+      const lx = Math.max(A.x + A.w, B.x + B.w) + 8;
+      const ly = (ac.y + bc.y) / 2;
+      reasonLabel = svgEl("text", { class: "edge-reason", x: lx, y: ly, "data-edge": key, visibility: "hidden" });
+      reasonLabel.addEventListener("click", (ev) => { ev.stopPropagation(); teamShowEdge(key); });
+      edgeLayer.appendChild(reasonLabel);
+    }
+    team.edges[key] = path;
+    team.edgeMeta[key] = team.edgeMeta[key] || { short: null, full: null, label: reasonLabel };
+    if (team.edgeMeta[key].short && reasonLabel) {
+      reasonLabel.textContent = team.edgeMeta[key].short.slice(0, 28);
+      reasonLabel.setAttribute("visibility", "visible");
+      path.classList.add("loop-fired", "has-reason");
+    }
+  }
+
+  const nodeLayer = svgEl("g", { class: "node-layer" });
+  svg.appendChild(nodeLayer);
+  for (const n of L.nodes) {
+    const g = svgEl("g", { class: "node", "data-agent": n.id, transform: `translate(${n.x},${n.y})` });
+    g.appendChild(svgEl("rect", { class: "node-body", width: n.w, height: n.h, rx: 10, ry: 10 }));
+    const label = svgEl("text", { class: "node-label", x: 8, y: 15 });
+    label.textContent = n.label;
+    g.appendChild(label);
+    if (n.tag) {
+      const tag = svgEl("text", { class: "node-tag", x: 8, y: 27 });
+      tag.textContent = n.tag;
+      g.appendChild(tag);
+    }
+    const modelLine = svgEl("text", { class: "node-sub", x: 8, y: n.tag ? 38 : 28, "data-model": "1" });
+    modelLine.textContent = team.models[n.id] || (n.id === "QAAgent" ? "reference runtime" : "idle");
+    g.appendChild(modelLine);
+    const sub = svgEl("text", { class: "node-sub", x: 8, y: n.tag ? 48 : 38, "data-sub": "1" });
+    sub.textContent = "idle";
+    g.appendChild(sub);
+    g.appendChild(svgEl("rect", { class: "node-hit", width: n.w, height: n.h }));
+    g.addEventListener("click", () => teamShowDetail(n.id));
+    nodeLayer.appendChild(g);
+    team.nodes[n.id] = { el: g, sub, modelLine, def: n };
+  }
+  $("agent-detail").hidden = true;
+  challengesRender();
+}
+
+function teamSetNode(id, cls, subText) {
+  const n = team.nodes[id];
+  if (!n) return;
+  n.el.classList.remove("working", "done", "wait", "rejected");
+  if (cls) n.el.classList.add(cls);
+  if (subText != null) n.sub.textContent = subText;
+  if (n.modelLine) {
+    n.modelLine.textContent = team.models[id]
+      || (id === "QAAgent" ? "reference runtime" : (n.def.tag || ""));
+  }
+}
+function teamLitEdge(from, to, warn, reason) {
+  if (!from || !to) return;
+  const key = `${from}→${to}`;
+  const path = team.edges[key];
+  if (!path) return;
+  path.classList.add(warn ? "warn" : "lit");
+  path.setAttribute("marker-end", warn ? "url(#edge-arrow-warn)" : "url(#edge-arrow)");
+  if (warn && reason) {
+    path.classList.add("loop-fired", "has-reason");
+    const meta = team.edgeMeta[key] || (team.edgeMeta[key] = {});
+    meta.short = reason.short;
+    meta.full = reason.full;
+    if (meta.label) {
+      meta.label.textContent = reason.short.slice(0, 28);
+      meta.label.setAttribute("visibility", "visible");
+    }
+  }
+  if (!warn) setTimeout(() => path.classList.remove("lit"), 900);
+}
+function teamAttemptLine(id) {
+  const a = team.attempts[id];
+  if (!a || !a.length) return null;
+  return a.map((x) => {
+    if (x.ok) return `v${x.v} ✓` + (x.score ? ` ${x.score}` : "");
+    return `v${x.v} ✗`;
+  }).join(" → ");
+}
+function shortText(v, n) {
+  const s = typeof v === "string" ? v : (v == null ? "" : JSON.stringify(v));
+  const one = s.replace(/\s+/g, " ").trim();
+  return one.length <= n ? one : one.slice(0, n - 1) + "…";
+}
+function parseMaybeJson(v) {
+  if (v == null) return null;
+  if (typeof v === "object") return v;
+  try { return JSON.parse(v); } catch (_) { return null; }
+}
+function challengeFromEvent(ev) {
+  const who = agentName(ev.agent);
+  const out = ev.summary || "";
+  const full = typeof out === "string" ? out : JSON.stringify(out);
+  if (ev.action === "critique_claims" && ev.status === "needs_revision") {
+    const m = full.match(/claim\s+(\d+)\s*:\s*([^"]+?)(?:\.|"|$)/i);
+    const claim = m ? `#${m[1]}` : "";
+    const why = m ? shortText(m[2], 70) : shortText(full, 70);
+    return { ok: false, line: `Insight Critic dropped claim ${claim}: ${why} → Report Writer revised`,
+             full, edge: "InsightCriticAgent→ReportWriterAgent",
+             reason: { short: shortText(why, 24), full } };
+  }
+  if (ev.action === "drop_claims") {
+    return { ok: false, line: `Insight Critic ${shortText(full, 90)}`, full,
+             edge: "InsightCriticAgent→ReportWriterAgent",
+             reason: { short: "claims dropped", full } };
+  }
+  if (ev.action === "critique_sources") {
+    const assessments = parseMaybeJson(out) || parseMaybeJson(full);
+    let trusted = "", task = "", detail = shortText(full, 90);
+    if (Array.isArray(assessments) && assessments[0]) {
+      task = assessments[0].task || "";
+      trusted = (assessments[0].trusted_source || "").replace(/^[^:]+:/, "");
+      detail = shortText(assessments[0].explanation || full, 80);
+    } else if (/timesheets|tickets|activity/i.test(full)) {
+      detail = shortText(full, 90);
+    }
+    const line = task
+      ? `Conflict Critic: sources disagree on ${task} → trusted ${trusted || "one source"}`
+      : `Conflict Critic: ${detail}`;
+    return { ok: ev.status === "approved", line, full,
+             edge: null, // forward handoff, not a loop
+             evidence: assessments,
+             reason: { short: shortText(`trust ${trusted || "source"}`, 24), full } };
+  }
+  if (ev.action === "critique_priority" && ev.status === "needs_revision") {
+    const m = full.match(/["']([a-z0-9_]+)["']/i) || String(ev.input || "").match(/chosen["']?\s*:\s*["']([^"']+)/i);
+    const routine = m ? m[1] : "ranking";
+    return { ok: false, line: `Priority Critic rejected "${routine}" ranking → PM re-ranked`, full,
+             edge: "PriorityCritic→PMAgent",
+             reason: { short: `reject ${routine}`, full } };
+  }
+  if (ev.action === "critique_output" && ev.status === "needs_revision") {
+    const fail = (full.match(/FAIL[^"]*/i) || [shortText(full, 60)])[0];
+    const ver = (String(ev.input || "").match(/\bv(\d+)\b/i) || [])[1] || "?";
+    return { ok: false, line: `QA rejected code v${ver}: ${shortText(fail, 70)} → Engineer revised`, full,
+             edge: "QAAgent→EngineerAgent",
+             reason: { short: shortText(fail, 24), full } };
+  }
+  if (ev.action === "critique_spec" && ev.status === "needs_revision") {
+    return { ok: false, line: `Spec Critic: ${shortText(full, 80)} → PM revised`, full,
+             edge: "SpecCritic→PMAgent",
+             reason: { short: shortText(full, 24), full } };
+  }
+  return null;
+}
+function challengesRender() {
+  const list = $("challenges-list"), sum = $("challenges-sum");
+  if (!list || !sum) return;
+  list.innerHTML = "";
+  const challenged = team.challenges.length;
+  const dropped = team.challenges.filter((c) => /dropped claim|claim\(s\) dropped/i.test(c.line)).length;
+  const revised = team.challenges.filter((c) => /revised|re-ranked/i.test(c.line)).length;
+  if (!challenged) {
+    sum.textContent = team.replay
+      ? "Replay ready — scrub or press play to see critiques."
+      : "No critiques yet — run the team or replay a saved run.";
+    return;
+  }
+  sum.textContent = `${challenged} claim${challenged === 1 ? "" : "s"} challenged · ${dropped} dropped · ${revised} revised.`;
+  for (const c of team.challenges.slice(-8)) {
+    const li = el("li", c.ok ? "ok" : "", esc(c.line));
+    li.title = c.full || c.line;
+    list.appendChild(li);
+  }
+}
+function teamCaptureEvidence(ev) {
+  if (ev.action === "write_report" || ev.action === "revise_report") {
+    const draft = parseMaybeJson(ev.summary);
+    if (draft && Array.isArray(draft.claims)) team.evidence.claims = draft.claims;
+  }
+  if (ev.action === "critique_claims") {
+    const texts = parseMaybeJson(ev.input);
+    if (Array.isArray(texts) && texts.length) {
+      // Prefer richer claim objects from write_report; otherwise keep the critic's claim list.
+      if (!team.evidence.claims?.length || !team.evidence.claims[0]?.evidence) {
+        team.evidence.claims = texts.map((t) => (typeof t === "string" ? { text: t, evidence: [] } : t));
+      }
+    }
+  }
+  if (ev.action === "critique_sources") {
+    const assessments = parseMaybeJson(ev.summary);
+    const conflicts = parseMaybeJson(ev.input);
+    if (Array.isArray(assessments) || Array.isArray(conflicts)) {
+      team.evidence.conflicts = {
+        assessments: Array.isArray(assessments) ? assessments : [],
+        conflicts: Array.isArray(conflicts) ? conflicts : [],
+      };
+    }
+  }
+}
+function teamOnEvent(ev, replay) {
+  if (!ev || !ev.agent) return;
+  if (ev.agent === "SourceMapperAgent" || ev.agent === "ResearchPlannerAgent" || ev.agent === "ConflictCriticAgent") {
+    teamSetMode("analysis");
+  }
+  if (ev.model && ev.model !== "offline-fallback") team.models[ev.agent] = shortText(ev.model, 28);
+  else if (ev.agent === "QAAgent") team.models[ev.agent] = "reference runtime";
+  else if (ev.model === "offline-fallback") team.models[ev.agent] = "offline-fallback";
+
+  teamCaptureEvidence(ev);
+  const ch = challengeFromEvent(ev);
+  if (ch) {
+    team.challenges.push(ch);
+    if (ch.edge && ch.reason) teamLitEdge(ch.edge.split("→")[0], ch.edge.split("→")[1], true, ch.reason);
+    challengesRender();
+  }
+
+  const id = ev.agent === "ManagerAgent" && ev.action === "request_approval" ? "Human" : ev.agent;
+  if (team.nodes[ev.agent] || id === "Human") {
+    if (team.working && team.working !== ev.agent && team.nodes[team.working]) {
+      const line = teamAttemptLine(team.working);
+      teamSetNode(team.working, "done", line || "done");
+    }
+    if (ev.action !== "cell_writes" && ev.action !== "audit_sheet" && ev.action !== "run_completed") {
+      if (team.nodes[ev.agent]) {
+        team.working = ev.agent;
+        const attempt = teamAttemptLine(ev.agent);
+        teamSetNode(ev.agent, "working", attempt || ACTIONS[ev.action] || ev.action);
+      }
+      const warn = CRITIC_ACTIONS.has(ev.action) && (ev.status === "needs_revision" || ev.status === "needs_attention");
+      teamLitEdge(ev.agent, ev.target, warn, ch && ch.edge === `${ev.agent}→${ev.target}` ? ch.reason : null);
+    }
+  }
+  team.last[ev.agent] = ev;
+  if (CRITIC_ACTIONS.has(ev.action) && ev.target) {
+    const m = String(ev.input || "").match(/\bv(\d+)\b/i);
+    const v = m ? Number(m[1]) : (ev.retry || 0) + 1;
+    const ok = ev.status === "approved";
+    const score = (ev.cases != null && ev.cases_matched != null) ? `${ev.cases_matched}/${ev.cases}` : null;
+    if (ev.action === "critique_output") {
+      (team.attempts[ev.target] || (team.attempts[ev.target] = [])).push({ v, ok, score });
+      const byV = {};
+      for (const x of team.attempts[ev.target]) byV[x.v] = x;
+      team.attempts[ev.target] = Object.keys(byV).sort((a, b) => a - b).map((k) => byV[k]);
+      if (team.nodes[ev.target]) teamSetNode(ev.target, ok ? "done" : "rejected", teamAttemptLine(ev.target));
+    }
+  }
+  if (ev.action === "request_approval") {
+    team.codeHash = ev.code_hash || (String(ev.summary || "").match(/code\s+([a-f0-9]{8,12})/i) || [])[1] || null;
+    teamAwaitApproval(team.codeHash);
+  }
+  if (ev.action === "run_completed" || ev.action === "run_automation") {
+    if (team.working && team.nodes[team.working]) teamSetNode(team.working, "done", teamAttemptLine(team.working) || "done");
+    team.working = null;
+  }
+}
+function teamFinish() {
+  if (team.working && team.nodes[team.working]) {
+    teamSetNode(team.working, "done", teamAttemptLine(team.working) || "done");
+  }
+  team.working = null;
+  for (const id of Object.keys(team.nodes)) {
+    if (id === "Human") continue;
+    const n = team.nodes[id];
+    if (n.el.classList.contains("working")) teamSetNode(id, "done", teamAttemptLine(id) || "done");
+  }
+  challengesRender();
+}
+function teamSetMode(mode) {
+  if (team.mode === mode && Object.keys(team.nodes).length) return;
+  team.mode = mode === "analysis" ? "analysis" : "task";
+  teamDraw();
+}
+function teamReset(mode) {
+  team.mode = mode === "analysis" ? "analysis" : "task";
+  team.runId = null; team.attempts = {}; team.last = {}; team.working = null; team.codeHash = null;
+  team.models = {}; team.challenges = []; team.edgeMeta = {};
+  team.evidence = { claims: [], conflicts: [] };
+  teamDraw();
+  challengesRender();
+}
+function teamSetRunId(id) { team.runId = id; }
+function teamAwaitApproval(hash) {
+  team.codeHash = hash || team.codeHash;
+  const sub = team.codeHash ? `waiting · ${String(team.codeHash).slice(0, 12)}` : "waiting";
+  teamSetNode("Human", "wait", sub);
+}
+function teamApprove(hash) {
+  team.codeHash = hash || team.codeHash;
+  teamSetNode("Human", "done", team.codeHash ? `approved · ${String(team.codeHash).slice(0, 12)}` : "approved");
+}
+function teamReject() { teamSetNode("Human", "rejected", "rejected"); }
+function teamShowEdge(key) {
+  const meta = team.edgeMeta[key];
+  const pop = $("edge-pop");
+  if (!pop) return;
+  if (!meta || !meta.full) { pop.hidden = true; return; }
+  pop.innerHTML = `<button type="button" class="pop-close" aria-label="Close">✕</button>
+    <b>Loop</b><div>${esc(key.replace("→", " → "))}</div>
+    <b>Reason</b><div class="pop-note">${esc(meta.short || "")}</div>
+    <b>Full</b><pre style="white-space:pre-wrap;font-size:11px;max-height:160px;overflow:auto">${esc(meta.full)}</pre>`;
+  pop.hidden = false;
+  pop.querySelector(".pop-close").addEventListener("click", () => { pop.hidden = true; });
+  pop.style.left = "12px";
+  pop.style.top = "72px";
+}
+function evidenceHtml(id) {
+  if (id === "ReportWriterAgent" && team.evidence.claims?.length) {
+    return `<div class="evidence-block"><b>Track 2 · findings with SQL evidence</b>` +
+      team.evidence.claims.slice(0, 4).map((c, i) => {
+        const text = typeof c === "string" ? c : (c.text || "");
+        const ev = (c && c.evidence) || [];
+        const rows = Array.isArray(ev) ? ev : [];
+        return `<div style="margin-top:6px"><button type="button" class="btn" data-claim="${i}" style="padding:4px 8px;font-size:11px">Finding ${i + 1}</button>
+          <div class="muted">${esc(shortText(text, 120))}</div>
+          <div class="claim-rows" id="claim-rows-${i}" hidden></div></div>`;
+      }).join("") + `</div>`;
+  }
+  if (id === "ConflictCriticAgent" && team.evidence.conflicts) {
+    const { assessments = [], conflicts = [] } = team.evidence.conflicts;
+    const rows = (conflicts.length ? conflicts : assessments).slice(0, 4);
+    if (!rows.length) return "";
+    return `<div class="evidence-block"><b>Track 1 · disagreeing sources</b>` +
+      rows.map((c) => {
+        const task = c.task || "?";
+        const values = c.values || {};
+        const trust = c.trusted_source ? `<div class="muted">Trusted: ${esc(c.trusted_source)}</div>` : "";
+        const vals = Object.keys(values).length
+          ? `<table><tbody>${Object.entries(values).map(([k, v]) =>
+            `<tr><td>${esc(k)}</td><td class="num">${esc(v)}</td></tr>`).join("")}</tbody></table>`
+          : `<div class="muted">${esc(shortText(c.explanation || "", 160))}</div>`;
+        return `<div style="margin-top:6px"><b>${esc(task)}</b>${trust}${vals}</div>`;
+      }).join("") + `</div>`;
+  }
+  return "";
+}
+function teamShowDetail(id) {
+  const panel = $("agent-detail"), body = $("agent-detail-body");
+  if (!panel || !body) return;
+  const ev = team.last[id] || (id === "Human" ? team.last.ManagerAgent : null);
+  const title = id === "Human" ? "Approval" : agentName(id);
+  const attempt = teamAttemptLine(id === "Human" ? "EngineerAgent" : id);
+  const model = team.models[id] || ev?.model || (id === "QAAgent" ? "no model, reference runtime" : "—");
+  body.innerHTML = `<h4>${esc(title)}</h4>` +
+    (attempt ? `<p class="muted">${esc(attempt)}</p>` : "") +
+    (team.codeHash && id === "Human" ? `<p class="muted">code ${esc(String(team.codeHash).slice(0, 12))}</p>` : "") +
+    `<div class="detail-block"><b>Model</b><pre>${esc(model)}</pre></div>` +
+    (ev ? `<div class="detail-block"><b>Latest input</b><pre>${esc(ev.input || "—")}</pre></div>
+      <div class="detail-block"><b>Latest output</b><pre>${esc(ev.summary || "—")}</pre></div>` :
+      `<p class="muted">No events yet for this agent.</p>`) +
+    evidenceHtml(id);
+  panel.hidden = false;
+  body.querySelectorAll("[data-claim]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const i = Number(btn.dataset.claim);
+      const box = body.querySelector(`#claim-rows-${i}`);
+      const claim = team.evidence.claims[i];
+      if (!box || !claim) return;
+      if (!box.hidden) { box.hidden = true; return; }
+      const evd = claim.evidence || [];
+      box.innerHTML = Array.isArray(evd) && evd.length
+        ? `<pre style="white-space:pre-wrap;font-size:11px">${esc(JSON.stringify(evd, null, 1))}</pre>`
+        : `<span class="muted">No SQL row citations on this claim in the saved event.</span>`;
+      box.hidden = false;
+    });
+  });
+}
+function teamCloseDetail(e) {
+  e?.preventDefault?.();
+  e?.stopPropagation?.();
+  const panel = $("agent-detail");
+  if (panel) panel.hidden = true;
+}
+$("agent-detail-close")?.addEventListener("click", teamCloseDetail);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("agent-detail") && !$("agent-detail").hidden) {
+    // Prefer closing the side panel before collapsing the island.
+    e.stopPropagation();
+    teamCloseDetail(e);
+  }
+}, true);
+
+function sheetStatus() {
+  const el = $("sheet-status");
+  if (!el) return;
+  const parts = [];
+  if (sheet.changed) parts.push(`${sheet.changed} cells changed`);
+  if (sheet.audit) parts.push("audit sheet written");
+  el.textContent = parts.join(" · ") || (sheet.meta ? "original preview" : "No sheet attached");
+}
+function sheetCellClass(key, value) {
+  const meta = sheet.cellMeta[key];
+  const parts = [];
+  if (meta?.kind === "blank_by_design") parts.push("blank-design", "has-meta");
+  else if (sheet.cellMap[key]) parts.push("changed", "has-meta");
+  else if (meta) parts.push("has-meta");
+  if (typeof value === "number") parts.push("num");
+  return parts.join(" ");
+}
+function sheetCellTitle(key, value) {
+  const meta = sheet.cellMeta[key];
+  if (meta?.note) return meta.note;
+  if (meta?.source) return meta.source;
+  return fmt(value);
+}
+function sheetHidePop() { const p = $("cell-pop"); if (p) p.hidden = true; }
+function sheetShowPop(key, anchor) {
+  const pop = $("cell-pop");
+  const meta = sheet.cellMeta[key];
+  if (!pop || !meta) return;
+  const oldText = meta.old === undefined || meta.old === null || meta.old === "" ? "∅" : fmt(meta.old);
+  const newText = meta.value === undefined || meta.value === null || meta.value === "" ? "∅" : fmt(meta.value);
+  pop.innerHTML = `<button type="button" class="pop-close" aria-label="Close">✕</button>` +
+    `<b>Change</b><div class="pop-change">${esc(oldText)} → ${esc(newText)}</div>` +
+    (meta.step_label || meta.step ? `<b>Plan</b><div>${esc(meta.step_label || ("Plan step " + meta.step + (meta.step_op ? ": " + meta.step_op : "")))}</div>` : "") +
+    (meta.source ? `<b>Source</b><div>${esc(meta.source)}</div>` : "") +
+    (meta.note ? `<b>Note</b><div class="pop-note">${esc(meta.note)}</div>` : "") +
+    (meta.code_hash ? `<b>Code</b><div class="pop-change">${esc(meta.code_hash)}</div>` : "");
+  pop.hidden = false;
+  pop.querySelector(".pop-close").addEventListener("click", sheetHidePop);
+  const host = $("view-sheet");
+  const hr = host.getBoundingClientRect();
+  const ar = anchor.getBoundingClientRect();
+  let left = ar.left - hr.left + host.scrollLeft;
+  let top = ar.bottom - hr.top + host.scrollTop + 6;
+  pop.style.left = Math.min(left, host.clientWidth - 220) + "px";
+  pop.style.top = Math.min(top, host.clientHeight - 40) + "px";
+}
+function sheetRender() {
+  const host = $("sheet-grid"), tabs = $("sheet-tabs");
+  if (!host || !tabs) return;
+  sheetHidePop();
+  tabs.innerHTML = "";
+  const names = Object.keys(sheet.data);
+  if (!names.length) {
+    host.innerHTML = `<p class="muted" style="padding:12px">Attach a spreadsheet to preview it here.</p>`;
+    sheetStatus();
+    return;
+  }
+  if (!sheet.active || !sheet.data[sheet.active]) sheet.active = names[0];
+  for (const name of names) {
+    const b = el("button", "sheet-tab", esc(name));
+    b.type = "button"; b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", String(name === sheet.active));
+    b.addEventListener("click", () => { sheet.active = name; sheetRender(); });
+    tabs.appendChild(b);
+  }
+  const cols = sheet.columns[sheet.active] || [];
+  const rows = sheet.data[sheet.active] || [];
+  const total = sheet.totals[sheet.active] ?? rows.length;
+  const shown = rows.slice(0, 200);
+  let html = `<table><thead><tr><th class="row-num">#</th>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>`;
+  for (let i = 0; i < shown.length; i++) {
+    const r = shown[i];
+    html += `<tr><td class="row-num">${i + 1}</td>`;
+    for (const c of cols) {
+      const key = `${sheet.active}|${i + 1}|${c}`;
+      const cls = sheetCellClass(key, r[c]);
+      html += `<td data-cell="${esc(key)}" class="${cls}" title="${esc(sheetCellTitle(key, r[c]))}">${esc(fmt(r[c]))}</td>`;
+    }
+    html += `</tr>`;
+  }
+  html += `</tbody></table>`;
+  if (total > shown.length) html += `<div class="sheet-more">+${total - shown.length} more rows</div>`;
+  host.innerHTML = html;
+  host.querySelectorAll("td.has-meta, td.blank-design").forEach((td) => {
+    td.addEventListener("click", (e) => {
+      e.stopPropagation();
+      sheetShowPop(td.getAttribute("data-cell"), td);
+    });
+  });
+  sheetStatus();
+}
+function sheetLoad(meta) {
+  sheet.meta = meta; sheet.changed = 0; sheet.audit = false; sheet.replay = false;
+  sheet.cellMap = {}; sheet.cellMeta = {};
+  sheet.data = {}; sheet.columns = {}; sheet.totals = {};
+  $("sheet-replay").hidden = true;
+  sheetHidePop();
+  if (!meta) { sheet.active = null; sheetRender(); return; }
+  const cols = meta.columns || {};
+  const rows = meta.rows || {};
+  const totals = meta.row_totals || {};
+  const names = meta.sheets ? meta.sheets.map((s) => s.name) : Object.keys(rows);
+  for (const name of names) {
+    sheet.columns[name] = cols[name] || (rows[name] && rows[name][0] ? Object.keys(rows[name][0]) : []);
+    sheet.data[name] = (rows[name] || []).map((r) => ({ ...r }));
+    sheet.totals[name] = totals[name] != null ? totals[name] : sheet.data[name].length;
+  }
+  sheet.active = names[0] || null;
+  sheetRender();
+}
+function sheetApplyCells(cells, flash) {
+  if (!cells || !cells.length) return;
+  for (const c of cells) {
+    const sheetName = c.sheet || sheet.active;
+    if (!sheetName) continue;
+    if (!sheet.data[sheetName]) {
+      sheet.data[sheetName] = [];
+      sheet.columns[sheetName] = sheet.columns[sheetName] || [];
+      sheet.totals[sheetName] = sheet.totals[sheetName] || 0;
+    }
+    if (c.col && !sheet.columns[sheetName].includes(c.col)) sheet.columns[sheetName].push(c.col);
+    const idx = (c.row || 1) - 1;
+    while (sheet.data[sheetName].length <= idx) sheet.data[sheetName].push({});
+    sheet.data[sheetName][idx][c.col] = c.value;
+    const key = `${sheetName}|${c.row}|${c.col}`;
+    sheet.cellMeta[key] = { ...sheet.cellMeta[key], ...c, sheet: sheetName };
+    if (c.kind !== "blank_by_design" && !sheet.cellMap[key]) {
+      sheet.cellMap[key] = true;
+      sheet.changed += 1;
+    } else if (c.kind === "blank_by_design") {
+      sheet.cellMap[key] = true; // mark as touched for styling hooks
+    }
+  }
+  const stay = sheet.active;
+  sheetRender();
+  sheet.active = stay;
+  if (flash) {
+    for (const c of cells) {
+      const key = `${c.sheet || sheet.active}|${c.row}|${c.col}`;
+      const td = $("sheet-grid")?.querySelector(`[data-cell="${CSS.escape(key)}"]`);
+      if (td) {
+        td.classList.add("flash");
+        if (c.kind === "blank_by_design") td.classList.add("blank-design");
+        else td.classList.add("changed");
+      }
+    }
+  }
+  sheetStatus();
+}
+function sheetOnEvent(ev, replay) {
+  if (!ev) return;
+  if (ev.action === "cell_writes" && ev.cells) {
+    const cells = ev.cells.map((c) => ({ ...c, sheet: c.sheet || ev.sheet }));
+    sheetApplyCells(cells, !replay);
+    if (ev.sheet && sheet.data[ev.sheet]) sheet.active = ev.sheet;
+  }
+  if (ev.action === "audit_sheet" || ev.audit_written) {
+    sheet.audit = true; sheetStatus();
+  }
+  if (ev.action === "run_automation" && ev.cells_changed != null) {
+    sheet.changed = Math.max(sheet.changed, ev.cells_changed);
+    sheetStatus();
+  }
+}
+function sheetReplay(writes, runId, cellsChanged) {
+  sheet.replay = true;
+  const banner = $("sheet-replay");
+  if (banner) {
+    banner.hidden = false;
+    banner.textContent = `Replay of run ${runId || "unknown"}`;
+  }
+  selectSideTab("sheet");
+  if (Array.isArray(writes) && writes.length) {
+    // Animate in small batches so the flash is visible even on a sync response.
+    let i = 0;
+    const step = () => {
+      const batch = writes.slice(i, i + 40);
+      i += 40;
+      sheetApplyCells(batch, true);
+      if (i < writes.length) setTimeout(step, 40);
+      else {
+        if (cellsChanged != null) sheet.changed = cellsChanged;
+        sheet.audit = true;
+        sheetStatus();
+      }
+    };
+    step();
+  } else {
+    if (cellsChanged != null) sheet.changed = cellsChanged;
+    sheet.audit = true;
+    sheetStatus();
+  }
+}
+
+function selectSideTab(which) {
+  const teamTab = $("tab-team"), sheetTab = $("tab-sheet");
+  const teamView = $("view-team"), sheetView = $("view-sheet");
+  const isTeam = which !== "sheet";
+  teamTab.setAttribute("aria-selected", String(isTeam));
+  sheetTab.setAttribute("aria-selected", String(!isTeam));
+  teamTab.tabIndex = isTeam ? 0 : -1;
+  sheetTab.tabIndex = isTeam ? -1 : 0;
+  teamView.hidden = !isTeam;
+  sheetView.hidden = isTeam;
+}
+
+function toUiEvent(e) {
+  const summary = e.output_summary;
+  const input = e.input_summary;
+  return {
+    i: e.i, at: e.timestamp, agent: e.agent_name, action: e.action, status: e.status,
+    target: e.target_agent, model: e.model,
+    summary: typeof summary === "string" ? summary : (summary == null ? "" : JSON.stringify(summary)),
+    input: typeof input === "string" ? input : (input == null ? "" : JSON.stringify(input)),
+    retry: e.retry_count || 0, confidence: e.confidence,
+    cases: e.cases, cases_matched: e.cases_matched, cells: e.cells, sheet: e.sheet,
+    code_hash: e.code_hash, audit_written: e.audit_written,
+  };
+}
+function replayStop() {
+  if (team.replayTimer) { clearTimeout(team.replayTimer); team.replayTimer = null; }
+}
+function replayApplyThrough(index) {
+  const mode = team.replayMode || "analysis";
+  teamReset(mode);
+  team.replay = true;
+  const banner = $("replay-label");
+  if (banner) {
+    banner.hidden = false;
+    banner.textContent = `Replay of run ${team.runId || "saved"}`;
+  }
+  for (let i = 0; i <= index && i < team.replayEvents.length; i++) {
+    const ui = toUiEvent(team.replayEvents[i]);
+    teamOnEvent(ui, true);
+    if (ui.action === "cell_writes") sheetOnEvent(ui, true);
+  }
+  team.replayIndex = index;
+  const scrub = $("replay-scrub");
+  if (scrub) scrub.value = String(index);
+  teamFinish();
+}
+function replayPlay() {
+  replayStop();
+  if (!team.replayEvents.length) return;
+  team.replay = true;
+  const banner = $("replay-label");
+  if (banner) {
+    banner.hidden = false;
+    banner.textContent = `Replay of run ${team.runId || "saved"}`;
+  }
+  selectSideTab("team");
+  const step = () => {
+    if (team.replayIndex >= team.replayEvents.length - 1) {
+      teamFinish();
+      return;
+    }
+    team.replayIndex += 1;
+    const ui = toUiEvent(team.replayEvents[team.replayIndex]);
+    // First event: reset canvas once.
+    if (team.replayIndex === 0) {
+      teamReset(team.replayMode || "analysis");
+      team.replay = true;
+      if (banner) banner.hidden = false;
+    }
+    teamOnEvent(ui, true);
+    if (ui.action === "cell_writes") sheetOnEvent(ui, true);
+    const scrub = $("replay-scrub");
+    if (scrub) scrub.value = String(team.replayIndex);
+    team.replayTimer = setTimeout(step, ui.action === "critique_output" || CRITIC_ACTIONS.has(ui.action) ? 700 : 220);
+  };
+  // Restart from beginning for a clean play.
+  team.replayIndex = -1;
+  teamReset(team.replayMode || "analysis");
+  team.replay = true;
+  if (banner) {
+    banner.hidden = false;
+    banner.textContent = `Replay of run ${team.runId || "saved"}`;
+  }
+  step();
+}
+async function loadReplayList() {
+  const sel = $("replay-select");
+  if (!sel) return;
+  try {
+    const data = await api("/demos/replays");
+    sel.innerHTML = "";
+    for (const r of data.replays.filter((x) => x.available)) {
+      const opt = document.createElement("option");
+      opt.value = r.id;
+      opt.textContent = r.label;
+      sel.appendChild(opt);
+    }
+    if (!sel.options.length) {
+      const opt = document.createElement("option");
+      opt.textContent = "No saved replays";
+      sel.appendChild(opt);
+      $("replay-btn").disabled = true;
+    }
+  } catch (_) {
+    sel.innerHTML = "<option>Replays unavailable</option>";
+  }
+}
+async function startSelectedReplay() {
+  const sel = $("replay-select");
+  const id = sel?.value;
+  if (!id) return;
+  replayStop();
+  const data = await api(`/demos/replays/${encodeURIComponent(id)}`);
+  team.replayEvents = data.events || [];
+  team.replayMode = data.mode || "analysis";
+  team.runId = data.run_id;
+  team.replay = true;
+  const scrub = $("replay-scrub");
+  if (scrub) {
+    scrub.disabled = false;
+    scrub.min = "0";
+    scrub.max = String(Math.max(0, team.replayEvents.length - 1));
+    scrub.value = "0";
+  }
+  const banner = $("replay-label");
+  if (banner) {
+    banner.hidden = false;
+    banner.textContent = `Replay of run ${data.run_id}`;
+  }
+  replayPlay();
+}
+function initSideTabs() {
+  const tabs = [$("tab-team"), $("tab-sheet")];
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => selectSideTab(tab.id === "tab-sheet" ? "sheet" : "team"));
+    tab.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Home" && e.key !== "End") return;
+      e.preventDefault();
+      const next = (e.key === "ArrowRight" || e.key === "End") ? $("tab-sheet") : $("tab-team");
+      selectSideTab(next.id === "tab-sheet" ? "sheet" : "team");
+      next.focus();
+    });
+  });
+  selectSideTab("team");
+  teamReset("task");
+  sheetRender();
+  loadReplayList();
+  $("replay-btn")?.addEventListener("click", () => startSelectedReplay().catch((e) => bot(`Replay failed: ${esc(e.message)}`, "error")));
+  $("replay-scrub")?.addEventListener("input", (e) => {
+    replayStop();
+    if (!team.replayEvents.length) return;
+    replayApplyThrough(Number(e.target.value));
+  });
+}
+
 // ------------------------------------------------------------------ start
 
 async function init() {
+  state.large = store("agentoffice.large") === "1";
   render();
+  initSideTabs();
   try {
     state.config = await api("/config");
     const c = state.config;
@@ -480,3 +1413,4 @@ async function init() {
   if (!desktop && new URLSearchParams(location.search).get("open") === "1") expand();
 }
 init();
+

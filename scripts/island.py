@@ -32,7 +32,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ISLAND = (300, 44)            # CSS pixels
-PANEL = (460, 760)
+PANEL = (960, 760)            # split view: chat + Team/Sheet
 TOP_MARGIN = 10
 TITLE_PREFIX = "AgentOffice ·"
 

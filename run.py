@@ -18,6 +18,7 @@ error ({status: "error", error: {type, message, recoverable}}), never a stack tr
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -156,6 +157,52 @@ def create_app(settings: Settings) -> FastAPI:
                 "data_source": "Zetaris" if ready and not settings.sample_mode else "sample data",
                 "hotkeys": ["Ctrl+Shift+Space", "Ctrl+K"]}
 
+    # Saved runs the Team pane can replay without keys (committed output_examples only).
+    _REPLAYS = {
+        "analysis_finance_live": {
+            "label": "Analysis · finance (live Nemotron)",
+            "mode": "analysis",
+            "path": ROOT / "output_examples" / "example_1.trace.jsonl",
+            "blurb": "Insight Critic revisions + Conflict Critic trust calls",
+        },
+        "analysis_finance_sample": {
+            "label": "Analysis · finance (sample mode)",
+            "mode": "analysis",
+            "path": ROOT / "output_examples" / "sample_mode" / "example_1.trace.jsonl",
+            "blurb": "Full 13-agent pipeline offline",
+        },
+        "task_expense_live": {
+            "label": "Task · expense claims (live QA loops)",
+            "mode": "task",
+            "path": ROOT / "output_examples" / "task_expense_claims.trace.jsonl",
+            "blurb": "Engineer v1 ✗ → v2 ✗ → v3 ✓ 49/49",
+        },
+    }
+
+    @app.get("/demos/replays")
+    def list_replays() -> dict:
+        return {"replays": [{"id": k, "label": v["label"], "mode": v["mode"], "blurb": v["blurb"],
+                             "available": v["path"].is_file()} for k, v in _REPLAYS.items()]}
+
+    @app.get("/demos/replays/{replay_id}")
+    def get_replay(replay_id: str):
+        meta = _REPLAYS.get(replay_id)
+        if meta is None or not meta["path"].is_file():
+            return _error(404, "not_found", f"no replay {replay_id!r}", False)
+        events = []
+        with meta["path"].open(encoding="utf-8") as f:
+            for i, line in enumerate(f):
+                e = json.loads(line)
+                # Drop hash-chain fields; the UI only needs the agent story.
+                events.append({k: e.get(k) for k in (
+                    "timestamp", "run_id", "agent_name", "action", "status", "target_agent", "model",
+                    "input_summary", "output_summary", "retry_count", "confidence", "cases",
+                    "cases_matched", "cells", "sheet", "code_hash", "audit_written")})
+                events[-1]["i"] = i
+        run_id = events[0]["run_id"] if events else replay_id
+        return {"id": replay_id, "label": meta["label"], "mode": meta["mode"], "blurb": meta["blurb"],
+                "run_id": run_id, "replay": True, "events": events, "count": len(events)}
+
     @app.get("/providers/meterless")
     def meterless_status() -> dict:
         """Test Connection for the primary provider. Never returns the token."""
@@ -207,7 +254,11 @@ def create_app(settings: Settings) -> FastAPI:
         parsed = services.uploads.parsed(upload_id)
         if meta is None or parsed is None:
             return None
+        # preview stays short for the chip; rows (capped) feeds the Sheet pane
         return {**meta, "preview": {s["name"]: s["rows"][:6] for s in parsed["sheets"]},
+                "columns": {s["name"]: s["columns"] for s in parsed["sheets"]},
+                "rows": {s["name"]: s["rows"][:200] for s in parsed["sheets"]},
+                "row_totals": {s["name"]: len(s["rows"]) for s in parsed["sheets"]},
                 "suggested_prompt": DEMO_PROMPTS.get(upload_id)}
 
     @app.get("/uploads/{upload_id}")

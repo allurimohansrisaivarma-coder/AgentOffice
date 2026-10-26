@@ -88,9 +88,18 @@ def find_secrets(code: str) -> list[str]:
 
 
 def _limits():  # pragma: no cover - POSIX only
+    # macOS often rejects RLIMIT_AS in preexec_fn ("Exception occurred in preexec_fn");
+    # keep the CPU cap, and apply the memory cap only where it works (Linux).
     import resource
-    resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
-    resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
+    try:
+        resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
+    except (ValueError, OSError):
+        pass
+    if sys.platform.startswith("linux"):
+        try:
+            resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
+        except (ValueError, OSError):
+            pass
 
 
 def run_batch(code: str, calls: list[list], *, timeout_s: float = 10.0) -> dict[str, Any]:

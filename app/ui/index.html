@@ -39,6 +39,10 @@
           <input id="sample-toggle" type="checkbox">
           <span>Sample</span>
         </label>
+        <button id="enlarge" class="icon-btn" type="button" aria-label="Enlarge window" title="Enlarge window" aria-pressed="false">
+          <svg class="ico-enlarge" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M9 3H3v6M15 3h6v6M9 21H3v-6M15 21h6v-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg class="ico-shrink" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" hidden><path d="M9 9H3V3M15 9h6V3M9 15H3v6M15 15h6v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <button id="quit" class="icon-btn" type="button" aria-label="Quit AgentOffice" title="Quit AgentOffice" hidden>
           <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 3v8M6.3 6.3a8 8 0 1011.4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
@@ -47,21 +51,62 @@
         </button>
       </header>
 
-      <div id="messages" class="messages" aria-live="polite"></div>
+      <div class="panel-body">
+        <div class="pane-chat">
+          <div id="messages" class="messages" aria-live="polite"></div>
 
-      <form id="composer" class="composer" autocomplete="off">
-        <div id="attachment" class="attachment" hidden></div>
-        <div class="composer-row">
-          <button id="attach" class="icon-btn" type="button" aria-label="Attach a CSV or Excel file" title="Attach a CSV or Excel file">
-            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l7.9-7.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <textarea id="input" rows="1" placeholder="Tell the team what to do…" aria-label="Message"></textarea>
-          <button id="send" class="send-btn" type="submit" aria-label="Send">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
+          <form id="composer" class="composer" autocomplete="off">
+            <div id="attachment" class="attachment" hidden></div>
+            <div class="composer-row">
+              <button id="attach" class="icon-btn" type="button" aria-label="Attach a CSV or Excel file" title="Attach a CSV or Excel file">
+                <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l7.9-7.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <textarea id="input" rows="1" placeholder="Tell the team what to do…" aria-label="Message"></textarea>
+              <button id="send" class="send-btn" type="submit" aria-label="Send">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+            <input id="file" type="file" accept=".csv,.xlsx,.xlsm" hidden>
+          </form>
         </div>
-        <input id="file" type="file" accept=".csv,.xlsx,.xlsm" hidden>
-      </form>
+
+        <aside class="pane-side" aria-label="Team and sheet">
+          <div class="side-tabs" role="tablist" aria-label="Right pane">
+            <button type="button" class="side-tab" role="tab" id="tab-team" aria-selected="true" aria-controls="view-team" tabindex="0">Team</button>
+            <button type="button" class="side-tab" role="tab" id="tab-sheet" aria-selected="false" aria-controls="view-sheet" tabindex="-1">Sheet</button>
+          </div>
+          <div id="view-team" class="side-view" role="tabpanel" aria-labelledby="tab-team">
+            <div class="team-toolbar">
+              <label class="replay-pick">
+                <span class="sr-only">Saved run</span>
+                <select id="replay-select" aria-label="Saved run to replay"></select>
+              </label>
+              <button type="button" id="replay-btn" class="btn replay-btn">Replay live run</button>
+              <input id="replay-scrub" class="replay-scrub" type="range" min="0" max="0" value="0" aria-label="Replay scrubber" disabled>
+              <span id="replay-label" class="replay-label" hidden>Replay</span>
+            </div>
+            <svg id="team-svg" class="team-svg" viewBox="0 0 440 540" role="img" aria-label="Agent team canvas"></svg>
+            <div id="challenges" class="challenges" aria-live="polite">
+              <div class="challenges-sum" id="challenges-sum">No critiques yet — run the team or replay a saved run.</div>
+              <ul id="challenges-list" class="challenges-list"></ul>
+            </div>
+            <div id="agent-detail" class="agent-detail" hidden>
+              <button type="button" id="agent-detail-close" class="agent-detail-close" aria-label="Close agent detail">✕</button>
+              <div id="agent-detail-body"></div>
+            </div>
+            <div id="edge-pop" class="cell-pop edge-pop" hidden role="dialog" aria-label="Edge reason"></div>
+          </div>
+          <div id="view-sheet" class="side-view" role="tabpanel" aria-labelledby="tab-sheet" hidden>
+            <div class="sheet-toolbar">
+              <div id="sheet-tabs" class="sheet-tabs" role="tablist" aria-label="Workbook sheets"></div>
+              <div id="sheet-status" class="sheet-status" aria-live="polite"></div>
+            </div>
+            <div id="sheet-replay" class="sheet-replay" hidden></div>
+            <div id="sheet-grid" class="sheet-grid" tabindex="0"></div>
+            <div id="cell-pop" class="cell-pop" hidden role="dialog" aria-label="Cell detail"></div>
+          </div>
+        </aside>
+      </div>
       <div id="drop" class="drop" hidden><div>Drop a CSV or Excel file</div></div>
     </div>
   </section>

@@ -187,7 +187,8 @@ def run_task(task: str, upload_id: str, *, settings: Settings, tracer: Tracer, g
                                          code=draft["code"], report=report, decision_memo=memo,
                                          sample_mode=sample_mode, kind="task", task_id=task_id)
             manager.log("request_approval", target_agent="Human", status="pending",
-                        output_summary=f"{approval['approval_id']} for code {approval['code_hash'][:12]}")
+                        output_summary=f"{approval['approval_id']} for code {approval['code_hash'][:12]}",
+                        code_hash=approval["code_hash"])
         elif memo["decision"] == "already_approved":
             approval = prior
             manager.log("approval_on_record", target_agent="OperatorAgent", status="applied",

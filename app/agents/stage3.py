@@ -391,10 +391,12 @@ class QAAgent(Agent):
                 report["advisories"] = [a for a in obj["advisories"][:5] if isinstance(a, dict)]
             except (AgentError, AdapterError) as e:   # optional model call: degrade, never fail the run
                 self.log("review_code", status="error", output_summary=f"advisory review skipped: {e.message}")
+        matched = int(round(report["pass_rate"] * total)) if total else 0
         self.log("critique_output", target_agent="EngineerAgent", status="approved" if passed else "needs_revision",
                  confidence=report["pass_rate"], retry_count=round_no - 1,
                  input_summary=f"code v{draft['version']} {draft['code_hash'][:12]}",
-                 output_summary=[f"{c['name']}: {'ok' if c['passed'] else 'FAIL - ' + c['detail']}" for c in checks])
+                 output_summary=[f"{c['name']}: {'ok' if c['passed'] else 'FAIL - ' + c['detail']}" for c in checks],
+                 cases=total, cases_matched=matched)
         return report
 
 
