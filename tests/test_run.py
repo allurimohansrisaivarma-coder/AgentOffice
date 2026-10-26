@@ -74,22 +74,40 @@ def test_config_exposes_meterless_and_zetaris_sponsors(make_settings):
     assert body["forced_sample_mode"] is False
 
 
-def test_live_replay_keeps_nightshift_and_zetaris_fields(make_settings):
-    client = TestClient(create_app(make_settings(sample_mode=True)))
-    listed = client.get("/demos/replays").json()["replays"]
-    assert any(r["id"] == "task_expense_live" and r["available"] for r in listed)
-    body = client.get("/demos/replays/task_expense_live").json()
-    assert body["sponsors"]["meterless"] is True
-    assert body["sponsors"]["zetaris"] is True
-    assert any("nemotron" in (m or "").lower() for m in body["sponsors"]["models"])
-    query = next(e for e in body["events"] if e.get("action") == "data_query")
-    assert query["target_agent"] == "Zetaris" and query["data_source"] == "zetaris"
-    assert query.get("executed_sql")
-    model_ev = next(e for e in body["events"] if e.get("model") and "nemotron" in e["model"].lower())
-    assert model_ev.get("provider") and "meterless" in model_ev["provider"]
-
-
-def test_sample_replay_claims_no_sponsor_call_it_skipped(make_settings):
-    body = TestClient(create_app(make_settings(sample_mode=True))).get("/demos/replays/analysis_finance_sample").json()
+def test_replays_come_from_this_machines_own_traces(make_settings):
+    s = make_settings()
+    client = TestClient(create_app(s))
+    trace_id = client.post("/run", json={**BODY, "options": {"sample_mode": True}}).json()["trace_id"]
+    runs = client.get("/traces").json()["runs"]
+    assert [r["mode"] for r in runs if r["id"] == trace_id] == ["analysis"]
+    body = client.get(f"/traces/{trace_id}").json()
+    assert body["chain_intact"] is True and body["count"] == len(body["events"]) > 10
+    # sample mode logs its Zetaris calls as skipped, so the replay claims no sponsor call
     assert any(e["target_agent"] == "Zetaris" and e["status"] == "skipped" for e in body["events"])
     assert body["sponsors"] == {"models": ["offline-fallback"], "zetaris": False, "meterless": False}
+    assert client.get("/traces/..%2F..%2Frun").status_code == 404
+    assert client.get("/traces/notahexrunid0000").status_code == 404
+
+
+def test_replay_reports_the_sponsor_calls_a_run_made_and_flags_an_edited_trace(make_settings):
+    from app.tracing import Tracer
+    s = make_settings()
+    tracer = Tracer("0123456789abcdef", s.log_dir, stream=None)
+    tracer.event("Orchestrator", "run_started", input_summary="Fill in the team column")
+    tracer.event("DataProfilerAgent", "data_query", target_agent="Zetaris", data_source="zetaris",
+                 executed_sql="SELECT 1", output_summary="1 rows")
+    tracer.event("PMAgent", "plan_task", model="nvidia/nemotron-3-ultra-550b-a55b", provider="meterless/deep")
+    client = TestClient(create_app(s))
+    body = client.get("/traces/0123456789abcdef").json()
+    assert body["mode"] == "task" and body["chain_intact"] is True
+    assert body["sponsors"] == {"models": ["nvidia/nemotron-3-ultra-550b-a55b"], "zetaris": True, "meterless": True}
+    path = Path(s.log_dir) / "trace-0123456789abcdef.jsonl"
+    path.write_text(path.read_text(encoding="utf-8").replace("1 rows", "9 rows"), encoding="utf-8")
+    assert client.get("/traces/0123456789abcdef").json()["chain_intact"] is False
+
+
+def test_the_app_never_reads_output_examples():
+    # output_examples/ holds saved real runs for judges; the hackathon rules forbid loading them at runtime
+    root = Path(__file__).resolve().parent.parent
+    for path in [root / "run.py", *(root / "app").rglob("*.py"), *(root / "app" / "ui").glob("*.js")]:
+        assert "output_examples" not in path.read_text(encoding="utf-8"), path

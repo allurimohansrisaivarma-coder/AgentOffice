@@ -137,7 +137,7 @@ The REST API is at `http://localhost:8888/api/v1.0`, and the organisation ID of 
 3. Add Nemotron models under **NIGHT → LANES**.
 4. Copy the runtime URL and token from the **Console** (top right), or copy the connect link.
 
-AgentOffice was run with `METERLESS_MODEL=meterless/deep`, which Nightshift routed to `nvidia/nemotron-3-ultra-550b-a55b`. Use any route that `GET /v1/models` lists. `meterless/auto` works too, but it may route to a model that isn't from NVIDIA.
+AgentOffice was run with `METERLESS_MODEL=meterless/deep`, which Nightshift routed to `nvidia/nemotron-3-ultra-550b-a55b` (and a few analysis calls to `nvidia/nemotron-3.5-lightning-30b-a3b`). Use any route that `GET /v1/models` lists. `meterless/auto` works too, but it may route to a model that isn't from NVIDIA.
 
 ### 4.3 Fill in `.env` and check both services
 

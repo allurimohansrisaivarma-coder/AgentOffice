@@ -8,7 +8,7 @@ AgentOffice is an AI office team you tell what to do: attach a spreadsheet, desc
 
 **Zetaris** is the data layer for both. The company's (synthetic) workforce tables *and every uploaded spreadsheet* are Lightning REST tables in a local Zetaris instance; agents profile uploads, fetch lookup data and ground every finding with Zetaris SQL.
 
-**Meterless Nightshift** is the primary model provider for every agent (route `meterless/deep` → **NVIDIA Nemotron** `nvidia/nemotron-3-ultra-550b-a55b`; each trace records the model that answered). We implemented its provider contract: URL normalization, status from `GET /v1/models`, auto-detect, connect links and a 180-second timeout.
+**Meterless Nightshift** is the primary model provider for every agent that uses a model (route `meterless/deep` → **NVIDIA Nemotron**: `nvidia/nemotron-3-ultra-550b-a55b`, plus `nemotron-3.5-lightning-30b-a3b` for a few analysis calls; each trace records the model that answered). We implemented its provider contract: URL normalization, status from `GET /v1/models`, auto-detect, connect links and a 180-second timeout.
 
 We implemented two **Meterless engines** from scratch: the **World Model** (shared state all agents read and write; its conflict records are the Conflict Critic's evidence) and **H-MEM** (cross-run memory: a human's approval lets the same automation run again without asking; a rejection changes what the team proposes next).
 
@@ -30,9 +30,9 @@ The code was built with **Claude Code**; the split-view Team and Sheet panes wer
 ### Meterless Nightshift: the primary model provider (Power rule)
 - [`app/adapters/meterless.py`](../app/adapters/meterless.py) implements the published provider contract: provider `meterless` / "Meterless Runtime"; pasted URLs normalized to `<host>/v1` and the `rt-local` placeholder rejected; `meterless-app` on every request and `meterless-scope: user` on chat; status from `GET /v1/models`; auto-detect across ports 8088, 8090, 8787 and 11434; connect links (`/connect#k=`); a 180-second timeout.
 - **Test Connection:** `GET /providers/meterless` and `scripts/check_connections.py --detect`.
-- **One seam for every agent.** Every agent calls the model through one injected generator ([`app/llm.py`](../app/llm.py)), so Nightshift serves all of them: the front desk, PM, engineer, QA, manager and memory keeper in task mode, the thirteen analysis agents, and the Assistant that answers workspace questions and drafts emails from Zetaris rows.
+- **One seam for every agent.** Every agent that uses a model calls it through one injected generator ([`app/llm.py`](../app/llm.py)), so Nightshift serves all of them: the front desk, PM, engineer, QA, manager and memory keeper in task mode, the thirteen analysis agents, and the Assistant that answers workspace questions and drafts emails from Zetaris rows.
 - **Reasoning models handled properly.** Nemotron thinks before answering; we strip the reasoning (including replies with only a closing `</think>`), give a larger token budget, detect replies cut off at the length limit (`finish_reason: length`) and ask for a compact retry.
-- **Live runs (25 Oct 2026):** all three analysis examples and the three spreadsheet tasks ran in default mode; traces in `output_examples/*.trace.jsonl` show `nvidia/nemotron-3-ultra-550b-a55b` answering through `meterless/deep`.
+- **Live runs (25 Oct 2026):** all three analysis examples and the three spreadsheet tasks ran in default mode; traces in `output_examples/*.trace.jsonl` show Nemotron answering every model call through `meterless/deep`: `nvidia/nemotron-3-ultra-550b-a55b` throughout the tasks, and for most analysis calls, with `nvidia/nemotron-3.5-lightning-30b-a3b` on 2 or 3 calls per analysis run.
 
 ### Meterless Engines (Build rule)
 - **World Model** ([`app/engines/world_model/`](../app/engines/world_model/)), written from scratch to the Meterless reference design: content-hash stable IDs; an append-only observation log that requires provenance; a 10-step idempotent, resumable ingest; canonical reconstruction; merge proposals never applied automatically; a structured, budgeted context builder.
@@ -51,16 +51,16 @@ The code was built with **Claude Code**; the split-view Team and Sheet panes wer
 | **H-MEM in task mode** | `pytest tests/test_tasks.py -k chat_task_needs_approval`: approve once, then the same request on the same file reuses the approved automation and runs without asking (`already_approved`) | passed |
 | **Engines in live runs** | `output_examples/*.trace.jsonl`: `world_model_write`, `hmem_retrieve` and `hmem_write` events in every default-mode run; in `task_vendor_invoices.trace.jsonl` the Memory Keeper hands the PM the automations approved earlier | live, 25 Oct 2026 |
 | **Zetaris** | `python scripts/load_zetaris.py --verify` (row counts for all 7 REST tables); the `data_query` events in every default-mode trace carry the agent SQL and the executed `workforce_api` SQL | 12 / 827 / 223 / 2,672 / 8,266 rows; uploads live |
-| **Nightshift + Nemotron** | `python scripts/check_connections.py` and `GET /providers/meterless`; the `model` field of every model-call event in `output_examples/*.trace.jsonl` | `nvidia/nemotron-3-ultra-550b-a55b` via `meterless/deep` |
-| **Whole product** | the chat UI at http://localhost:8000 (or `docker run -p 8000:8000 -e SAMPLE_MODE=true oah-submission`); setup in `docs/SETUP.md` | sample mode needs no keys |
+| **Nightshift + Nemotron** | `python scripts/check_connections.py` and `GET /providers/meterless`; the `model` field of every model-call event in `output_examples/*.trace.jsonl` | Nemotron 3 Ultra (and 3.5 Lightning on a few analysis calls) via `meterless/deep` |
+| **Whole product** | the AgentOffice desktop app (Start menu, then Ctrl+Shift+Space); for testing, the same service in a browser or `docker run -p 8000:8000 -e SAMPLE_MODE=true oah-submission`; setup in `docs/SETUP.md` | sample mode needs no keys |
 
 ### NVIDIA
-- **Nemotron** (`nvidia/nemotron-3-ultra-550b-a55b`) is served through the Nightshift route `meterless/deep`, hosted, with no local GPU. It powers every agent's reasoning: routing, planning specs, SQL, code writing and revision, test design, code review, critique and the decision memo.
+- **Nemotron** (`nvidia/nemotron-3-ultra-550b-a55b`, and `nvidia/nemotron-3.5-lightning-30b-a3b` where Nightshift routed a few analysis calls) is served through the Nightshift route `meterless/deep`, hosted, with no local GPU. It powers every model call: routing, planning specs, SQL, code writing and revision, test design, code review, critique, the decision memo, and answers and email drafts. The fact-checking critics (Spec, Priority, Grounding) are deterministic rules by design.
 
 ### AI coding tool
 - **We built most of the codebase with Claude Code (Anthropic)**, from an empty repository on 23 Oct 2026: scaffolding, adapters, both engines, the agents, the task mode, the chat UI and desktop island, tests and the Docker setup.
 - **Cursor** was used by one team member on 26 Oct 2026 to build the split-view **Team** and **Sheet** panes: the agent canvas and saved-run replay, the per-cell change events behind the Sheet grid, and the macOS sandbox fix. Those commits carry `Co-authored-by: Cursor`.
-- The team reviewed and tested all generated code (194 tests).
+- The team reviewed and tested all generated code (195 tests).
 - **No Meterless or NVIDIA credentials** were ever given to either coding tool.
 - **If the form asks how Cursor was used:** for the split-view Team and Sheet panes described above; the rest of the code was written with Claude Code.
 

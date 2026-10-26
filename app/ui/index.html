@@ -82,16 +82,16 @@
           <div id="view-team" class="side-view" role="tabpanel" aria-labelledby="tab-team">
             <div class="team-toolbar">
               <label class="replay-pick">
-                <span class="sr-only">Saved run</span>
-                <select id="replay-select" aria-label="Saved run to replay"></select>
+                <span class="sr-only">Past run</span>
+                <select id="replay-select" aria-label="Past run on this machine to replay"></select>
               </label>
-              <button type="button" id="replay-btn" class="btn replay-btn">Replay saved run</button>
+              <button type="button" id="replay-btn" class="btn replay-btn">Replay past run</button>
               <input id="replay-scrub" class="replay-scrub" type="range" min="0" max="0" value="0" aria-label="Replay scrubber" disabled>
               <span id="replay-label" class="replay-label" hidden>Replay</span>
             </div>
             <svg id="team-svg" class="team-svg" viewBox="0 0 440 540" role="img" aria-label="Agent team canvas"></svg>
             <div id="challenges" class="challenges" aria-live="polite">
-              <div class="challenges-sum" id="challenges-sum">No critiques yet — run the team or replay a saved run.</div>
+              <div class="challenges-sum" id="challenges-sum">No critiques yet — run the team or replay a past run.</div>
               <ul id="challenges-list" class="challenges-list"></ul>
             </div>
             <div id="agent-detail" class="agent-detail" hidden>

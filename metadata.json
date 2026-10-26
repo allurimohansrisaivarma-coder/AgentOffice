@@ -4,12 +4,12 @@
   "hackathon": "Open Agent Hackathon 2026",
   "primary_track": "Track 3 - Reasoning Architecture",
   "also_addresses": ["Track 1 - Fragmented Intelligence", "Track 2 - Explain Why"],
-  "description": "An AI office team you tell what to do: attach a spreadsheet and describe the repetitive work, and the agents plan it, write the automation, test it on your data and ask you to approve the exact code before handing back the filled file. It also analyses where a team's time goes and proposes what to automate first.",
+  "description": "An AI office team you tell what to do: attach a spreadsheet and describe the repetitive work, and the agents plan it, write the automation, test it on your data and ask you to approve the exact code before handing back the filled file. It also analyses where a team's time goes and proposes what to automate first, and answers everyday questions or drafts emails from the company's data, with every number checked against the rows.",
   "repository": "https://github.com/allurimohansrisaivarma-coder/AgentOffice",
   "run": {
     "setup": "Windows: powershell -ExecutionPolicy Bypass -File setup.ps1 (virtual environment, dependencies, .env, shortcut); other platforms and default mode: docs/SETUP.md",
     "desktop_app": "Windows: the AgentOffice shortcut that setup.ps1 creates (AgentOffice.pyw): no terminal, no browser tab, Ctrl+Shift+Space opens the island",
-    "sample_mode": "docker run --rm -p 8000:8000 -e SAMPLE_MODE=true oah-submission, then open http://localhost:8000",
+    "sample_mode": "for testing without keys: docker run --rm -p 8000:8000 -e SAMPLE_MODE=true oah-submission, then open http://localhost:8000 (the same UI the desktop app shows)",
     "default_mode": "python run.py with Zetaris and Meterless Nightshift configured in .env (see README)",
     "api_contract": "POST /run (analysis), POST /chat + GET /jobs/{id} (chat), POST /tasks/{id}/decision (approval)"
   },
@@ -43,12 +43,12 @@
       ]
     },
     "nvidia": {
-      "models": ["nvidia/nemotron-3-ultra-550b-a55b"],
+      "models": ["nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3.5-lightning-30b-a3b"],
       "how": "Served through Meterless Nightshift (route meterless/deep), hosted, no local GPU; powers routing, planning, SQL, code writing and revision, test design, review, critique and decision memos."
     }
   },
   "ai_coding_tool": "Claude Code (Anthropic) for most of the code; Cursor for the split-view Team and Sheet panes",
   "pre_existing_components": "none",
   "data": "Synthetic only (scripts/generate_workforce_data.py, scripts/generate_task_samples.py); example.com / example.org emails.",
-  "tests": 194
+  "tests": 195
 }

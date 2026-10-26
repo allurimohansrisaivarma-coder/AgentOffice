@@ -354,6 +354,7 @@ async function follow(jobId) {
     if (view.status !== "running") {
       finishCard(run);
       teamFinish();
+      loadReplayList();   // this run is now replayable
       if (view.status === "failed") {
         bot(`<p><b>The run stopped.</b> ${esc(view.error?.message)}</p><p class="muted">Error type: ${esc(view.error?.type)}. Trace: logs/trace-${esc(view.trace_id)}.jsonl</p>`, "error");
         setRun("error", "Run stopped", "error");
@@ -494,6 +495,7 @@ function approvalBox(slot, task) {
                           done.outputs.cells_changed, done.outputs.sheet_layout);
         }
         slot.innerHTML = resultBlock(done) + `<p class="muted">Saved to memory: next time this exact automation can run without asking.</p>`;
+        loadReplayList();
         setRun("done", "Your file is ready", "done");
       } else {
         teamReject();
@@ -947,7 +949,7 @@ function challengesRender() {
   if (!challenged) {
     sum.textContent = team.replay
       ? "Replay ready — scrub or press play to see critiques."
-      : "No critiques yet — run the team or replay a saved run.";
+      : "No critiques yet — run the team or replay a past run.";
     return;
   }
   sum.textContent = `${challenged} claim${challenged === 1 ? "" : "s"} challenged · ${dropped} dropped · ${revised} revised.`;
@@ -1428,6 +1430,7 @@ function replaySponsorLabel(sponsors, runId) {
   if (m) bits.push(shortModel(m));
   if (sponsors.zetaris) bits.push("Zetaris");
   if (bits.length === 1) bits.push(`run ${runId || "saved"}`);
+  if (sponsors.chainIntact === false) bits.push("trace edited: hash chain broken");
   return bits.join(" · ");
 }
 function replayStop() {
@@ -1440,7 +1443,7 @@ function replayApplyThrough(index) {
   const banner = $("replay-label");
   if (banner) {
     banner.hidden = false;
-    banner.textContent = replaySponsorLabel(team.sponsors, team.runId);
+    banner.textContent = replaySponsorLabel(team.sponsors, team.replayRunId);
   }
   for (let i = 0; i <= index && i < team.replayEvents.length; i++) {
     const ui = toUiEvent(team.replayEvents[i]);
@@ -1457,7 +1460,7 @@ function replayPlay() {
   if (!team.replayEvents.length) return;
   team.replay = true;
   const banner = $("replay-label");
-  const label = () => replaySponsorLabel(team.sponsors, team.runId);
+  const label = () => replaySponsorLabel(team.sponsors, team.replayRunId);   // teamReset() clears team.runId
   if (banner) {
     banner.hidden = false;
     banner.textContent = label();
@@ -1496,19 +1499,20 @@ async function loadReplayList() {
   const sel = $("replay-select");
   if (!sel) return;
   try {
-    const data = await api("/demos/replays");
+    // Runs made on this machine, from their own traces in logs/.
+    const data = await api("/traces");
     sel.innerHTML = "";
-    for (const r of data.replays.filter((x) => x.available)) {
+    for (const r of data.runs) {
       const opt = document.createElement("option");
       opt.value = r.id;
       opt.textContent = r.label;
       sel.appendChild(opt);
     }
+    $("replay-btn").disabled = !sel.options.length;
     if (!sel.options.length) {
       const opt = document.createElement("option");
-      opt.textContent = "No saved replays";
+      opt.textContent = "No past runs yet";
       sel.appendChild(opt);
-      $("replay-btn").disabled = true;
     }
   } catch (_) {
     sel.innerHTML = "<option>Replays unavailable</option>";
@@ -1519,11 +1523,11 @@ async function startSelectedReplay() {
   const id = sel?.value;
   if (!id) return;
   replayStop();
-  const data = await api(`/demos/replays/${encodeURIComponent(id)}`);
+  const data = await api(`/traces/${encodeURIComponent(id)}`);
   team.replayEvents = data.events || [];
   team.replayMode = data.mode || "analysis";
-  team.runId = data.run_id;
-  team.sponsors = data.sponsors || null;
+  team.runId = team.replayRunId = data.run_id;
+  team.sponsors = data.sponsors ? { ...data.sponsors, chainIntact: data.chain_intact } : null;
   team.replay = true;
   const scrub = $("replay-scrub");
   if (scrub) {

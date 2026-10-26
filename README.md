@@ -35,6 +35,7 @@ AgentOffice is a desktop app with a team of AI agents behind it. It lives at the
 - **Approval bound to code.** You approve one exact code hash. Nothing is written before that, and the filled file carries an audit sheet recording who approved which code.
 - **Memory that changes behaviour.** An approval lets the same automation run again next week without asking; a rejection changes what the team proposes next.
 - **Evidence for every number.** Findings cite the SQL rows behind them, and every step lands in a hash-chained trace (`logs/trace-<run_id>.jsonl`).
+- **Watch the team work.** Beside the chat, the **Team** pane draws each agent, handoff and critique as it happens, and the **Sheet** pane shows every cell the approved code changed, with its old value and the plan step behind it. Any past run on your machine can be replayed from its trace; hide the pane for a narrow chat.
 - **Runs without keys.** Sample mode runs the real agent logic on bundled synthetic data, with no keys and no network.
 
 ## Built on our sponsors
@@ -45,7 +46,7 @@ AgentOffice is a desktop app with a team of AI agents behind it. It lives at the
 | **Meterless Nightshift** | The primary model provider for every agent (Power rule) | [`app/adapters/meterless.py`](app/adapters/meterless.py), [`app/llm.py`](app/llm.py) | `scripts/check_connections.py`, `GET /providers/meterless`; the `model` field of every model call in the traces |
 | **Meterless World Model** | The shared state all agents read and write (Build rule) | [`app/engines/world_model/`](app/engines/world_model/) | 18 tests; `world_model_write` events in every live run |
 | **Meterless H-MEM** | Memory across runs: human decisions and QA lessons | [`app/engines/hmem/`](app/engines/hmem/) | 16 tests, including learned → retrieved → behaved differently |
-| **NVIDIA Nemotron** | The reasoning behind every agent: planning, SQL, code, tests, critique, decisions | served through Nightshift (`meterless/deep`) | `nvidia/nemotron-3-ultra-550b-a55b` answers every model call in `output_examples/*.trace.jsonl` |
+| **NVIDIA Nemotron** | The reasoning behind every model call: planning, SQL, code, tests, critique, decisions | served through Nightshift (`meterless/deep`) | Nemotron answers every model call in `output_examples/*.trace.jsonl`: `nemotron-3-ultra-550b-a55b`, and `nemotron-3.5-lightning-30b-a3b` for a few analysis calls |
 
 ### Zetaris: the data layer
 
@@ -60,7 +61,7 @@ Verified on a local Zetaris 2.4.3 install: all 7 statements succeed, every row c
 
 ### Meterless: the model provider and two engines
 
-**Nightshift is the primary model provider for every agent.** All of them, from the front desk to the Manager, call the model through one injected generator. The adapter implements the published provider contract:
+**Nightshift is the primary model provider.** Every agent that reasons with a model, from the front desk to the Manager, calls it through one injected generator; the fact-checking critics (Spec, Priority and Grounding) are deterministic rules on purpose. The adapter implements the published provider contract:
 
 - URL normalisation, and status from `GET /v1/models` (online, unauthorized or offline)
 - auto-detect across ports 8088, 8090, 8787 and 11434
@@ -74,7 +75,7 @@ Verified on a local Zetaris 2.4.3 install: all 7 statements succeed, every row c
 
 ### NVIDIA Nemotron: the reasoning
 
-Every agent thinks with **`nvidia/nemotron-3-ultra-550b-a55b`**, served through the Nightshift route `meterless/deep`. It's hosted, so no local GPU is needed. Nemotron routes requests, writes the step specs and SQL, writes and revises the code, designs extra test cases, reviews the code, critiques the claims and writes the decision memos.
+Every model call in the live runs was answered by NVIDIA Nemotron through the Nightshift route `meterless/deep`: **`nvidia/nemotron-3-ultra-550b-a55b`** for all the spreadsheet tasks and most analysis calls, and `nvidia/nemotron-3.5-lightning-30b-a3b` for the 2 or 3 analysis calls per run that Nightshift routed there. Each trace records which model answered. It's hosted, so no local GPU is needed. Nemotron routes requests, writes the step specs and SQL, writes and revises the code, designs extra test cases, reviews the code, critiques the claims, writes the decision memos, and answers questions and drafts emails from Zetaris rows.
 
 In the live expense-claims run, Nemotron wrote a 7-step plan with lookup SQL on the staff directory. QA rejected its first two versions of the code: v1 broke the sandbox policy, and v2 mishandled blank and text-typed amounts. Version 3 passed **49/49** cases. AgentOffice handles Nemotron as a reasoning model: it strips the reasoning from each reply, gives the model an 8,000-token budget, and detects and retries replies cut off at the length limit.
 
@@ -129,6 +130,8 @@ flowchart LR
 | 1 Fragmented Intelligence | Discover: reconcile timesheets, tickets and the activity log, and judge which source to trust | Source Mapper, Reconciler, Conflict Critic | World Model |
 | 2 Explain Why | Explain: answer with SQL evidence, and drop any claim a critic can't verify | Research Planner, Retriever, Report Writer, Insight Critic | World Model |
 
+**Questions and email drafts** use a shorter loop: the Assistant plans what to look up, the Retriever runs read-only SQL on Zetaris, the Assistant writes from those rows only (people reach the model as placeholders), and the rule-based Grounding Critic sends back any number or person the data doesn't support. Nothing is sent; you copy the draft.
+
 Each agent's role, the QA design and the engine internals are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Results
@@ -161,11 +164,13 @@ cd AgentOffice
 powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
-Open **AgentOffice** from the Start menu and press **Ctrl+Shift+Space**. With no keys it runs in **sample mode**: pick a demo file, send its suggested request, and watch the team work.
+Open **AgentOffice** from the Start menu and press **Ctrl+Shift+Space**: the island opens over whatever app you're in. With no keys it runs in **sample mode**: pick a demo file, send its suggested request, and watch the team work.
 
-- **Browser (any OS):** `.\.venv\Scripts\python.exe run.py`, then open http://localhost:8000.
-- **Docker:** `docker build -t oah-submission .`, then `docker run --rm -p 8000:8000 -e SAMPLE_MODE=true oah-submission`.
-- **API:** `curl -X POST http://localhost:8000/run -H "Content-Type: application/json" -d @input_examples/example_1.json`. In Windows PowerShell, type `curl.exe`; every endpoint is in [docs/API.md](docs/API.md).
+For testing, the same agent service also runs without the desktop shell:
+
+- **In a browser (any OS):** `.\.venv\Scripts\python.exe run.py`, then open http://localhost:8000.
+- **In Docker, with no keys:** `docker build -t oah-submission .`, then `docker run --rm -p 8000:8000 -e SAMPLE_MODE=true oah-submission`.
+- **From a script, with no UI:** `curl -X POST http://localhost:8000/run -H "Content-Type: application/json" -d @input_examples/example_1.json`. In Windows PowerShell, type `curl.exe`; every endpoint is in [docs/API.md](docs/API.md).
 
 To connect Zetaris and Meterless Nightshift for live runs on your own files, follow the [setup guide](docs/SETUP.md).
 
@@ -184,7 +189,7 @@ To connect Zetaris and Meterless Nightshift for live runs on your own files, fol
 - **Data:** synthetic only, generated by committed, deterministic scripts; invented people, with `example.com` and `example.org` emails. See [data/README.md](data/README.md).
 - **Open-source code adapted:** none. Design ideas, not code, are listed in [docs/INSPIRATION.md](docs/INSPIRATION.md). The World Model and H-MEM follow the Meterless reference *designs*, reimplemented.
 - **Pre-existing components:** none. All code was written in this repository from 23 Oct 2026.
-- **AI coding tools:** developed with **Claude Code** (Anthropic); the split-view Team and Sheet panes were built with **Cursor**. The team reviewed and tested all AI-generated code; the suite has 194 tests.
+- **AI coding tools:** developed with **Claude Code** (Anthropic); the split-view Team and Sheet panes were built with **Cursor**. The team reviewed and tested all AI-generated code; the suite has 195 tests.
 - **Sample mode and design boundaries:** documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#design-boundaries).
 
 ## Documentation

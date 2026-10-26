@@ -9,6 +9,7 @@
     GET  /files/{file_id}       a filled spreadsheet
     POST /run                   the workforce-analysis pipeline, synchronous (the hackathon's /run contract)
     GET  /approvals[/{id}] ; POST /approvals/{id}
+    GET  /traces ; GET /traces/{run_id}   past runs on this machine, for the Team pane's replay
     GET  /health ; GET /config ; GET /providers/meterless
     GET  /data/workforce/{table} ; GET /data/uploads/cells      (what Zetaris pulls as REST tables)
 
@@ -19,6 +20,7 @@ error ({status: "error", error: {type, message, recoverable}}), never a stack tr
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -43,9 +45,18 @@ from app.services import Services
 from app.tasks import files
 from app.tasks.agents import SHEET_PREVIEW_ROWS
 from app.tasks.pipeline import execute_task
-from app.tracing import Tracer, new_run_id
+from app.tracing import Tracer, new_run_id, verify_chain
 
 UI_DIR = ROOT / "app" / "ui"
+_RUN_ID = re.compile(r"^[0-9a-f]{16}$")
+# Which kind of run a trace is, from the agents that acted in it.
+_MODE_AGENTS = (("analysis", {"SourceMapperAgent", "ResearchPlannerAgent"}), ("assist", {"AssistantAgent"}),
+                ("task", {"DataProfilerAgent", "OperatorAgent"}))
+# What the Team pane replays from each event (the hash-chain fields stay in the file).
+_REPLAY_FIELDS = ("timestamp", "run_id", "agent_name", "action", "status", "target_agent", "model", "input_summary",
+                  "output_summary", "retry_count", "confidence", "cases", "cases_matched", "cells", "sheet",
+                  "rows_out", "cells_changed", "code_hash", "audit_written", "provider", "data_source", "purpose",
+                  "executed_sql")
 DEMO_PROMPTS = {
     "demo_expense_claims": "Fill in each employee's team and role from our staff directory, tidy the category "
                            "names, convert the dates to YYYY-MM-DD, add the amount including 10% GST, flag claims "
@@ -168,58 +179,55 @@ def create_app(settings: Settings) -> FastAPI:
                     "zetaris": {"ready": zetaris_ready, "provider": "Zetaris"},
                 }}
 
-    # Saved runs the Team pane can replay without keys (committed output_examples only).
-    _REPLAYS = {
-        "analysis_finance_live": {
-            "label": "Analysis · finance (Nightshift + Zetaris)",
-            "mode": "analysis",
-            "path": ROOT / "output_examples" / "example_1.trace.jsonl",
-            "blurb": "Nemotron via Meterless · Zetaris SQL · Insight/Conflict critics",
-        },
-        "analysis_finance_sample": {
-            "label": "Analysis · finance (sample mode)",
-            "mode": "analysis",
-            "path": ROOT / "output_examples" / "sample_mode" / "example_1.trace.jsonl",
-            "blurb": "All 13 analysis agents in sample mode: no model, Zetaris calls logged as skipped",
-        },
-        "task_expense_live": {
-            "label": "Task · expense (Nightshift + Zetaris)",
-            "mode": "task",
-            "path": ROOT / "output_examples" / "task_expense_claims.trace.jsonl",
-            "blurb": "Nemotron via Meterless · Zetaris profile · QA v1→v3",
-        },
-    }
+    # Past runs on this machine, replayed in the Team pane from their own traces in logs/
+    # (the saved example runs committed for judges are never read by the app).
+    def _trace_path(run_id: str) -> Optional[Path]:
+        path = Path(settings.log_dir) / f"trace-{run_id}.jsonl"
+        return path if _RUN_ID.match(run_id) and path.is_file() else None
 
-    @app.get("/demos/replays")
-    def list_replays() -> dict:
-        return {"replays": [{"id": k, "label": v["label"], "mode": v["mode"], "blurb": v["blurb"],
-                             "available": v["path"].is_file()} for k, v in _REPLAYS.items()]}
+    def _trace_view(path: Path) -> Optional[dict]:
+        try:
+            events = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        except (OSError, ValueError):
+            return None
+        agents = {e.get("agent_name") for e in events}
+        mode = next((m for m, names in _MODE_AGENTS if agents & names), None)
+        if mode is None:         # a plain chat reply: nothing to replay
+            return None
+        started = next((e for e in events if e.get("action") == "run_started"), events[0])
+        when = str(started.get("timestamp", ""))[5:16].replace("T", " ")
+        what = " ".join(str(started.get("input_summary") or "").split())
+        return {"id": path.stem[len("trace-"):], "mode": mode, "events": events, "at": started.get("timestamp"),
+                "label": f"{when} · {mode} · {what[:56] + ('…' if len(what) > 56 else '')}"}
 
-    @app.get("/demos/replays/{replay_id}")
-    def get_replay(replay_id: str):
-        meta = _REPLAYS.get(replay_id)
-        if meta is None or not meta["path"].is_file():
-            return _error(404, "not_found", f"no replay {replay_id!r}", False)
-        events = []
-        with meta["path"].open(encoding="utf-8") as f:
-            for i, line in enumerate(f):
-                e = json.loads(line)
-                # Drop hash-chain fields; the UI only needs the agent story.
-                events.append({k: e.get(k) for k in (
-                    "timestamp", "run_id", "agent_name", "action", "status", "target_agent", "model",
-                    "input_summary", "output_summary", "retry_count", "confidence", "cases",
-                    "cases_matched", "cells", "sheet", "rows_out", "cells_changed", "code_hash", "audit_written",
-                    "provider", "data_source", "purpose", "executed_sql")})
-                events[-1]["i"] = i
-        run_id = events[0]["run_id"] if events else replay_id
-        models = sorted({e.get("model") for e in events if e.get("model")})
+    @app.get("/traces")
+    def list_traces() -> dict:
+        """The most recent replayable runs on this machine, newest first."""
+        paths = sorted(Path(settings.log_dir).glob("trace-*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+        runs = []
+        for path in paths[:40]:
+            view = _trace_view(path)
+            if view:
+                runs.append({k: view[k] for k in ("id", "label", "mode", "at")} | {"count": len(view["events"])})
+            if len(runs) == 12:
+                break
+        return {"runs": runs}
+
+    @app.get("/traces/{run_id}")
+    def get_trace(run_id: str):
+        path = _trace_path(run_id)
+        view = _trace_view(path) if path else None
+        if view is None:
+            return _error(404, "not_found", f"no replayable run {run_id!r} in {settings.log_dir}", False)
+        events = [{k: e.get(k) for k in _REPLAY_FIELDS} | {"i": i} for i, e in enumerate(view["events"])]
+        models = sorted({e["model"] for e in events if e.get("model")})
         # Sponsor badges count only calls that happened: sample mode logs its Zetaris calls as "skipped".
         used_zetaris = any(e.get("status") != "skipped" and (
             e.get("target_agent") == "Zetaris" or "zetaris" in str(e.get("data_source") or "").lower())
             for e in events)
         used_meterless = any("meterless" in str(e.get("provider") or "").lower() for e in events)
-        return {"id": replay_id, "label": meta["label"], "mode": meta["mode"], "blurb": meta["blurb"],
-                "run_id": run_id, "replay": True, "events": events, "count": len(events),
+        return {"id": run_id, "label": view["label"], "mode": view["mode"], "run_id": run_id, "replay": True,
+                "chain_intact": verify_chain(path) is None, "events": events, "count": len(events),
                 "sponsors": {"models": models, "zetaris": used_zetaris, "meterless": used_meterless}}
 
     @app.get("/providers/meterless")

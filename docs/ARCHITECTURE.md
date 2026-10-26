@@ -35,6 +35,7 @@ flowchart LR
 - **The local service** ([`run.py`](../run.py)) is a FastAPI app on `0.0.0.0:$PORT`. It serves the chat UI and the [HTTP API](API.md). Each chat message becomes a background job ([`app/jobs.py`](../app/jobs.py)) whose agent events the UI streams live.
 - **The front desk** ([`app/chat.py`](../app/chat.py)) routes each message to task mode, the analysis pipeline, a question, an email draft or a plain reply.
 - **The desktop island** ([`scripts/island.py`](../scripts/island.py), started by [`AgentOffice.pyw`](../AgentOffice.pyw)) opens the same UI in Microsoft Edge or Google Chrome app mode, with its own profile under `state/island-browser`. It removes the window's frame and taskbar button, keeps it on top, and clips it to a pill or a rounded panel at the top of the screen. The panel is 960 px wide with the Team and Sheet pane beside the chat, or 480 px when you hide that pane (the button next to Enlarge; the choice is remembered). A global hotkey (Ctrl+Shift+Space) focuses it. It uses only Python's standard `ctypes`.
+- **The Team and Sheet pane** ([`app/ui/app.js`](../app/ui/app.js)) is drawn only from real trace events: the Team canvas lights each agent, handoff and critique as it happens, and the Sheet grid applies the Operator's `cell_writes` events (old value, plan step, code hash). A past run on the same machine can be replayed from its own trace in `logs/`, with its hash chain checked.
 - **Adapters** ([`app/adapters/`](../app/adapters/)) wrap every external call with a timeout, bounded retries and a structured error.
 
 ## Task mode: "do this to my spreadsheet"
@@ -210,7 +211,7 @@ What it changes: when a human rejects an automation, the next run proposes a dif
 
 ### NVIDIA
 
-Nemotron runs through Nightshift lanes; no local GPU is used. The live runs pinned `METERLESS_MODEL=meterless/deep`, which Nightshift routes to **`nvidia/nemotron-3-ultra-550b-a55b`**, and every model call's trace records the model that actually answered. Nemotron reasons before it answers, so replies are stripped of their reasoning and get an 8,000-token budget. A reply cut off at the length limit is detected (`finish_reason: length`) and retried with a request for compact JSON.
+Nemotron runs through Nightshift lanes; no local GPU is used. The live runs pinned `METERLESS_MODEL=meterless/deep`, which Nightshift routed to **`nvidia/nemotron-3-ultra-550b-a55b`** (and, for 2 or 3 calls in each analysis run, to `nvidia/nemotron-3.5-lightning-30b-a3b`); every model call's trace records the model that actually answered. Nemotron reasons before it answers, so replies are stripped of their reasoning and get an 8,000-token budget. A reply cut off at the length limit is detected (`finish_reason: length`) and retried with a request for compact JSON.
 
 ## Sample mode and fallbacks
 

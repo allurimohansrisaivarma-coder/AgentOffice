@@ -14,7 +14,7 @@ Everything the chat UI does is plain HTTP on the local service (`http://localhos
 | `POST /uploads?filename=<name>` | Upload a CSV or XLSX as the raw request body. Returns the `upload_id`, sheets, columns, row counts and a preview. `GET /uploads/{id}` returns the same. |
 | `GET /samples` | The three demo files (`demo_expense_claims`, `demo_vendor_invoices`, `demo_leads_and_contacts`), each with a suggested request. |
 | `POST /chat` | `{"message", "upload_id"?, "options": {"sample_mode"}}`. Starts a background job and returns `{job_id}`. The front desk routes the message to task mode, the analysis pipeline, a question, an email draft or a plain reply. The finished job's `result.type` is `task`, `analysis`, `assist` (questions and email drafts: `result.assist` holds `kind`, `answer` or `to`/`subject`/`body`, `evidence` and `grounding`) or `reply`. |
-| `GET /jobs/{id}?after=<n>` | The job's live agent events from event `n` on, its `status` (`running`, `completed` or `failed`), and then its `result` (`type` is `task`, `analysis` or `reply`) or a structured `error`, plus the `trace_id`. |
+| `GET /jobs/{id}?after=<n>` | The job's live agent events from event `n` on, its `status` (`running`, `completed` or `failed`), and then its `result` (`type` is `task`, `analysis`, `assist` or `reply`) or a structured `error`, plus the `trace_id`. |
 | `GET /tasks/{id}` | A spreadsheet task: request, understanding, spec, references, code and hash, QA checks and preview, the Manager's memo, approval and outputs. |
 | `GET /tasks/{id}/code` | The automation as a `.py` file. |
 | `POST /tasks/{id}/decision` | `{"decision": "approve" \| "reject", "approver", "note", "code_hash"}`. Records the decision in the approval ledger and in H-MEM. **Approving runs exactly that code** on the file and returns the outputs. A `code_hash` that doesn't match returns 409. |
@@ -23,6 +23,7 @@ Everything the chat UI does is plain HTTP on the local service (`http://localhos
 | `POST /run` | The analysis pipeline, synchronous. See [below](#post-run). |
 | `GET /approvals` | Every approval, newest first; `?status=pending` filters. |
 | `GET /approvals/{id}`, `POST /approvals/{id}` | The human approval gate, with the same body as the task decision. It's hash-chained and bound to the code hash, and the decision becomes a long-term H-MEM preference that later runs respect. For automations from analysis mode, approving only records the decision; nothing is deployed. |
+| `GET /traces`, `GET /traces/{run_id}` | Past runs on this machine, newest first, read from their own trace files in `logs/` (the committed `output_examples/` are never read). A run's events come back for the Team pane's replay, with `chain_intact` (the hash chain still verifies) and the sponsor calls it actually made. |
 | `GET /health` | Configuration status: mode, provider, missing settings and the addresses in effect. Makes no external calls. |
 | `GET /config` | What the UI shows: mode, model route, data source and hotkeys. No secrets. |
 | `GET /providers/meterless` | Test Connection for the primary model provider. The token is never returned. |
