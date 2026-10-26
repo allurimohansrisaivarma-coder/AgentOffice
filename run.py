@@ -151,19 +151,29 @@ def create_app(settings: Settings) -> FastAPI:
     def ui_config() -> dict:
         """What the UI shows in its badges. No secrets."""
         ready = not settings.missing_for_default_mode()
+        meterless_ready = not any(k.startswith("METERLESS") or k.startswith("MODEL_") or k == "LLM_PROVIDER"
+                                  for k in settings.missing_for_default_mode())
+        zetaris_ready = "ZETARIS_REST_URL" not in settings.missing_for_default_mode() \
+            and "ZETARIS_API_KEY" not in settings.missing_for_default_mode()
         return {"sample_mode": settings.sample_mode or not ready, "default_mode_ready": ready,
                 "forced_sample_mode": settings.sample_mode, "model": settings.meterless_model
                 if settings.llm_provider == "meterless" else settings.llm_provider,
                 "data_source": "Zetaris" if ready and not settings.sample_mode else "sample data",
-                "hotkeys": ["Ctrl+Shift+Space", "Ctrl+K"]}
+                "hotkeys": ["Ctrl+Shift+Space", "Ctrl+K"],
+                "sponsors": {
+                    "meterless": {"ready": meterless_ready, "provider": "Meterless Nightshift",
+                                  "model": settings.meterless_model if settings.llm_provider == "meterless"
+                                  else settings.llm_provider},
+                    "zetaris": {"ready": zetaris_ready, "provider": "Zetaris"},
+                }}
 
     # Saved runs the Team pane can replay without keys (committed output_examples only).
     _REPLAYS = {
         "analysis_finance_live": {
-            "label": "Analysis · finance (live Nemotron)",
+            "label": "Analysis · finance (Nightshift + Zetaris)",
             "mode": "analysis",
             "path": ROOT / "output_examples" / "example_1.trace.jsonl",
-            "blurb": "Insight Critic revisions + Conflict Critic trust calls",
+            "blurb": "Nemotron via Meterless · Zetaris SQL · Insight/Conflict critics",
         },
         "analysis_finance_sample": {
             "label": "Analysis · finance (sample mode)",
@@ -172,10 +182,10 @@ def create_app(settings: Settings) -> FastAPI:
             "blurb": "Full 13-agent pipeline offline",
         },
         "task_expense_live": {
-            "label": "Task · expense claims (live QA loops)",
+            "label": "Task · expense (Nightshift + Zetaris)",
             "mode": "task",
             "path": ROOT / "output_examples" / "task_expense_claims.trace.jsonl",
-            "blurb": "Engineer v1 ✗ → v2 ✗ → v3 ✓ 49/49",
+            "blurb": "Nemotron via Meterless · Zetaris profile · QA v1→v3",
         },
     }
 
@@ -197,11 +207,19 @@ def create_app(settings: Settings) -> FastAPI:
                 events.append({k: e.get(k) for k in (
                     "timestamp", "run_id", "agent_name", "action", "status", "target_agent", "model",
                     "input_summary", "output_summary", "retry_count", "confidence", "cases",
-                    "cases_matched", "cells", "sheet", "code_hash", "audit_written")})
+                    "cases_matched", "cells", "sheet", "code_hash", "audit_written",
+                    "provider", "data_source", "purpose", "executed_sql")})
                 events[-1]["i"] = i
         run_id = events[0]["run_id"] if events else replay_id
+        models = sorted({e.get("model") for e in events if e.get("model")})
+        used_zetaris = any(e.get("target_agent") == "Zetaris" or e.get("data_source") == "zetaris"
+                           or (isinstance(e.get("data_source"), str) and "zetaris" in e["data_source"].lower())
+                           for e in events)
         return {"id": replay_id, "label": meta["label"], "mode": meta["mode"], "blurb": meta["blurb"],
-                "run_id": run_id, "replay": True, "events": events, "count": len(events)}
+                "run_id": run_id, "replay": True, "events": events, "count": len(events),
+                "sponsors": {"models": models, "zetaris": used_zetaris,
+                             "meterless": any(isinstance(m, str) and ("nemotron" in m.lower()
+                                            or m.startswith("meterless/")) for m in models)}}
 
     @app.get("/providers/meterless")
     def meterless_status() -> dict:

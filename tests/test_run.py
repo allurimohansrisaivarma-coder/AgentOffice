@@ -62,3 +62,28 @@ def test_invalid_request_is_structured(make_settings):
     assert r.json()["status"] == "error"
     assert r.json()["error"]["type"] == "invalid_request"
     assert "user_query" in r.json()["error"]["message"]
+
+
+def test_config_exposes_meterless_and_zetaris_sponsors(make_settings):
+    s = make_settings(sample_mode=False)
+    body = TestClient(create_app(s)).get("/config").json()
+    assert body["sponsors"]["meterless"]["ready"] is True
+    assert body["sponsors"]["meterless"]["provider"] == "Meterless Nightshift"
+    assert body["sponsors"]["zetaris"]["ready"] is True
+    assert body["data_source"] == "Zetaris"
+    assert body["forced_sample_mode"] is False
+
+
+def test_live_replay_keeps_nightshift_and_zetaris_fields(make_settings):
+    client = TestClient(create_app(make_settings(sample_mode=True)))
+    listed = client.get("/demos/replays").json()["replays"]
+    assert any(r["id"] == "task_expense_live" and r["available"] for r in listed)
+    body = client.get("/demos/replays/task_expense_live").json()
+    assert body["sponsors"]["meterless"] is True
+    assert body["sponsors"]["zetaris"] is True
+    assert any("nemotron" in (m or "").lower() for m in body["sponsors"]["models"])
+    query = next(e for e in body["events"] if e.get("action") == "data_query")
+    assert query["target_agent"] == "Zetaris" and query["data_source"] == "zetaris"
+    assert query.get("executed_sql")
+    model_ev = next(e for e in body["events"] if e.get("model") and "nemotron" in e["model"].lower())
+    assert model_ev.get("provider") and "meterless" in model_ev["provider"]

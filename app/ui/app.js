@@ -276,7 +276,10 @@ function stepClass(ev) {
 function stepDetail(ev) {
   let s = ev.summary || "";
   try { const j = JSON.parse(s); if (typeof j === "object") s = Array.isArray(j) ? j.join(" · ") : Object.entries(j).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · "); } catch (_) { /* plain text */ }
-  if (ev.action === "data_query") s = `${s}${ev.target === "Zetaris" ? " from Zetaris" : " from sample data"}`;
+  if (ev.action === "data_query") {
+    const z = ev.target === "Zetaris" || String(ev.data_source || "").toLowerCase() === "zetaris";
+    s = `${s}${z ? " from Zetaris" : " from sample data"}`;
+  }
   return s;
 }
 function addStep(run, ev) {
@@ -573,8 +576,9 @@ const CRITIC_ACTIONS = new Set(["critique_spec", "critique_output", "critique_pr
 
 const team = {
   mode: "task", runId: null, nodes: {}, edges: {}, edgeMeta: {}, attempts: {}, last: {},
-  models: {}, challenges: [], evidence: { claims: [], conflicts: [] },
+  models: {}, providers: {}, sources: {}, challenges: [], evidence: { claims: [], conflicts: [] },
   working: null, codeHash: null, replay: false, replayTimer: null, replayEvents: [], replayIndex: -1,
+  sponsors: null,
 };
 const sheet = {
   meta: null, active: null, data: {}, totals: {}, columns: {},
@@ -694,7 +698,7 @@ function teamDraw() {
       g.appendChild(tag);
     }
     const modelLine = svgEl("text", { class: "node-sub", x: 8, y: n.tag ? 38 : 28, "data-model": "1" });
-    modelLine.textContent = team.models[n.id] || (n.id === "QAAgent" ? "reference runtime" : "idle");
+    modelLine.textContent = teamModelCaption(n.id);
     g.appendChild(modelLine);
     const sub = svgEl("text", { class: "node-sub", x: 8, y: n.tag ? 48 : 38, "data-sub": "1" });
     sub.textContent = "idle";
@@ -714,10 +718,28 @@ function teamSetNode(id, cls, subText) {
   n.el.classList.remove("working", "done", "wait", "rejected");
   if (cls) n.el.classList.add(cls);
   if (subText != null) n.sub.textContent = subText;
-  if (n.modelLine) {
-    n.modelLine.textContent = team.models[id]
-      || (id === "QAAgent" ? "reference runtime" : (n.def.tag || ""));
-  }
+  if (n.modelLine) n.modelLine.textContent = teamModelCaption(id);
+}
+function shortModel(m) {
+  let s = String(m || "");
+  s = s.replace(/^nvidia\//i, "").replace(/^meterless\//i, "");
+  return shortText(s, 26);
+}
+function shortProvider(p) {
+  const s = String(p || "");
+  if (/meterless/i.test(s)) return "Meterless Nightshift";
+  return shortText(s, 28);
+}
+function teamModelCaption(id) {
+  const m = team.models[id];
+  const src = team.sources[id];
+  const parts = [];
+  if (m) parts.push(m);
+  else if (id === "QAAgent") parts.push("reference runtime");
+  if (src) parts.push(src);
+  if (parts.length) return parts.join(" · ");
+  const n = team.nodes[id];
+  return (n && n.def && n.def.tag) || "idle";
 }
 function teamLitEdge(from, to, warn, reason) {
   if (!from || !to) return;
@@ -862,9 +884,20 @@ function teamOnEvent(ev, replay) {
   if (ev.agent === "SourceMapperAgent" || ev.agent === "ResearchPlannerAgent" || ev.agent === "ConflictCriticAgent") {
     teamSetMode("analysis");
   }
-  if (ev.model && ev.model !== "offline-fallback") team.models[ev.agent] = shortText(ev.model, 28);
-  else if (ev.agent === "QAAgent") team.models[ev.agent] = "reference runtime";
-  else if (ev.model === "offline-fallback") team.models[ev.agent] = "offline-fallback";
+  if (ev.model && ev.model !== "offline-fallback") {
+    team.models[ev.agent] = shortModel(ev.model);
+    if (ev.provider) team.providers[ev.agent] = shortProvider(ev.provider);
+  } else if (ev.model === "offline-fallback") {
+    if (!team.models[ev.agent]) team.models[ev.agent] = "offline-fallback";
+  } else if (ev.agent === "QAAgent" && !team.models[ev.agent]) {
+    team.models[ev.agent] = "reference runtime";
+  } else if (CRITIC_ACTIONS.has(ev.action) && !team.models[ev.agent]) {
+    team.models[ev.agent] = "rules";
+  }
+  if (ev.action === "data_query") {
+    const z = ev.target === "Zetaris" || String(ev.data_source || "").toLowerCase() === "zetaris";
+    team.sources[ev.agent] = z ? "Zetaris" : (team.sources[ev.agent] || "sample");
+  }
 
   teamCaptureEvidence(ev);
   const ch = challengeFromEvent(ev);
@@ -933,7 +966,7 @@ function teamSetMode(mode) {
 function teamReset(mode) {
   team.mode = mode === "analysis" ? "analysis" : "task";
   team.runId = null; team.attempts = {}; team.last = {}; team.working = null; team.codeHash = null;
-  team.models = {}; team.challenges = []; team.edgeMeta = {};
+  team.models = {}; team.providers = {}; team.sources = {}; team.challenges = []; team.edgeMeta = {};
   team.evidence = { claims: [], conflicts: [] };
   teamDraw();
   challengesRender();
@@ -999,11 +1032,18 @@ function teamShowDetail(id) {
   const ev = team.last[id] || (id === "Human" ? team.last.ManagerAgent : null);
   const title = id === "Human" ? "Approval" : agentName(id);
   const attempt = teamAttemptLine(id === "Human" ? "EngineerAgent" : id);
-  const model = team.models[id] || ev?.model || (id === "QAAgent" ? "no model, reference runtime" : "—");
+  const model = team.models[id] || (ev?.model ? shortModel(ev.model) : null)
+    || (id === "QAAgent" ? "no model, reference runtime" : "—");
+  const provider = team.providers[id] || (ev?.provider ? shortProvider(ev.provider) : null);
+  const source = team.sources[id] || (ev?.data_source === "zetaris" || ev?.target === "Zetaris" ? "Zetaris" : null);
+  const sql = ev?.executed_sql ? shortText(ev.executed_sql, 220) : null;
   body.innerHTML = `<h4>${esc(title)}</h4>` +
     (attempt ? `<p class="muted">${esc(attempt)}</p>` : "") +
     (team.codeHash && id === "Human" ? `<p class="muted">code ${esc(String(team.codeHash).slice(0, 12))}</p>` : "") +
     `<div class="detail-block"><b>Model</b><pre>${esc(model)}</pre></div>` +
+    (provider ? `<div class="detail-block"><b>Provider</b><pre>${esc(provider)}</pre></div>` : "") +
+    (source ? `<div class="detail-block"><b>Data</b><pre>${esc(source)}</pre></div>` : "") +
+    (sql ? `<div class="detail-block"><b>SQL</b><pre>${esc(sql)}</pre></div>` : "") +
     (ev ? `<div class="detail-block"><b>Latest input</b><pre>${esc(ev.input || "—")}</pre></div>
       <div class="detail-block"><b>Latest output</b><pre>${esc(ev.summary || "—")}</pre></div>` :
       `<p class="muted">No events yet for this agent.</p>`) +
@@ -1246,17 +1286,29 @@ function selectSideTab(which) {
 }
 
 function toUiEvent(e) {
-  const summary = e.output_summary;
-  const input = e.input_summary;
+  // Live job events are already flattened (agent/summary); replay traces use agent_name/output_summary.
+  const summary = e.summary != null ? e.summary : e.output_summary;
+  const input = e.input != null ? e.input : e.input_summary;
   return {
-    i: e.i, at: e.timestamp, agent: e.agent_name, action: e.action, status: e.status,
-    target: e.target_agent, model: e.model,
+    i: e.i, at: e.at || e.timestamp, agent: e.agent || e.agent_name, action: e.action, status: e.status,
+    target: e.target || e.target_agent, model: e.model,
+    provider: e.provider, data_source: e.data_source, purpose: e.purpose, executed_sql: e.executed_sql,
     summary: typeof summary === "string" ? summary : (summary == null ? "" : JSON.stringify(summary)),
     input: typeof input === "string" ? input : (input == null ? "" : JSON.stringify(input)),
-    retry: e.retry_count || 0, confidence: e.confidence,
+    retry: e.retry != null ? e.retry : (e.retry_count || 0), confidence: e.confidence,
     cases: e.cases, cases_matched: e.cases_matched, cells: e.cells, sheet: e.sheet,
     code_hash: e.code_hash, audit_written: e.audit_written,
   };
+}
+function replaySponsorLabel(sponsors, runId) {
+  if (!sponsors) return `Replay of run ${runId || "saved"}`;
+  const bits = ["Replay"];
+  if (sponsors.meterless) bits.push("Meterless Nightshift");
+  const m = (sponsors.models || []).find((x) => x && x !== "offline-fallback");
+  if (m) bits.push(shortModel(m));
+  if (sponsors.zetaris) bits.push("Zetaris");
+  if (bits.length === 1) bits.push(`run ${runId || "saved"}`);
+  return bits.join(" · ");
 }
 function replayStop() {
   if (team.replayTimer) { clearTimeout(team.replayTimer); team.replayTimer = null; }
@@ -1268,7 +1320,7 @@ function replayApplyThrough(index) {
   const banner = $("replay-label");
   if (banner) {
     banner.hidden = false;
-    banner.textContent = `Replay of run ${team.runId || "saved"}`;
+    banner.textContent = replaySponsorLabel(team.sponsors, team.runId);
   }
   for (let i = 0; i <= index && i < team.replayEvents.length; i++) {
     const ui = toUiEvent(team.replayEvents[i]);
@@ -1285,9 +1337,10 @@ function replayPlay() {
   if (!team.replayEvents.length) return;
   team.replay = true;
   const banner = $("replay-label");
+  const label = () => replaySponsorLabel(team.sponsors, team.runId);
   if (banner) {
     banner.hidden = false;
-    banner.textContent = `Replay of run ${team.runId || "saved"}`;
+    banner.textContent = label();
   }
   selectSideTab("team");
   const step = () => {
@@ -1301,7 +1354,7 @@ function replayPlay() {
     if (team.replayIndex === 0) {
       teamReset(team.replayMode || "analysis");
       team.replay = true;
-      if (banner) banner.hidden = false;
+      if (banner) { banner.hidden = false; banner.textContent = label(); }
     }
     teamOnEvent(ui, true);
     if (ui.action === "cell_writes") sheetOnEvent(ui, true);
@@ -1315,7 +1368,7 @@ function replayPlay() {
   team.replay = true;
   if (banner) {
     banner.hidden = false;
-    banner.textContent = `Replay of run ${team.runId || "saved"}`;
+    banner.textContent = label();
   }
   step();
 }
@@ -1350,6 +1403,7 @@ async function startSelectedReplay() {
   team.replayEvents = data.events || [];
   team.replayMode = data.mode || "analysis";
   team.runId = data.run_id;
+  team.sponsors = data.sponsors || null;
   team.replay = true;
   const scrub = $("replay-scrub");
   if (scrub) {
@@ -1361,7 +1415,7 @@ async function startSelectedReplay() {
   const banner = $("replay-label");
   if (banner) {
     banner.hidden = false;
-    banner.textContent = `Replay of run ${data.run_id}`;
+    banner.textContent = replaySponsorLabel(team.sponsors, data.run_id);
   }
   replayPlay();
 }
@@ -1400,9 +1454,16 @@ async function init() {
     const c = state.config;
     $("sample-toggle").checked = c.sample_mode;
     $("sample-toggle").disabled = c.forced_sample_mode || !c.default_mode_ready;
-    const modeText = () => $("sample-toggle").checked
-      ? `<span class="dot sample"></span>Sample mode · bundled data, no sponsor calls`
-      : `<span class="dot"></span>Live · ${esc(c.model)} via Meterless Nightshift · Zetaris`;
+    const modeText = () => {
+      if ($("sample-toggle").checked) {
+        const liveHint = c.default_mode_ready
+          ? "bundled data, no sponsor calls"
+          : "bundled data · set Meterless Nightshift + Zetaris in .env for live";
+        return `<span class="dot sample"></span>Sample mode · ${liveHint}`;
+      }
+      const model = (c.sponsors && c.sponsors.meterless && c.sponsors.meterless.model) || c.model;
+      return `<span class="dot"></span>Live · ${esc(model)} via Meterless Nightshift · Zetaris`;
+    };
     $("mode").innerHTML = modeText();
     $("sample-toggle").addEventListener("change", () => { $("mode").innerHTML = modeText(); });
   } catch (_) {
