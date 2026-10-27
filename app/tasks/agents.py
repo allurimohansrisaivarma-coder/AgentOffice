@@ -324,16 +324,18 @@ def critique(spec: dict, parsed: dict, reference: dict) -> tuple[list[str], list
         elif step["op"] == "format_date":
             column = step["column"]
             if column in files.sheet_columns(parsed)[spec["input"]["sheet"]]:
-                bad = []
+                bad, arabic_ok = [], 0
                 for r in rows:
                     v = r.get(column)
                     if isinstance(v, str) and v.strip():
-                        if runtime.parse_date_value(v.strip(), step["input_formats"]) is None:
+                        if runtime.parse_date_value(v, step["input_formats"], arabic=bool(step.get("arabic"))) is None:
                             bad.append(v)
+                            arabic_ok += runtime.parse_date_value(v, step["input_formats"]) is not None
                 if bad:
-                    issues.append(f"{where}: {len(bad)} {column!r} values match none of the input formats "
-                                  f"(Arabic months and Hijri are tried automatically), e.g. "
-                                  f"{sorted(set(bad))[:3]}; add their formats (strptime codes)")
+                    fix = ('set "arabic": true on this step (they are Arabic month names, Indic digits or Hijri '
+                           'dates)' if arabic_ok == len(bad) else "add their formats (strptime codes)")
+                    issues.append(f"{where}: {len(bad)} {column!r} values match none of the input formats, e.g. "
+                                  f"{sorted(set(bad))[:3]}; {fix}")
         elif step["op"] == "compute":
             for col in runtime.expression_columns(step["expression"]):
                 if col in files.sheet_columns(parsed)[spec["input"]["sheet"]]:
@@ -342,10 +344,6 @@ def critique(spec: dict, parsed: dict, reference: dict) -> tuple[list[str], list
                         advisories.append(f"{where}: {len(texty)} {col!r} values are text (e.g. {texty[0]!r}), so "
                                           "their result is blank")
     return issues, advisories
-
-
-def _parses(value: str, fmt: str) -> bool:
-    return runtime.parse_date_value(value, [fmt]) is not None
 
 
 class TaskPlanner(Agent):
@@ -357,8 +355,8 @@ class TaskPlanner(Agent):
               "in Zetaris (the catalog lists exact column values; filter values are case-sensitive). When the profile "
               "notes Arabic digits, Arabic name spellings, Latin↔Arabic name mismatches, or Arabic separators, put "
               "arabic_digits / arabic_text / arabic_separators / arabic_names on lookup and dedupe normalize lists so "
-              "keys match the directory. For د.إ / ر.س / AED amounts use parse_amount before compute; format_date "
-              "handles Arabic month names and Hijri. The user may write the task in Arabic. Do only "
+              "keys match the directory. For د.إ / ر.س / AED amounts use parse_amount before compute; set \"arabic\": "
+              "true on format_date for Arabic month names, Indic digits or Hijri dates. The user may write the task in Arabic. Do only "
               "what was asked. If a request cannot be expressed with the steps, do the closest useful part and say "
               "what was left out in 'assumptions'. Think briefly. Reply with only a compact JSON object.")
 

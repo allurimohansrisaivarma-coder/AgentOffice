@@ -91,7 +91,6 @@ def _latin_name_variant(value: Any) -> Any:
     return value
 
 
-_ARABIC_RE = re.compile(r"[؀-ۿ]")
 _RUNTIME_SOURCE = Path(runtime.__file__).read_text(encoding="utf-8")
 
 
@@ -141,11 +140,8 @@ def build_cases(spec: dict, rows: list[dict], reference: dict, *, seed: int = 0,
     sample = head + rng.sample(rest, min(len(rest), max(0, sample_size - len(head))))
     add(f"{len(sample)} real rows from your file", "sample", copy.deepcopy(sample))
 
-    # Date columns with no Arabic text skip the Arabic-digit mutation: the reference parses ١٥/٠٣/٢٠٢٦ as a date,
-    # and an English sheet shouldn't make every live date task handle Indic digits to pass.
-    english_dates = {s["column"] for s in spec["steps"] if s["op"] == "format_date"
-                     and not any(isinstance(r.get(s["column"]), str) and _ARABIC_RE.search(r[s["column"]])
-                                 for r in rows)}
+    # English date steps skip the Arabic-digit mutation, so they never have to handle Indic digits to pass.
+    english_dates = {s["column"] for s in spec["steps"] if s["op"] == "format_date" and not s.get("arabic")}
     for col in declared:
         v = _first(rows, col)
         variants: list[tuple[str, Any]] = [("blank", None)]
@@ -275,9 +271,9 @@ def _edge_cases(step: dict, rows: list[dict], reference: dict, pick) -> list[tup
             r = pick()
             r[step["column"]] = day.strftime(fmt)
             out.append((f"date written as {fmt}", [r], None))
-        # Arabic month names and Hijri dates are tested only on a column that holds Arabic text: on an
-        # English sheet they would make every live date task depend on reproducing the Hijri calendar.
-        if any(isinstance(row.get(step["column"]), str) and _ARABIC_RE.search(row[step["column"]]) for row in rows):
+        # Arabic month names and Hijri dates are tested only on a step that opts in with "arabic": true, so an
+        # English date task never depends on reproducing the Hijri calendar.
+        if step.get("arabic"):
             r = pick()
             r[step["column"]] = "١٥ مارس ٢٠٢٦"
             out.append(("date with Arabic month name and Indic digits", [r], None))

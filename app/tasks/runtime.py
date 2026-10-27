@@ -211,12 +211,13 @@ def prepare_date_string(s: str) -> str:
     return " ".join(s.split())
 
 
-def parse_date_value(s: str, input_formats):
-    """Parse a date string with Arabic months / Hijri / listed strptime formats. None on miss."""
+def parse_date_value(s: str, input_formats, arabic: bool = True):
+    """Parse a date string with the listed strptime formats, plus Arabic months, Indic digits and Hijri dates
+    when arabic is on. None on miss."""
     if not isinstance(s, str) or not s.strip():
         return None
-    prepared = prepare_date_string(s)
-    hijri = _HIJRI_RE.match(prepared)
+    prepared = prepare_date_string(s) if arabic else s.strip()
+    hijri = _HIJRI_RE.match(prepared) if arabic else None
     if hijri:
         day_i, month_name, year_i = int(hijri.group(1)), hijri.group(2), int(hijri.group(3))
         month_i = _HIJRI_MONTHS.get(month_name)
@@ -512,7 +513,7 @@ def _format_date(rows, step):
         v = row.get(col)
         out = None
         if isinstance(v, str) and v.strip():
-            parsed = parse_date_value(v, step["input_formats"])
+            parsed = parse_date_value(v, step["input_formats"], arabic=bool(step.get("arabic")))
             if parsed is not None:
                 out = parsed.strftime(step["output_format"])
         if out is not None:

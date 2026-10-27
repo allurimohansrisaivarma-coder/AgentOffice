@@ -88,7 +88,7 @@ def test_lookup_matches_latin_to_arabic_directory_names():
 def test_format_date_handles_arabic_months_and_hijri():
     spec = {"input": {"columns": ["d"]}, "steps": [{"op": "format_date", "column": "d",
                                                      "input_formats": ["%d/%m/%Y", "%Y-%m-%d", "%d %b %Y"],
-                                                     "output_format": "%Y-%m-%d"}]}
+                                                     "output_format": "%Y-%m-%d", "arabic": True}]}
     out = runtime.execute(spec, rows(
         {"d": "١٥ مارس ٢٠٢٦"},
         {"d": "15 رمضان 1447"},
@@ -594,14 +594,20 @@ def test_a_repeated_request_reuses_the_approved_automation_without_asking_the_mo
     assert pm._same_request(request, {"Sheet1": ["A", "B"]}, approved, set()) is None
 
 
-def test_hijri_and_arabic_month_cases_only_for_columns_that_hold_arabic():
-    """An English date column must not make live code reproduce the Hijri calendar to pass QA."""
-    step = {"op": "format_date", "column": "Date", "input_formats": ["%d/%m/%Y"], "output_format": "%Y-%m-%d"}
-    spec = {"name": "dates", "summary": "fix dates", "input": {"sheet": "S", "columns": ["Date"]},
-            "references": {}, "steps": [step]}
-    purposes = lambda rows: {c["purpose"] for c in qa.build_cases(spec, rows, {})}
-    english = purposes([{"Date": "15/03/2026"}, {"Date": "16/03/2026"}])
-    arabic = purposes([{"Date": "15/03/2026"}, {"Date": "15 رمضان 1447"}])
+def test_arabic_dates_are_opt_in_so_english_date_tasks_stay_simple():
+    """Seen live: once every format_date had to handle Hijri and Arabic months, Nemotron's code for the English
+    expense demo failed QA four times. Only a step with "arabic": true is described and tested that way."""
+    from app.tasks.spec import describe
+    english_step = {"op": "format_date", "column": "Date", "input_formats": ["%d/%m/%Y"], "output_format": "%Y-%m-%d"}
+    spec = lambda step: {"name": "dates", "summary": "fix dates", "input": {"sheet": "S", "columns": ["Date"]},
+                         "references": {}, "steps": [step]}
+    purposes = lambda step, rows: {c["purpose"] for c in qa.build_cases(spec(step), rows, {})}
+    rows = [{"Date": "15/03/2026"}, {"Date": "15 رمضان 1447"}]
+    english = purposes(english_step, rows)
+    arabic = purposes({**english_step, "arabic": True}, rows)
+    assert "Hijri" not in describe(spec(english_step)) and "Hijri" in describe(spec({**english_step, "arabic": True}))
+    assert runtime.execute(spec(english_step), rows, {})["rows"][1]["Date"] == "15 رمضان 1447"      # kept as is
+    assert runtime.execute(spec({**english_step, "arabic": True}), rows, {})["rows"][1]["Date"] == "2026-03-04"
     hijri = lambda names: any(n.endswith("Hijri date") for n in names)
     assert not hijri(english) and hijri(arabic)
     assert "Date: Arabic-Indic digits" not in english and "Date: Arabic-Indic digits" in arabic

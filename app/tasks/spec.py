@@ -66,12 +66,11 @@ OP_DOCS = {
               "parts = s.split(None, n - 1) when separator is exactly ' ', else s.split(separator, n - 1). "
               "into[i] = parts[i].strip(), or None when that part is missing or ''."),
     "format_date": ('{"op": "format_date", "column": col, "input_formats": ["%d/%m/%Y", "%d %b %Y", ...], '
-                    '"output_format": "%Y-%m-%d", "invalid": "keep|blank"}',
-                    "Only str values that are not blank: first map Arabic-Indic digits and Arabic Gregorian month "
-                    "names (يناير→Jan, …); if the text is a Hijri date (e.g. '15 رمضان 1447') convert via the "
-                    "civil Hijri calendar; else try datetime.strptime on the prepared text for each input format. "
-                    "First success → strftime(output_format). Non-str / blank / no match: unchanged with invalid "
-                    "'keep', None with 'blank'."),
+                    '"output_format": "%Y-%m-%d", "invalid": "keep|blank", '
+                    '"arabic": true (only when the column has Arabic month names, Indic digits or Hijri dates)}',
+                    "Only str values that are not blank: try datetime.strptime(value.strip(), fmt) for each input "
+                    "format in order; the first that parses gives value = parsed.strftime(output_format). Values "
+                    "that are not str, blank, or match no format: unchanged with invalid 'keep', None with 'blank'."),
     "parse_amount": ('{"op": "parse_amount", "column": col, "invalid": "keep|blank"}',
                      "Where the value is a Gulf/Latin amount string (د.إ ١٬٢٣٤٫٥٠, ر.س 100, AED 1,234.50), strip "
                      "currency tokens, map Arabic digits/separators, and store a float. Real int/float values are "
@@ -145,7 +144,8 @@ When the file profile notes Arabic-Indic digits, Arabic script names, Latin↔Ar
 decimal/thousands separators (common in UAE/Saudi sheets), put arabic_digits / arabic_text / arabic_separators /
 arabic_names on the lookup or dedupe normalize list so keys match the directory (Spec Critic rejects the plan if
 you omit the ones that raise the hit rate). For amount columns with د.إ / ر.س / AED, use parse_amount before
-compute. format_date already accepts Arabic month names and Hijri dates alongside the listed strptime formats.
+compute. Put "arabic": true on format_date when the date column holds Arabic month names, Indic digits or Hijri
+dates (and only then).
 Column names are the sheet's header text exactly (case and spaces matter). A step may use columns created by
 earlier steps. Use references only for data the sheet does not have; "fields" lists the reference fields used.
 {columns_hint}"""
@@ -261,6 +261,8 @@ def _step_errors(step: dict, where: str, available: list[str], references: dict,
             errors.append(f"{where}.output_format must be a strftime format")
         if step.get("invalid", "keep") not in ("keep", "blank"):
             errors.append(f"{where}.invalid must be 'keep' or 'blank'")
+        if not isinstance(step.get("arabic", False), bool):
+            errors.append(f"{where}.arabic must be true or false")
     elif op == "parse_amount":
         need_col("column")
         if step.get("invalid", "keep") not in ("keep", "blank"):
@@ -392,6 +394,15 @@ def _safe_created(step: dict) -> list[str]:
         return []
 
 
+# Only described to the Engineer when a step opts in, so English date steps stay as simple as before.
+ARABIC_DATE_DOC = (
+    "format_date with \"arabic\": true: before strptime, map Arabic-Indic digits to 0-9, replace Arabic Gregorian "
+    "month names with English abbreviations (يناير→Jan, فبراير→Feb, مارس→Mar, أبريل→Apr, مايو→May, يونيو→Jun, "
+    "يوليو→Jul, أغسطس→Aug, سبتمبر→Sep, أكتوبر→Oct, نوفمبر→Nov, ديسمبر→Dec) and collapse whitespace; a value "
+    "'<day> <Hijri month name> <year>' (e.g. '15 رمضان 1447') is converted with the civil (Kuwaiti) Hijri "
+    "algorithm. Without \"arabic\", none of this applies.")
+
+
 def describe(spec: dict) -> str:
     """The exact semantics of this spec, in words, for the Engineer (only the ops it uses)."""
     used = []
@@ -417,6 +428,8 @@ def describe(spec: dict) -> str:
     lines.append("Step semantics:")
     for op in used:
         lines.append(f"  - {op}: {OP_DOCS[op][1]}")
+    if any(s["op"] == "format_date" and s.get("arabic") for s in spec["steps"]):
+        lines.append(f"  - {ARABIC_DATE_DOC}")
     if any(op in ("flag", "filter") for op in used):
         lines.append(f"  - {CONDITION_DOC}")
     if spec.get("output_columns"):
@@ -525,7 +538,7 @@ DEMO_SPECS: dict[str, dict] = {
              "statuses": {"found": "matched", "not_found": "missing", "ambiguous": "ambiguous"}},
             {"op": "format_date", "column": "Date",
              "input_formats": ["%Y-%m-%d", "%d/%m/%Y", "%d %b %Y", "%d %B %Y"],
-             "output_format": "%Y-%m-%d", "invalid": "keep"},
+             "output_format": "%Y-%m-%d", "invalid": "keep", "arabic": True},
             {"op": "parse_amount", "column": "Amount", "invalid": "keep"},
         ],
     },
