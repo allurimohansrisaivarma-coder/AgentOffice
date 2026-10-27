@@ -79,6 +79,11 @@ def _key_variant(value: str, steps: list[str]) -> Optional[str]:
             variant = f"#{variant[:2]}-{variant[2:]}"
     if "arabic_text" in steps and "ا" in variant:
         variant = variant.replace("ا", "أ", 1)
+    if "arabic_names" in steps:
+        for src, dst in (("Mohammed", "Muhammad"), ("Ahmed", "Ahmad"), ("Khaled", "Khalid")):
+            if src in variant:
+                variant = variant.replace(src, dst, 1)
+                break
     if "arabic_separators" in steps and ("." in variant or "," in variant):
         variant = variant.replace(".", "٫").replace(",", "٬")
     return variant if variant != value else None

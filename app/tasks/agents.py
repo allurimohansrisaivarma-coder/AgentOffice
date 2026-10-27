@@ -36,7 +36,7 @@ def _q(value: str) -> str:
 _DIGIT_RE = re.compile(r"[\d٠-٩۰-۹]+")
 _LETTER_RE = re.compile(r"[A-Za-z\u0600-\u06FF]+")
 _ARABIC_SCRIPT_RE = re.compile(r"[\u0600-\u06FF]")
-_ARABIC_NORMALIZE = ("arabic_digits", "arabic_text", "arabic_separators")
+_ARABIC_NORMALIZE = ("arabic_digits", "arabic_text", "arabic_separators", "arabic_names")
 
 
 def _mask(col: str, value: Any) -> Any:
@@ -90,8 +90,13 @@ class FrontDesk(Agent):
 
     TASK_WORDS = ("fill", "clean", "tidy", "match", "look up", "lookup", "format", "flag", "dedupe", "duplicate",
                   "sort", "total", "sum", "split", "merge", "convert", "standardi", "spreadsheet", "sheet", "excel",
-                  "csv", "column", "row")
-    ANALYSIS_WORDS = ("where", "time", "hours", "automate", "bottleneck", "slow", "losing", "team", "why", "workload")
+                  "csv", "column", "row",
+                  # Arabic task phrasing (UAE/Saudi users type the request in Arabic); verbs only, since
+                  # short nouns like "صف" (row) also occur inside other words ("وصف", description)
+                  "املأ", "املا", "عبّئ", "عبئ", "نظّف", "نظف", "طابق", "ابحث", "أصلح", "اصلح",
+                  "رتّب", "رتب", "احذف")
+    ANALYSIS_WORDS = ("where", "time", "hours", "automate", "bottleneck", "slow", "losing", "team", "why", "workload",
+                      "أين", "اين", "وقت", "ساعات", "أتمتة", "اتمتة")
     # Asking for a message to be written, not a mention of email ("check each lead ... by email" is a task).
     EMAIL_ASK = re.compile(r"\b(draft|compose)\b|\b(write|send)\s+(an?\s+)?(e-?mail|message|note|reply)\b"
                            r"|\b(e-?mail|reply|write)\s+to\b", re.I)
@@ -103,11 +108,13 @@ class FrontDesk(Agent):
     def route(self, message: str, *, has_file: bool) -> dict:
         if self.offline:
             low = message.lower()
+            arabic_task = any(w in message for w in self.TASK_WORDS if not w.isascii())
             if self.EMAIL_ASK.search(message):
                 intent = "email"
-            elif has_file:
+            elif has_file or arabic_task:
                 intent = "task"
-            elif any(w in low for w in self.ANALYSIS_WORDS) and not any(w in low for w in self.TASK_WORDS):
+            elif any(w in low or w in message for w in self.ANALYSIS_WORDS) and not any(
+                    w in low or w in message for w in self.TASK_WORDS):
                 intent = "analysis"
             elif any(low.startswith(w) or f" {w}" in low for w in self.QUESTION_WORDS):
                 intent = "question"
@@ -199,8 +206,8 @@ class DataProfiler(Agent):
                     arabic_folded = {_fold_arabic(v) for v, _ in pairs}
                     if len(arabic_folded) < len(folded):
                         info["note"] = (f"{len(pairs)} spellings of {len(arabic_folded)} values "
-                                        "(Arabic digits/letters/separators differ; use arabic_digits / "
-                                        "arabic_text / arabic_separators on lookup keys)")
+                                        "(Arabic digits/letters/separators/names differ; use arabic_digits / "
+                                        "arabic_text / arabic_separators / arabic_names on lookup keys)")
                     elif len(folded) < len(pairs):
                         info["note"] = f"{len(pairs)} spellings of {len(folded)} values (case/spacing differ)"
                 elif info["type"] in ("text", "mixed") and present:
@@ -226,7 +233,7 @@ class DataProfiler(Agent):
                         if arabic_n > digits_n:
                             parts.append(f"{arabic_n} with Arabic script")
                         notes.append("; ".join(parts) + " (normalize with arabic_digits / arabic_text / "
-                                     "arabic_separators for directory lookups)")
+                                     "arabic_separators / arabic_names for directory lookups)")
                     if notes:
                         info["note"] = "; ".join(notes)
                 columns.append(info)
@@ -321,10 +328,11 @@ def critique(spec: dict, parsed: dict, reference: dict) -> tuple[list[str], list
                 for r in rows:
                     v = r.get(column)
                     if isinstance(v, str) and v.strip():
-                        if not any(_parses(v.strip(), f) for f in step["input_formats"]):
+                        if runtime.parse_date_value(v.strip(), step["input_formats"]) is None:
                             bad.append(v)
                 if bad:
-                    issues.append(f"{where}: {len(bad)} {column!r} values match none of the input formats, e.g. "
+                    issues.append(f"{where}: {len(bad)} {column!r} values match none of the input formats "
+                                  f"(Arabic months and Hijri are tried automatically), e.g. "
                                   f"{sorted(set(bad))[:3]}; add their formats (strptime codes)")
         elif step["op"] == "compute":
             for col in runtime.expression_columns(step["expression"]):
@@ -337,12 +345,7 @@ def critique(spec: dict, parsed: dict, reference: dict) -> tuple[list[str], list
 
 
 def _parses(value: str, fmt: str) -> bool:
-    from datetime import datetime
-    try:
-        datetime.strptime(value, fmt)
-        return True
-    except ValueError:
-        return False
+    return runtime.parse_date_value(value, [fmt]) is not None
 
 
 class TaskPlanner(Agent):
@@ -352,8 +355,10 @@ class TaskPlanner(Agent):
               "Turn the user's request into a precise step spec over their file, using only the step types given. "
               "Use the file profile (exact column names and values) and, for data the file lacks, the company tables "
               "in Zetaris (the catalog lists exact column values; filter values are case-sensitive). When the profile "
-              "notes Arabic digits, Arabic name spellings, or Arabic separators, put arabic_digits / arabic_text / "
-              "arabic_separators on lookup and dedupe normalize lists so keys match the Zetaris directory. Do only "
+              "notes Arabic digits, Arabic name spellings, Latin↔Arabic name mismatches, or Arabic separators, put "
+              "arabic_digits / arabic_text / arabic_separators / arabic_names on lookup and dedupe normalize lists so "
+              "keys match the directory. For د.إ / ر.س / AED amounts use parse_amount before compute; format_date "
+              "handles Arabic month names and Hijri. The user may write the task in Arabic. Do only "
               "what was asked. If a request cannot be expressed with the steps, do the closest useful part and say "
               "what was left out in 'assumptions'. Think briefly. Reply with only a compact JSON object.")
 
@@ -829,7 +834,7 @@ def _summarize_source(step: dict) -> str:
 _STEP_PLAIN = {
     "clean_text": "tidy text", "fill_blank": "fill blanks", "map_values": "map values",
     "lookup": "look up values", "compute": "compute", "concat": "join text", "split": "split text",
-    "format_date": "fix dates", "flag": "flag rows", "filter": "filter rows", "dedupe": "remove duplicates",
+    "format_date": "fix dates", "parse_amount": "parse amounts", "flag": "flag rows", "filter": "filter rows", "dedupe": "remove duplicates",
     "sort": "sort rows", "summarize": "summarize by group",
 }
 

@@ -46,6 +46,20 @@ const HIDDEN = new Set(["zetaris_query"]);
 function esc(v) {
   return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+/** True when the text has Arabic-script letters (UAE/Saudi instructions and sheet cells). */
+function hasArabic(text) {
+  return /[\u0600-\u06FF]/.test(String(text ?? ""));
+}
+function applyRtl(node, text) {
+  if (!node) return;
+  if (hasArabic(text)) {
+    node.setAttribute("dir", "rtl");
+    node.setAttribute("lang", "ar");
+  } else {
+    node.removeAttribute("dir");
+    node.removeAttribute("lang");
+  }
+}
 function el(tag, cls, html) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -228,9 +242,16 @@ function bot(html, extra) {
 }
 function user(text, meta) {
   const m = el("div", "msg user");
+  applyRtl(m, text);
   m.appendChild(document.createTextNode(text));
   if (meta) m.appendChild(el("div", "file-chip", `<span aria-hidden="true">📄</span><span class="name">${esc(meta.filename)}</span>`));
   messages.appendChild(m);
+  if (hasArabic(text)) {
+    applyRtl(input, text);
+    applyRtl(messages, text);
+    const host = $("sheet-grid");
+    if (host) applyRtl(host, text);
+  }
   scrollDown();
 }
 function welcome() {
@@ -264,7 +285,10 @@ function welcome() {
 // ------------------------------------------------------------------ sending + live runs
 
 function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 140) + "px"; }
-input.addEventListener("input", autosize);
+input.addEventListener("input", () => {
+  applyRtl(input, input.value);
+  autosize();
+});
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
 });
@@ -274,7 +298,7 @@ form.addEventListener("submit", async (e) => {
   if (!text || state.busy) return;
   const attachment = state.attachment;
   user(text, attachment);
-  input.value = ""; autosize();
+  input.value = ""; applyRtl(input, ""); autosize();
   // Keep the sheet preview for the right pane; clear only the composer chip.
   state.attachment = null;
   attachmentEl.innerHTML = "";
@@ -1308,6 +1332,9 @@ function sheetRender() {
   const rows = sheet.data[sheet.active] || [];
   const total = sheet.totals[sheet.active] ?? rows.length;
   const shown = rows.slice(0, 200);
+  const sheetHasArabic = cols.some((c) => hasArabic(c)) ||
+    shown.some((r) => cols.some((c) => hasArabic(fmt(r[c]))));
+  applyRtl(host, sheetHasArabic ? "ع" : "");
   let html = `<table><thead><tr><th class="row-num">#</th>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>`;
   for (let i = 0; i < shown.length; i++) {
     const r = shown[i];
@@ -1315,7 +1342,9 @@ function sheetRender() {
     for (const c of cols) {
       const key = `${sheet.active}|${i + 1}|${c}`;
       const cls = sheetCellClass(key, r[c]);
-      html += `<td data-cell="${esc(key)}" class="${cls}" title="${esc(sheetCellTitle(key, r[c]))}">${esc(fmt(r[c]))}</td>`;
+      const cellText = fmt(r[c]);
+      const dirAttr = hasArabic(cellText) ? ' dir="rtl" lang="ar"' : "";
+      html += `<td data-cell="${esc(key)}" class="${cls}" title="${esc(sheetCellTitle(key, r[c]))}"${dirAttr}>${esc(cellText)}</td>`;
     }
     html += `</tr>`;
   }

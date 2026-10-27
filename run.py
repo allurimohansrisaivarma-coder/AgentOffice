@@ -58,9 +58,10 @@ _REPLAY_FIELDS = ("timestamp", "run_id", "agent_name", "action", "status", "targ
                   "rows_out", "cells_changed", "code_hash", "audit_written", "provider", "data_source", "purpose",
                   "executed_sql")
 DEMO_PROMPTS = {
-    "demo_expense_claims": "Fill in each employee's team and role from our staff directory, tidy the category "
-                           "names, convert the dates to YYYY-MM-DD, add the amount including 10% GST, flag claims "
-                           "over 500 for approval and give me totals by team on a separate sheet.",
+    "demo_uae_staff_lookup": "املأ الفريق لكل موظف من دليل الأسماء، أصلح التواريخ، وحوّل المبالغ",
+    "demo_expense_claims": ("Fill in each employee's team and role from our staff directory, tidy the category "
+                            "names, convert the dates to YYYY-MM-DD, add the amount including 10% GST, flag claims "
+                            "over 500 for approval and give me totals by team on a separate sheet."),
     "demo_vendor_invoices": "Remove duplicate invoices, fill blank statuses with Pending, mark unpaid invoices due "
                             "before 2026-10-15 as Overdue and sort by due date.",
     "demo_leads_and_contacts": "Split the full names into first and last name, check each lead against the CRM "

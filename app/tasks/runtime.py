@@ -19,7 +19,7 @@ from datetime import datetime
 
 NORMALIZERS = (
     "strip", "upper", "lower", "collapse_spaces", "digits_only",
-    "arabic_digits", "arabic_text", "arabic_separators",
+    "arabic_digits", "arabic_text", "arabic_separators", "arabic_names",
 )
 
 # Arabic-Indic (U+0660..) and Extended Arabic-Indic / Persian (U+06F0..) -> ASCII.
@@ -30,6 +30,82 @@ _ARABIC_LETTERS = str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا",
 _ARABIC_SEPARATORS = str.maketrans({"٫": ".", "٬": ","})
 # Tatweel + harakat / superscript alef (not digits: those start at U+0660).
 _ARABIC_MARKS = frozenset("\u0640" + "".join(chr(c) for c in range(0x064B, 0x0660)) + "\u0670")
+
+# Cross-script given-name folding: محمد ↔ Mohammed/Muhammad/Mohamed/Mohd, etc.
+# Keys on the Arabic side are post-arabic_text forms; Latin aliases map to the same canon.
+# Keys are post-arabic_text forms (ة→ه, ى→ي, أ/إ/آ→ا) so lookup after folding works.
+_NAME_AR_TO_CANON = {
+    "محمد": "mohammad", "محمود": "mahmoud", "احمد": "ahmad", "علي": "ali", "حسن": "hassan",
+    "حسين": "hussein", "خالد": "khalid", "عمر": "omar", "عثمان": "othman", "يوسف": "youssef",
+    "ابراهيم": "ibrahim", "اسماعيل": "ismail", "عبدالله": "abdullah", "عبدالرحمن": "abdulrahman",
+    "عبدالعزيز": "abdulaziz", "فهد": "fahad", "سلطان": "sultan", "سعود": "saud", "ناصر": "nasser",
+    "سالم": "salem", "سعيد": "saeed", "راشد": "rashid", "حمد": "hamad", "حمدان": "hamdan",
+    "فاطمه": "fatima", "عائشه": "aisha", "مريم": "maryam", "نوره": "noura", "هند": "hind",
+    "ساره": "sara", "لينا": "lina", "ريم": "reem", "مني": "mona", "ندي": "nada",
+}
+_NAME_LATIN_TO_CANON = {}
+for _canon, _aliases in {
+    "mohammad": ("mohammad", "muhammad", "mohammed", "mohamed", "mohd", "muhamed", "muhammed", "mo"),
+    "mahmoud": ("mahmoud", "mahmud", "mahmood"),
+    "ahmad": ("ahmad", "ahmed"),
+    "ali": ("ali",),
+    "hassan": ("hassan", "hasan"),
+    "hussein": ("hussein", "hussain", "hosein"),
+    "khalid": ("khalid", "khaled"),
+    "omar": ("omar", "umar"),
+    "othman": ("othman", "uthman", "osman"),
+    "youssef": ("youssef", "yousef", "yusuf", "yosef"),
+    "ibrahim": ("ibrahim", "ebraheem", "ibraheem"),
+    "ismail": ("ismail", "ismael"),
+    "abdullah": ("abdullah", "abdalla", "abdallah", "abdollah"),
+    "abdulrahman": ("abdulrahman", "abdurrahman", "abdul-rahman"),
+    "abdulaziz": ("abdulaziz", "abdul-aziz", "abdelaziz"),
+    "fahad": ("fahad", "fahd"),
+    "sultan": ("sultan",),
+    "saud": ("saud",),
+    "nasser": ("nasser", "nasir"),
+    "salem": ("salem", "salim"),
+    "saeed": ("saeed", "said", "saeid"),
+    "rashid": ("rashid", "rashed"),
+    "hamad": ("hamad", "hamed", "hamid"),
+    "hamdan": ("hamdan",),
+    "fatima": ("fatima", "fatimah", "fatma"),
+    "aisha": ("aisha", "aysha", "aishah"),
+    "maryam": ("maryam", "mariam", "mary"),
+    "noura": ("noura", "nora", "norah"),
+    "hind": ("hind",),
+    "sara": ("sara", "sarah"),
+    "lina": ("lina", "leena"),
+    "reem": ("reem", "rim"),
+    "mona": ("mona", "muna"),
+    "nada": ("nada",),
+}.items():
+    for _a in _aliases:
+        _NAME_LATIN_TO_CANON[_a] = _canon
+
+# Gregorian month names in Arabic → English abbreviation for strptime %b.
+_AR_GREGORIAN_MONTHS = {
+    "يناير": "Jan", "فبراير": "Feb", "مارس": "Mar", "أبريل": "Apr", "ابريل": "Apr",
+    "مايو": "May", "يونيو": "Jun", "يونية": "Jun", "يوليو": "Jul", "يولية": "Jul",
+    "أغسطس": "Aug", "اغسطس": "Aug", "سبتمبر": "Sep", "أكتوبر": "Oct", "اكتوبر": "Oct",
+    "نوفمبر": "Nov", "ديسمبر": "Dec",
+}
+# Hijri month name → month number (1-12).
+_HIJRI_MONTHS = {
+    "محرم": 1, "صفر": 2, "ربيع الأول": 3, "ربيع اول": 3, "ربيع الآخر": 4, "ربيع الثاني": 4,
+    "جمادى الأولى": 5, "جمادى الاولى": 5, "جمادى الأول": 5, "جمادى الآخرة": 6, "جمادى الاخرة": 6,
+    "جمادى الثانية": 6, "رجب": 7, "شعبان": 8, "رمضان": 9, "شوال": 10,
+    "ذو القعدة": 11, "ذي القعدة": 11, "ذو الحجة": 12, "ذي الحجة": 12,
+}
+_CURRENCY_TOKENS = (
+    "د.إ.", "د.إ", "دإ", "ر.س.", "ر.س", "رس", "AED", "SAR", "USD", "GBP", "EUR",
+    "DH", "Dhs", "د.ا.إ", "درهم", "ريال", "فلس",
+)
+_AMOUNT_NOISE = re.compile(r"[^\d.\-]+")
+_HIJRI_RE = re.compile(
+    r"^(\d{1,2})\s+(" + "|".join(re.escape(m) for m in sorted(_HIJRI_MONTHS, key=len, reverse=True))
+    + r")\s+(\d{3,4})$"
+)
 
 
 class SpecError(ValueError):
@@ -65,6 +141,98 @@ def arabic_separators(s):
     return s.translate(_ARABIC_SEPARATORS)
 
 
+def _name_token_canon(token: str) -> str:
+    """Fold one name token (already arabic_text + lower) to a Latin canon when known."""
+    if not token:
+        return token
+    if token in _NAME_AR_TO_CANON:
+        return _NAME_AR_TO_CANON[token]
+    latin = _NAME_LATIN_TO_CANON.get(token)
+    if latin:
+        return latin
+    # Drop Arabic script leftovers that we don't map (keep Latin surname as-is).
+    if any("\u0600" <= ch <= "\u06FF" for ch in token):
+        return token
+    return token
+
+
+def arabic_names(s):
+    """Transliteration-aware name key: محمد علي and Mohammed Ali → 'mohammad ali'."""
+    folded = arabic_text(arabic_digits(s))
+    tokens = " ".join(folded.split()).casefold().split()
+    return " ".join(_name_token_canon(t) for t in tokens)
+
+
+def parse_amount(v):
+    """Number from Gulf amount strings (د.إ ١٬٢٣٤٫٥٠ / AED 1,234.50) or a real int/float."""
+    if is_num(v):
+        return float(v)
+    if not isinstance(v, str) or not v.strip():
+        return None
+    s = arabic_digits(arabic_separators(v.strip()))
+    for tok in _CURRENCY_TOKENS:
+        s = s.replace(tok, "")
+        s = s.replace(tok.lower(), "")
+        s = s.replace(tok.upper(), "")
+    s = s.replace(",", "").strip()
+    s = _AMOUNT_NOISE.sub("", s)
+    if not s or s in {".", "-", "-."}:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _hijri_to_gregorian(y: int, m: int, d: int):
+    """Kuwaiti algorithm: Islamic civil calendar → Gregorian date."""
+    # Source: widely used civil Hijri conversion (Fliegel / Kuwaiti).
+    jd = int((11 * y + 3) / 30) + 354 * y + 30 * m - int((m - 1) / 2) + d + 1948440 - 385
+    l = jd + 68569
+    n = int((4 * l) / 146097)
+    l = l - int((146097 * n + 3) / 4)
+    i = int((4000 * (l + 1)) / 1461001)
+    l = l - int((1461 * i) / 4) + 31
+    j = int((80 * l) / 2447)
+    day = l - int((2447 * j) / 80)
+    l = int(j / 11)
+    month = j + 2 - 12 * l
+    year = 100 * (n - 49) + i + l
+    return datetime(year, month, day)
+
+
+def prepare_date_string(s: str) -> str:
+    """Arabic-Indic digits + Arabic Gregorian month names → strptime-friendly text."""
+    s = arabic_digits(s.strip())
+    # Longer month phrases first is handled by iterating sorted-by-length.
+    for ar, en in sorted(_AR_GREGORIAN_MONTHS.items(), key=lambda kv: -len(kv[0])):
+        if ar in s:
+            s = s.replace(ar, en)
+    return " ".join(s.split())
+
+
+def parse_date_value(s: str, input_formats):
+    """Parse a date string with Arabic months / Hijri / listed strptime formats. None on miss."""
+    if not isinstance(s, str) or not s.strip():
+        return None
+    prepared = prepare_date_string(s)
+    hijri = _HIJRI_RE.match(prepared)
+    if hijri:
+        day_i, month_name, year_i = int(hijri.group(1)), hijri.group(2), int(hijri.group(3))
+        month_i = _HIJRI_MONTHS.get(month_name)
+        if month_i:
+            try:
+                return _hijri_to_gregorian(year_i, month_i, day_i)
+            except ValueError:
+                pass
+    for fmt in input_formats:
+        try:
+            return datetime.strptime(prepared, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def normalize(v, steps):
     s = text(v)
     for step in steps:
@@ -84,6 +252,8 @@ def normalize(v, steps):
             s = arabic_text(s)
         elif step == "arabic_separators":
             s = arabic_separators(s)
+        elif step == "arabic_names":
+            s = arabic_names(s)
     return s
 
 
@@ -342,14 +512,25 @@ def _format_date(rows, step):
         v = row.get(col)
         out = None
         if isinstance(v, str) and v.strip():
-            for fmt in step["input_formats"]:
-                try:
-                    out = datetime.strptime(v.strip(), fmt).strftime(step["output_format"])
-                    break
-                except ValueError:
-                    continue
+            parsed = parse_date_value(v, step["input_formats"])
+            if parsed is not None:
+                out = parsed.strftime(step["output_format"])
         if out is not None:
             row[col] = out
+        elif step.get("invalid", "keep") == "blank":
+            row[col] = None
+    return rows
+
+
+def _parse_amount(rows, step):
+    col = step["column"]
+    for row in rows:
+        v = row.get(col)
+        if is_blank(v):
+            continue
+        parsed = parse_amount(v)
+        if parsed is not None:
+            row[col] = parsed
         elif step.get("invalid", "keep") == "blank":
             row[col] = None
     return rows
@@ -431,8 +612,8 @@ def _summarize(rows, step):
 
 
 ROW_OPS = {"clean_text": _clean_text, "fill_blank": _fill_blank, "map_values": _map_values, "compute": _compute,
-           "concat": _concat, "split": _split, "format_date": _format_date, "flag": _flag, "filter": _filter,
-           "dedupe": _dedupe, "sort": _sort}
+           "concat": _concat, "split": _split, "format_date": _format_date, "parse_amount": _parse_amount,
+           "flag": _flag, "filter": _filter, "dedupe": _dedupe, "sort": _sort}
 
 
 def created_columns(step):

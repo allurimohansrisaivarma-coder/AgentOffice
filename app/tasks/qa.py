@@ -68,6 +68,29 @@ def _arabic_separator_variant(value: Any) -> Any:
         return value
     return value.replace(".", "٫").replace(",", "٬")
 
+
+# Latin given-name spelling swaps QA uses when arabic_names is on the key.
+_LATIN_NAME_SWAPS = (
+    ("Mohammed", "Muhammad"), ("Muhammad", "Mohamed"), ("Mohamed", "Mohd"),
+    ("Mohd", "Mohammed"), ("Ahmed", "Ahmad"), ("Ahmad", "Ahmed"),
+    ("Khaled", "Khalid"), ("Khalid", "Khaled"), ("Hassan", "Hasan"),
+)
+
+
+def _latin_name_variant(value: Any) -> Any:
+    """A different Latin spelling that arabic_names should still fold to the same key."""
+    if not isinstance(value, str) or not value:
+        return value
+    for src, dst in _LATIN_NAME_SWAPS:
+        if src in value:
+            return value.replace(src, dst, 1)
+        if src.lower() in value:
+            return value.replace(src.lower(), dst.lower(), 1)
+        if src.upper() in value:
+            return value.replace(src.upper(), dst.upper(), 1)
+    return value
+
+
 _RUNTIME_SOURCE = Path(runtime.__file__).read_text(encoding="utf-8")
 
 
@@ -128,6 +151,9 @@ def build_cases(spec: dict, rows: list[dict], reference: dict, *, seed: int = 0,
             name_v = _arabic_name_variant(v)
             if name_v != v:
                 variants.append(("Arabic name spelling variant", name_v))
+            latin_v = _latin_name_variant(v)
+            if latin_v != v:
+                variants.append(("Latin name spelling variant", latin_v))
             sep_v = _arabic_separator_variant(v)
             if sep_v != v:
                 variants.append(("Arabic decimal/thousands separators", sep_v))
@@ -176,6 +202,18 @@ def _edge_cases(step: dict, rows: list[dict], reference: dict, pick) -> list[tup
                     r = pick()
                     r[step["key"]] = name_v
                     out.append(("key uses an Arabic spelling variant", [r], None))
+            if "arabic_names" in steps and isinstance(raw, str):
+                latin_v = _latin_name_variant(raw)
+                if latin_v != raw:
+                    r = pick()
+                    r[step["key"]] = latin_v
+                    out.append(("key uses a Latin name spelling variant", [r], None))
+                for src, ar in (("Mohammed", "محمد"), ("Muhammad", "محمد"), ("Ahmed", "أحمد"), ("Ahmad", "أحمد")):
+                    if src in raw:
+                        r = pick()
+                        r[step["key"]] = raw.replace(src, ar, 1)
+                        out.append(("key uses Arabic script for a Latin directory name", [r], None))
+                        break
             if "arabic_separators" in steps and isinstance(raw, str):
                 sep_v = _arabic_separator_variant(raw)
                 if sep_v != raw:
@@ -231,10 +269,23 @@ def _edge_cases(step: dict, rows: list[dict], reference: dict, pick) -> list[tup
             r = pick()
             r[step["column"]] = day.strftime(fmt)
             out.append((f"date written as {fmt}", [r], None))
+        r = pick()
+        r[step["column"]] = "١٥ مارس ٢٠٢٦"
+        out.append(("date with Arabic month name and Indic digits", [r], None))
+        r = pick()
+        r[step["column"]] = "15 رمضان 1447"
+        out.append(("Hijri date", [r], None))
         for bad, why in (("not a date", "text that is not a date"), (46000, "an Excel serial number")):
             r = pick()
             r[step["column"]] = bad
             out.append((f"{why}", [r], None))
+    elif op == "parse_amount":
+        for sample, why in (("د.إ ١٬٢٣٤٫٥٠", "AED Arabic digits and separators"),
+                            ("ر.س 100.00", "Saudi riyal prefix"),
+                            ("AED 1,234.50", "Latin AED prefix")):
+            r = pick()
+            r[step["column"]] = sample
+            out.append((f"amount with {why}", [r], None))
     elif op == "dedupe":
         a = pick()
         b = copy.deepcopy(a)

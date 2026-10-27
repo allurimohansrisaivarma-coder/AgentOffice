@@ -43,6 +43,15 @@ def test_arabic_normalizers_unify_digits_names_and_separators():
     assert runtime.normalize("آمنة", ["arabic_text"]) == "امنه"
 
 
+def test_arabic_names_folds_latin_and_arabic_given_names():
+    assert runtime.normalize("محمد علي", ["arabic_names"]) == "mohammad ali"
+    assert runtime.normalize("Mohammed Ali", ["arabic_names"]) == "mohammad ali"
+    assert runtime.normalize("Muhammad Ali", ["arabic_names"]) == "mohammad ali"
+    assert runtime.normalize("Mohamed Ali", ["arabic_names"]) == "mohammad ali"
+    assert runtime.normalize("Mohd Ali", ["arabic_names"]) == "mohammad ali"
+    assert runtime.normalize("Ahmed Nasser", ["arabic_names"]) == runtime.normalize("أحمد ناصر", ["arabic_names"])
+
+
 def test_lookup_matches_arabic_digit_and_name_variants():
     spec = {"input": {"columns": ["staff_id", "name"]}, "references": {"staff": {"fields": ["id", "name", "team"]}},
             "steps": [
@@ -62,6 +71,58 @@ def test_lookup_matches_arabic_digit_and_name_variants():
     ), ref)["rows"]
     assert out[0]["team"] == "Ops" and out[0]["id_status"] == "ok"
     assert out[1]["team"] == "Ops" and out[1]["name_status"] == "ok"
+
+
+def test_lookup_matches_latin_to_arabic_directory_names():
+    spec = {"input": {"columns": ["name"]}, "references": {"staff": {"fields": ["name", "team"]}},
+            "steps": [{"op": "lookup", "key": "name", "reference": "staff", "reference_key": "name",
+                       "fields": {"team": "team"}, "normalize": ["strip", "arabic_names"], "mode": "overwrite",
+                       "status_column": "status",
+                       "statuses": {"found": "ok", "not_found": "missing", "ambiguous": "dup"}}]}
+    ref = {"staff": [{"name": "محمد علي", "team": "Finance"}]}
+    out = runtime.execute(spec, rows({"name": "Mohammed Ali"}, {"name": "Mohd Ali"}), ref)["rows"]
+    assert out[0]["team"] == "Finance" and out[0]["status"] == "ok"
+    assert out[1]["team"] == "Finance" and out[1]["status"] == "ok"
+
+
+def test_format_date_handles_arabic_months_and_hijri():
+    spec = {"input": {"columns": ["d"]}, "steps": [{"op": "format_date", "column": "d",
+                                                     "input_formats": ["%d/%m/%Y", "%Y-%m-%d", "%d %b %Y"],
+                                                     "output_format": "%Y-%m-%d"}]}
+    out = runtime.execute(spec, rows(
+        {"d": "١٥ مارس ٢٠٢٦"},
+        {"d": "15 رمضان 1447"},
+        {"d": "07/03/2026"},
+    ), {})["rows"]
+    assert out[0]["d"] == "2026-03-15"
+    assert isinstance(out[1]["d"], str) and out[1]["d"].startswith("20")  # civil Hijri → Gregorian
+    assert out[2]["d"] == "2026-03-07"
+
+
+def test_parse_amount_strips_gulf_currency():
+    spec = {"input": {"columns": ["Amount"]}, "steps": [{"op": "parse_amount", "column": "Amount"}]}
+    out = runtime.execute(spec, rows(
+        {"Amount": "د.إ ١٬٢٥٠٫٥٠"},
+        {"Amount": "ر.س 100.00"},
+        {"Amount": "AED 1,234.50"},
+    ), {})["rows"]
+    assert out[0]["Amount"] == 1250.5
+    assert out[1]["Amount"] == 100.0
+    assert out[2]["Amount"] == 1234.5
+
+
+def test_uae_staff_lookup_demo_beats_naive_exact_match():
+    """Measured headline: naive name join misses; AgentOffice arabic_names hits all rows."""
+    path = files.DEMO_DIR / "uae_staff_lookup.xlsx"
+    parsed = files.parse(path.name, path.read_bytes())
+    claims = files.sheet(parsed, "Claims")["rows"]
+    directory = files.sheet(parsed, "Directory")["rows"]
+    naive = sum(1 for r in claims if any(d["name"] == r["Name"] for d in directory))
+    assert naive == 0
+    out = runtime.execute(DEMO_SPECS["uae_staff_lookup"], claims, {"directory": directory})["rows"]
+    assert all(r.get("Name Match") == "matched" for r in out)
+    assert all(r.get("ID Match") == "matched" for r in out)
+    assert all(isinstance(r.get("Amount"), (int, float)) for r in out)
 
 
 def test_compute_treats_text_and_zero_division_as_blank():
@@ -123,7 +184,8 @@ def test_nightshift_spec_format_lists_arabic_normalizers():
     from app.tasks.spec import spec_format
     fmt = spec_format()
     assert "arabic_digits" in fmt and "arabic_text" in fmt and "arabic_separators" in fmt
-    assert "UAE/Saudi" in fmt or "Zetaris staff directory" in fmt
+    assert "arabic_names" in fmt and "parse_amount" in fmt
+    assert "UAE/Saudi" in fmt or "Zetaris staff directory" in fmt or "directory" in fmt
 
 
 # ------------------------------------------------------------------ files

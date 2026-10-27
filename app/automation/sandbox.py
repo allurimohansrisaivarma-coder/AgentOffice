@@ -26,7 +26,7 @@ ALLOWED_IMPORTS = frozenset({"math", "re", "decimal", "datetime", "collections",
 FORBIDDEN_CALLS = frozenset({"eval", "exec", "compile", "open", "__import__", "input", "globals", "locals",
                              "vars", "getattr", "setattr", "delattr", "breakpoint", "exit", "quit", "help",
                              "memoryview", "classmethod", "staticmethod", "super"})
-MAX_CODE_CHARS = 20_000
+MAX_CODE_CHARS = 28_000  # room for the embedded UAE/Saudi normalizers in compiled specs
 _SECRET = re.compile(r"(sk-[A-Za-z0-9_\-]{8,}|nvapi-[A-Za-z0-9_\-]{8,}|"
                      r"(?i:(api[_-]?key|secret|token|password))\s*=\s*['\"][^'\"]{6,}['\"])")
 _MARKER = "__AGENTOFFICE_RESULT__"

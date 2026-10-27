@@ -23,7 +23,8 @@
   --spring: cubic-bezier(0.32, 0.72, 0, 1);
   --radius-pill: 22px;
   --radius-panel: 28px;
-  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
+          "Noto Sans Arabic", "Segoe UI Arabic", "Tahoma", Arial, sans-serif;
   --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
 }
 
@@ -225,8 +226,13 @@ kbd {
   background: var(--accent); color: var(--accent-ink);
   padding: 9px 13px; border-radius: 18px 18px 6px 18px;
 }
+.msg.user[dir="rtl"] { border-radius: 18px 18px 18px 6px; text-align: right; }
 .msg.user .file-chip { background: rgba(11, 12, 15, 0.12); color: var(--accent-ink); margin-top: 6px; }
 .msg.bot { align-self: flex-start; color: var(--isl-ink); padding: 2px 2px; }
+.msg.bot[dir="rtl"], .messages[dir="rtl"] .msg.bot { text-align: right; }
+#input[dir="rtl"] { text-align: right; }
+#sheet-grid[dir="rtl"] table { direction: rtl; }
+#sheet-grid td[dir="rtl"], #sheet-grid th[dir="rtl"] { text-align: right; font-family: var(--font); }
 .msg.bot p { margin: 0 0 6px; }
 .msg.error { color: var(--bad); }
 

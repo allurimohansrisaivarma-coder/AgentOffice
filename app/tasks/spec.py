@@ -40,7 +40,8 @@ OP_DOCS = {
                    ".strip().casefold(). Values with no matching key are unchanged."),
     "lookup": ('{"op": "lookup", "key": col, "reference": ref_name, "reference_key": ref_field, '
                '"fields": {out_col: ref_field, ...}, '
-               '"normalize": [strip|upper|lower|collapse_spaces|digits_only|arabic_digits|arabic_text|arabic_separators], '
+               '"normalize": [strip|upper|lower|collapse_spaces|digits_only|arabic_digits|arabic_text|'
+               'arabic_separators|arabic_names], '
                '"mode": "fill_blanks|overwrite", '
                '"status_column": col (optional), "statuses": {"found": s, "not_found": s, "ambiguous": s}}',
                "Index the reference rows by normalize(ref[reference_key]), skipping rows whose normalized key is ''. "
@@ -49,8 +50,8 @@ OP_DOCS = {
                "row[out_col] is blank, set row[out_col] = match[ref_field]; status = statuses.found. If more than "
                "one matches: status = statuses.ambiguous, fields untouched. Otherwise status = statuses.not_found. "
                "If status_column is given, set row[status_column] = status. UAE/Saudi sheets: include arabic_digits "
-               "for IDs/amounts with ٠١٢٣٤, arabic_text for name alef/yeh/teh-marbuta variants, "
-               "arabic_separators for ٫/٬."),
+               "for IDs with ٠١٢٣٤, arabic_text for alef/yeh/teh-marbuta, arabic_separators for ٫/٬, "
+               "arabic_names when Latin spellings (Mohammed/Muhammad/Mohd) must match Arabic محمد."),
     "compute": ('{"op": "compute", "column": col, "expression": "{Amount} * 1.1", "round": <int digits, optional>}',
                 "Evaluate the arithmetic expression: {Column} references, int/float literals, + - * /, unary minus, "
                 "parentheses, usual precedence. A column reference whose value is not an int/float (bool is not a "
@@ -64,11 +65,17 @@ OP_DOCS = {
               "If the value is blank every into column is None. Otherwise s = text(value).strip(); n = len(into); "
               "parts = s.split(None, n - 1) when separator is exactly ' ', else s.split(separator, n - 1). "
               "into[i] = parts[i].strip(), or None when that part is missing or ''."),
-    "format_date": ('{"op": "format_date", "column": col, "input_formats": ["%d/%m/%Y", ...], '
+    "format_date": ('{"op": "format_date", "column": col, "input_formats": ["%d/%m/%Y", "%d %b %Y", ...], '
                     '"output_format": "%Y-%m-%d", "invalid": "keep|blank"}',
-                    "Only str values that are not blank: try datetime.strptime(value.strip(), fmt) for each input "
-                    "format in order; the first that parses gives value = parsed.strftime(output_format). Values "
-                    "that are not str, blank, or match no format: unchanged with invalid 'keep', None with 'blank'."),
+                    "Only str values that are not blank: first map Arabic-Indic digits and Arabic Gregorian month "
+                    "names (يناير→Jan, …); if the text is a Hijri date (e.g. '15 رمضان 1447') convert via the "
+                    "civil Hijri calendar; else try datetime.strptime on the prepared text for each input format. "
+                    "First success → strftime(output_format). Non-str / blank / no match: unchanged with invalid "
+                    "'keep', None with 'blank'."),
+    "parse_amount": ('{"op": "parse_amount", "column": col, "invalid": "keep|blank"}',
+                     "Where the value is a Gulf/Latin amount string (د.إ ١٬٢٣٤٫٥٠, ر.س 100, AED 1,234.50), strip "
+                     "currency tokens, map Arabic digits/separators, and store a float. Real int/float values are "
+                     "coerced to float. Unparseable: unchanged with invalid 'keep', None with 'blank'."),
     "flag": ('{"op": "flag", "column": col, "when": [condition, ...], "match": "all|any", "then": value, '
              '"else": value (optional)}',
              "Create the column (None) if missing. If the conditions hold (all of them, or any with match 'any') set "
@@ -76,7 +83,8 @@ OP_DOCS = {
     "filter": ('{"op": "filter", "keep_when": [condition, ...], "match": "all|any"}',
                "Keep only the rows where the conditions hold; order is preserved."),
     "dedupe": ('{"op": "dedupe", "columns": [col, ...], '
-               '"normalize": [strip|upper|lower|collapse_spaces|digits_only|arabic_digits|arabic_text|arabic_separators], '
+               '"normalize": [strip|upper|lower|collapse_spaces|digits_only|arabic_digits|arabic_text|'
+               'arabic_separators|arabic_names], '
                '"keep": "first|last"}',
                "key = tuple(normalize(row[c]) for c in columns). Rows whose key parts are all '' are always kept. "
                "Among rows sharing a key keep only the first (or last) occurrence; surviving rows keep their "
@@ -112,7 +120,9 @@ HELPERS_DOC = (
     "normalize(v, steps) = text(v) then each step in order: strip, upper, lower, collapse_spaces "
     "(' '.join(s.split())), digits_only (Arabic-Indic digits to 0-9 then keep 0-9), arabic_digits "
     "(٠١٢٣٤ / ۰۱۲۳۴ → 01234), arabic_text (أ/إ/آ→ا, ى→ي, ة→ه, strip diacritics and tatweel ـ), "
-    "arabic_separators (٫→., ٬→,). UAE/Saudi sheets often need arabic_* on lookup and dedupe keys."
+    "arabic_separators (٫→., ٬→,), arabic_names (محمد↔Mohammed/Muhammad/Mohamed/Mohd and other common "
+    "Gulf given-name Latin↔Arabic pairs → one Latin canon per token). UAE/Saudi sheets often need "
+    "arabic_* on lookup and dedupe keys; use parse_amount before compute on ر.س / د.إ / AED columns."
 )
 
 
@@ -131,9 +141,11 @@ STEPS:
 {CONDITION_DOC}
 LOOKUP / DEDUPE KEY NORMALIZERS (normalize list, in order): {norms}.
 {HELPERS_DOC}
-When the file profile notes Arabic-Indic digits, Arabic script names, or Arabic decimal/thousands separators
-(common in UAE/Saudi sheets), put arabic_digits / arabic_text / arabic_separators on the lookup or dedupe
-normalize list so keys match the Zetaris staff directory (and Spec Critic will reject the plan if you omit them).
+When the file profile notes Arabic-Indic digits, Arabic script names, Latin↔Arabic name mismatches, or Arabic
+decimal/thousands separators (common in UAE/Saudi sheets), put arabic_digits / arabic_text / arabic_separators /
+arabic_names on the lookup or dedupe normalize list so keys match the directory (Spec Critic rejects the plan if
+you omit the ones that raise the hit rate). For amount columns with د.إ / ر.س / AED, use parse_amount before
+compute. format_date already accepts Arabic month names and Hijri dates alongside the listed strptime formats.
 Column names are the sheet's header text exactly (case and spaces matter). A step may use columns created by
 earlier steps. Use references only for data the sheet does not have; "fields" lists the reference fields used.
 {columns_hint}"""
@@ -247,6 +259,10 @@ def _step_errors(step: dict, where: str, available: list[str], references: dict,
             errors.append(f"{where}.input_formats must be a non-empty list of strptime formats")
         if not isinstance(step.get("output_format"), str) or "%" not in step.get("output_format", ""):
             errors.append(f"{where}.output_format must be a strftime format")
+        if step.get("invalid", "keep") not in ("keep", "blank"):
+            errors.append(f"{where}.invalid must be 'keep' or 'blank'")
+    elif op == "parse_amount":
+        need_col("column")
         if step.get("invalid", "keep") not in ("keep", "blank"):
             errors.append(f"{where}.invalid must be 'keep' or 'blank'")
     elif op == "flag":
@@ -488,6 +504,29 @@ DEMO_SPECS: dict[str, dict] = {
             {"op": "summarize", "sheet": "Totals by Team", "group_by": ["Team"],
              "values": [{"column": "Claim ID", "agg": "count", "as": "Claims"},
                         {"column": "Amount (AED)", "agg": "sum", "as": "Total (AED)"}], "round": 2},
+        ],
+    },
+    "uae_staff_lookup": {
+        "name": "uae_staff_directory_match",
+        "summary": "Match UAE staff claims to the Arabic directory by ID and name, fix Arabic/Hijri dates, "
+                   "parse د.إ / ر.س / AED amounts, and fill each person's team.",
+        "input": {"sheet": "Claims", "columns": ["Staff ID", "Name", "Date", "Amount"]},
+        "references": {"directory": {"source": "sheet", "sheet": "Directory",
+                                     "fields": ["id", "name", "team"]}},
+        "steps": [
+            {"op": "lookup", "key": "Staff ID", "reference": "directory", "reference_key": "id",
+             "fields": {"Team": "team"}, "normalize": ["strip", "arabic_digits"], "mode": "fill_blanks",
+             "status_column": "ID Match",
+             "statuses": {"found": "matched", "not_found": "missing", "ambiguous": "ambiguous"}},
+            {"op": "lookup", "key": "Name", "reference": "directory", "reference_key": "name",
+             "fields": {"Team": "team"},
+             "normalize": ["strip", "arabic_names", "collapse_spaces"], "mode": "fill_blanks",
+             "status_column": "Name Match",
+             "statuses": {"found": "matched", "not_found": "missing", "ambiguous": "ambiguous"}},
+            {"op": "format_date", "column": "Date",
+             "input_formats": ["%Y-%m-%d", "%d/%m/%Y", "%d %b %Y", "%d %B %Y"],
+             "output_format": "%Y-%m-%d", "invalid": "keep"},
+            {"op": "parse_amount", "column": "Amount", "invalid": "keep"},
         ],
     },
 }
