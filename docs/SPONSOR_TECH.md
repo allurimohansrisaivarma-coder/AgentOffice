@@ -73,7 +73,7 @@ The code was built with **Claude Code**; the split-view Team and Sheet panes, th
 ### AI coding tool
 - **We built most of the codebase with Claude Code (Anthropic)**, from an empty repository on 23 Oct 2026: scaffolding, adapters, both engines, the agents, the task mode, the chat UI and desktop island, tests and the Docker setup.
 - **Cursor** was used by one team member on 26 Oct 2026 to build the split-view **Team** and **Sheet** panes: the agent canvas and saved-run replay, the per-cell change events behind the Sheet grid, and the macOS sandbox fix. On 27 Oct 2026 the same team member used Cursor for the macOS desktop island (`AgentOffice.command`, `AgentOffice.app`, the macOS half of `scripts/island.py`) and the extended Arabic support (Latin↔Arabic name keys, Arabic and Hijri dates, dirham and riyal amounts, Arabic requests and right-to-left display, `scripts/measure_arabic_lookup.py`). Those commits carry `Co-authored-by: Cursor`.
-- The team reviewed and tested all generated code (227 tests).
+- The team reviewed and tested all generated code (231 tests).
 - **No Meterless or NVIDIA credentials** were ever given to either coding tool.
 - **If the form asks how Cursor was used:** for the split-view Team and Sheet panes, the macOS desktop island and the extended Arabic support described above; the rest of the code was written with Claude Code.
 

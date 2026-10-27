@@ -261,6 +261,7 @@ To start fresh, quit AgentOffice and delete `state/` and the files in `logs/`.
 | `agent_not_configured` from the API | Default mode is missing settings (the message lists them). Pass `"options": {"sample_mode": true}` or set `SAMPLE_MODE=true`. |
 | `check_connections.py` fails for Zetaris | Check that `docker ps` shows the Zetaris containers as healthy, and that the API key is current. A 401 means a bad or expired key. |
 | `check_connections.py` fails for Nightshift | Check that Nightshift is open and that an NVIDIA provider is connected. `--detect` scans ports 8088, 8090, 8787 and 11434. |
+| A live run stops with "no complete reply within 480 s … (tried twice)" or "the provider failed mid-reply" | Nightshift or the NVIDIA endpoint behind it is overloaded. Each model call is cut off after 8 minutes and tried twice, and nothing is written when a run stops. Run `check_connections.py`, wait a few minutes and send the request again, or tick **Sample** to run on the bundled data. |
 | `load_zetaris.py --apply` can't reach the service | Start AgentOffice first, and allow `python.exe` and `pythonw.exe` through Windows Firewall on private networks. |
 
 ## Uninstall

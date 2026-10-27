@@ -156,12 +156,21 @@ class Agent:
                              f"{model or 'the route'} is unavailable at the provider; retrying once on {fallback}")
                     params = dict(params, model=fallback)
                     continue
-                if attempt == 1 and params and tier != "deep" and "timeout" not in e.type:
-                    # e.g. the fast model's empty_response: the deep lane gets one try
+                if attempt == 1 and params and tier != "deep":
+                    # e.g. the fast model's empty_response or a stalled call: the deep lane gets one try
                     self.log("model_fallback", status="retry", target_agent=self.name, output_summary=
                              f"the {tier} lane failed ({e.message[:120]}); retrying once on the deep lane")
                     params, tier = ctx.lane("deep"), "deep"
                     continue
+                if attempt == 1 and e.recoverable:
+                    # a provider hiccup (timeout, dropped connection, 'fetch failed'): one fresh request
+                    self.log("model_retry", status="retry", target_agent=self.name, output_summary=
+                             f"Nightshift didn't answer ({e.message[:120]}); trying once more")
+                    continue
+                if e.recoverable:
+                    raise AdapterError(e.service, e.type, f"{e.message} (tried twice). Nothing was changed; "
+                                       "try again in a few minutes, or turn on sample mode",
+                                       recoverable=True, status_code=e.status_code, attempts=e.attempts + 1) from None
                 raise
         self._cut_off = result.finish_reason == "length"
         self.log(action, model=result.model, input_summary=user, output_summary=result.content,

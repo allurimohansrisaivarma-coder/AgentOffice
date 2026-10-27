@@ -22,6 +22,7 @@ the contract's 180 s) because Nightshift may buffer a long reply until it is don
 from __future__ import annotations
 
 import json
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
@@ -36,7 +37,10 @@ PROVIDER_ID = "meterless"
 PROVIDER_NAME = "Meterless Runtime"
 DEFAULT_BASE_URL = "http://127.0.0.1:8088/v1"
 MODEL_LOAD_TIMEOUT_S = 180.0
-MAX_STREAM_S = 900.0
+# A hard wall-clock limit per call, enforced by a watchdog that closes the connection: a provider that goes silent
+# or only sends keep-alives can't hold a run for long (seen live: one call hung for 52 minutes). Nemotron Ultra's
+# slowest successful reply on 27 Oct took about 5.5 minutes.
+MAX_STREAM_S = 480.0
 # Nightshift may send nothing until a reply is complete, and Nemotron Ultra writing a 7-step automation module
 # (reasoning + code) can take 3-6 minutes, so a single silent wait may last this long.
 LONG_REPLY_TIMEOUT_S = 600.0
@@ -52,6 +56,19 @@ class ChatResult:
     usage: dict = field(default_factory=dict)
     response_id: Optional[str] = None
     finish_reason: Optional[str] = None   # "length" = cut off at max_tokens
+
+
+class _StreamError(Exception):
+    """An error object inside the stream; retry is True when no text had arrived yet."""
+
+    def __init__(self, error: Any, status: int, *, retry: bool):
+        super().__init__(str(error))
+        self.detail, self.status, self.retry = str(error)[:300], status, retry
+
+
+def _deadline_error(service: str, attempts: int) -> AdapterError:
+    return AdapterError(service, "timeout", f"no complete reply within {MAX_STREAM_S:g} s; the provider may be "
+                        "overloaded", recoverable=True, attempts=attempts)
 
 
 def normalize_base_url(url: str) -> str:
@@ -122,18 +139,27 @@ class ChatClient:
 
     def _chat_stream(self, payload: dict) -> ChatResult:
         """Streamed chat: the read timeout applies between chunks, so a long answer from a slow reasoning
-        model is not cut off, while MAX_STREAM_S still bounds the whole reply. A connection that fails
-        before any data arrives is retried like any request; a stream that dies midway is not."""
+        model is not cut off, while MAX_STREAM_S bounds each attempt by the wall clock. A connection that
+        fails, or a provider error that arrives before any text, is retried; a stream that dies midway is not."""
         url = f"{self.base_url}/chat/completions"
         body = {**payload, "stream": True, "stream_options": {"include_usage": True}}
-        started, attempts = time.monotonic(), 0
+        attempts = 0
         while True:
             attempts += 1
+            started = time.monotonic()
             parts: list[str] = []
             meta: dict = {"model": payload["model"], "usage": {}, "finish_reason": None, "id": None}
-            got_data = False
+            got_data = complete = False
+            watchdog: Optional[threading.Timer] = None
+            expired = threading.Event()
             try:
                 with self._client.stream("POST", url, json=body, headers=self._chat_headers) as response:
+                    def expire(resp=response):
+                        expired.set()
+                        resp.close()        # unblocks a read that is waiting on a silent connection
+                    watchdog = threading.Timer(max(0.0, MAX_STREAM_S - (time.monotonic() - started)), expire)
+                    watchdog.daemon = True
+                    watchdog.start()
                     status = response.status_code
                     if not response.is_success:
                         response.read()
@@ -147,10 +173,13 @@ class ChatClient:
                         response.read()   # the server ignored stream=true
                         return self._result(json_body(response, self.service), payload, status)
                     for line in response.iter_lines():
+                        if time.monotonic() - started > MAX_STREAM_S:      # keep-alives can't extend the wait
+                            break
                         if not line.startswith("data:"):
                             continue
                         data = line[5:].strip()
                         if data == "[DONE]":
+                            complete = True
                             break
                         try:
                             chunk = json.loads(data)
@@ -158,8 +187,7 @@ class ChatClient:
                             continue
                         got_data = True
                         if chunk.get("error"):
-                            raise AdapterError(self.service, "http_error", f"stream error: {str(chunk['error'])[:300]}",
-                                               recoverable=True, status_code=status, attempts=attempts)
+                            raise _StreamError(chunk["error"], status, retry=not parts)
                         meta["model"] = chunk.get("model") or meta["model"]
                         meta["id"] = chunk.get("id") or meta["id"]
                         meta["usage"] = chunk.get("usage") or meta["usage"]
@@ -168,10 +196,19 @@ class ChatClient:
                             if isinstance(delta.get("content"), str):
                                 parts.append(delta["content"])
                             meta["finish_reason"] = choice.get("finish_reason") or meta["finish_reason"]
-                        if time.monotonic() - started > MAX_STREAM_S:
-                            raise AdapterError(self.service, "timeout", f"no complete reply after {MAX_STREAM_S:g}s",
-                                               recoverable=True, status_code=status, attempts=attempts)
-            except httpx.HTTPError as e:
+                    else:
+                        complete = True        # the server closed the stream normally
+            except _StreamError as e:
+                # e.g. {'code': 'provider_error', 'meterless_detail': 'fetch failed'} seconds into the call: a fresh
+                # request usually succeeds. An error after text has arrived is not retried here.
+                if e.retry and attempts <= self.max_retries:
+                    time.sleep(_http.BACKOFF_BASE_S * 2 ** (attempts - 1))
+                    continue
+                raise AdapterError(self.service, "provider_error", f"the provider failed mid-reply: {e.detail}",
+                                   recoverable=True, status_code=e.status, attempts=attempts) from None
+            except (httpx.HTTPError, httpx.StreamError, OSError) as e:
+                if expired.is_set():
+                    raise _deadline_error(self.service, attempts) from None
                 # a connection failure is retried; a timeout is not (the server was busy generating: retrying
                 # would only double the wait)
                 if not got_data and not isinstance(e, httpx.TimeoutException) and attempts <= self.max_retries:
@@ -179,6 +216,11 @@ class ChatClient:
                     continue
                 raise AdapterError(self.service, "timeout" if isinstance(e, httpx.TimeoutException) else "unreachable",
                                    f"{type(e).__name__}: {e}", recoverable=True, attempts=attempts) from None
+            finally:
+                if watchdog is not None:
+                    watchdog.cancel()
+            if not complete:
+                raise _deadline_error(self.service, attempts)
             if not got_data:
                 raise AdapterError(self.service, "invalid_response", "the stream carried no data", recoverable=True,
                                    status_code=status, attempts=attempts)

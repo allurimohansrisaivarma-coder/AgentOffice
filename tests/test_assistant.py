@@ -3,6 +3,7 @@
 import json
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.meterless import ChatResult
@@ -176,6 +177,34 @@ def test_front_desk_keeps_an_explicit_email_ask_when_the_model_routes_it_elsewhe
     assert desk.route(msg, has_file=False)["intent"] == "email"
     # a real analysis question stays with the model's routing
     assert desk.route("Where is the finance team losing time?", has_file=False)["intent"] == "analysis"
+
+
+def test_an_agent_asks_again_after_a_provider_hiccup_then_explains_a_second_failure(tmp_path, make_settings):
+    from app.adapters.http import AdapterError
+    from app.agents.base import Agent, RunContext
+
+    class Flaky:
+        name = "meterless/deep"
+
+        def __init__(self, failures):
+            self.failures = failures
+
+        def chat(self, messages, **params):
+            if self.failures:
+                self.failures -= 1
+                raise AdapterError("meterless", "timeout", "no complete reply within 480 s", recoverable=True)
+            return ChatResult(content="fine", model="nvidia/nemotron-3-ultra-550b-a55b", usage={}, finish_reason="stop")
+
+    def agent(failures):
+        ctx = RunContext(run_id="r9", settings=make_settings(), tracer=Tracer("r9", tmp_path, stream=None),
+                         generator=Flaky(failures), data=None, store=None, pipeline=None, builder=None,
+                         sample_mode=False)
+        return Agent(ctx)
+
+    assert agent(1).chat("s", "u", action="write_code", tier="deep") == "fine"
+    with pytest.raises(AdapterError) as e:
+        agent(2).chat("s", "u", action="write_code", tier="deep")
+    assert "tried twice" in e.value.message and "sample mode" in e.value.message
 
 
 def test_sample_mode_says_it_needs_the_model_instead_of_guessing(make_settings):

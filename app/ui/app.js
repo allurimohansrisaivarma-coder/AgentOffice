@@ -38,6 +38,7 @@ const ACTIONS = {
   write_answer: "Wrote the answer", revise_answer: "Revised the answer", write_email: "Drafted the email",
   revise_email: "Revised the draft", critique_grounding: "Checked every fact", assist_done: "Draft ready",
   review_wording: "Checked each statement against the rows", ranking_trimmed: "Kept the ranking to this question",
+  model_retry: "Asked the model again", model_fallback: "Switched to another model",
 };
 const HIDDEN = new Set(["zetaris_query"]);
 

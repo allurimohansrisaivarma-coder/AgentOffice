@@ -117,6 +117,73 @@ def test_chat_sends_nightshift_headers_and_reads_reply(make_settings):
     assert result.usage == {"total_tokens": 7}
 
 
+def _sse(*chunks) -> bytes:
+    return "".join(f"data: {json.dumps(c)}\n\n" for c in chunks).encode() + b"data: [DONE]\n\n"
+
+
+def _streaming_client(transport, **kw):
+    return meterless.ChatClient("http://nightshift.test/v1", "tok", "meterless/deep", service="meterless",
+                                transport=transport, stream=True, **kw)
+
+
+def test_provider_error_before_any_text_is_retried():
+    """Seen live: {'code': 'provider_error', 'meterless_detail': 'fetch failed'} a few seconds into a call."""
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) == 1:
+            body = _sse({"error": {"message": "failed", "code": "provider_error", "meterless_detail": "fetch failed"}})
+        else:
+            body = _sse({"model": "nvidia/nemotron-3-ultra-550b-a55b", "choices": [{"delta": {"content": "ok"}}]})
+        return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
+
+    result = _streaming_client(httpx.MockTransport(handler)).chat([{"role": "user", "content": "hi"}])
+    assert result.content == "ok" and len(calls) == 2
+
+
+def _silent_server(keepalive: bool):
+    """A local server that answers 200 and then sends nothing (or only SSE keep-alive comments), like a stuck
+    provider; returns its base URL."""
+    import socket
+    import threading
+    import time as _time
+
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+
+    def serve():
+        conn, _ = srv.accept()
+        conn.recv(65536)
+        conn.sendall(b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\n\r\n")
+        for _ in range(100):
+            if keepalive:
+                try:
+                    conn.sendall(b"c\r\n: keepalive\n\r\n")
+                except OSError:
+                    break
+            _time.sleep(0.1)
+        conn.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    return f"http://127.0.0.1:{srv.getsockname()[1]}/v1"
+
+
+@pytest.mark.parametrize("keepalive", [False, True])
+def test_a_stuck_provider_is_cut_off_at_the_wall_clock_limit(monkeypatch, keepalive):
+    """Seen live: one Engineer call hung for 52 minutes. Silence and keep-alives both stop at MAX_STREAM_S."""
+    import time as _time
+    monkeypatch.setattr(meterless, "MAX_STREAM_S", 0.6)
+    client = meterless.ChatClient(_silent_server(keepalive), "tok", "meterless/deep", service="meterless",
+                                  timeout_s=30, stream=True)
+    started = _time.monotonic()
+    with pytest.raises(AdapterError) as e:
+        client.chat([{"role": "user", "content": "hi"}])
+    assert e.value.type == "timeout" and "within 0.6 s" in e.value.message
+    assert _time.monotonic() - started < 5
+
+
 def test_malformed_reply_is_structured_error(make_settings):
     transport = httpx.MockTransport(lambda r: httpx.Response(200, json={"choices": []}))
     with pytest.raises(AdapterError) as e:
