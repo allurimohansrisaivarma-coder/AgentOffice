@@ -56,11 +56,24 @@ The code was built with **Claude Code**; the split-view Team and Sheet panes wer
 
 ### NVIDIA
 - **Nemotron** (`nvidia/nemotron-3-ultra-550b-a55b`, and `nvidia/nemotron-3.5-lightning-30b-a3b` where Nightshift routed a few analysis calls) is served through the Nightshift route `meterless/deep`, hosted, with no local GPU. It powers every model call: routing, planning specs, SQL, code writing and revision, test design, code review, critique, the decision memo, and answers and email drafts. The Spec and Priority Critics are deterministic rules by design; the Insight and Grounding Critics check by rule first, then ask Nemotron for a wording review.
+- **Usage evidence.** In the six saved live runs, **83 of 83 model calls were answered by Nemotron** (626,326 tokens), across **13 agents**. Reproduce it from the traces with `python scripts/nemotron_usage.py`; every model-call event records the model that actually answered.
+
+  | Live run (`output_examples/`) | Model calls | Answered by |
+  |---|---|---|
+  | Analysis: Finance (`example_1`) | 20 | Nemotron 3 Ultra x17, Nemotron 3.5 Lightning x3 |
+  | Analysis: Operations (`example_2`) | 18 | Nemotron 3 Ultra x15, Nemotron 3.5 Lightning x3 |
+  | Analysis: Sales (`example_3`) | 22 | Nemotron 3 Ultra x20, Nemotron 3.5 Lightning x2 |
+  | Task: expense claims (3 QA rounds) | 9 | Nemotron 3 Ultra x9 |
+  | Task: leads vs CRM | 7 | Nemotron 3 Ultra x7 |
+  | Task: vendor invoices | 7 | Nemotron 3 Ultra x7 |
+
+  By agent: Retriever 12, QA 12, Report Writer 9, Engineer 8, PM 7, Insight Critic 6, Manager 6, Memory Keeper 6, Source Mapper 4, Research Planner 4, Reconciler 3, Conflict Critic 3, Front Desk 3.
+- **What Nemotron decides, not just phrases.** It writes the step spec that becomes the automation, the SQL that grounds every finding, and the Python that QA tests; when QA rejects the code (the expense-claims run: sandbox policy, then blank amounts), Nemotron's revision is what finally passes 49/49 cases.
 
 ### AI coding tool
 - **We built most of the codebase with Claude Code (Anthropic)**, from an empty repository on 23 Oct 2026: scaffolding, adapters, both engines, the agents, the task mode, the chat UI and desktop island, tests and the Docker setup.
 - **Cursor** was used by one team member on 26 Oct 2026 to build the split-view **Team** and **Sheet** panes: the agent canvas and saved-run replay, the per-cell change events behind the Sheet grid, and the macOS sandbox fix. Those commits carry `Co-authored-by: Cursor`.
-- The team reviewed and tested all generated code (199 tests).
+- The team reviewed and tested all generated code (201 tests).
 - **No Meterless or NVIDIA credentials** were ever given to either coding tool.
 - **If the form asks how Cursor was used:** for the split-view Team and Sheet panes described above; the rest of the code was written with Claude Code.
 

@@ -170,6 +170,23 @@ def test_a_provider_error_in_an_optional_qa_call_does_not_fail_the_run(tmp_path,
     assert "404" in (tmp_path / "trace-r1.jsonl").read_text(encoding="utf-8")
 
 
+def test_nemotron_usage_counts_only_real_model_calls(tmp_path, capsys):
+    import json as _json
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import nemotron_usage
+    events = [{"agent_name": "PMAgent", "model": "nvidia/nemotron-3-ultra-550b-a55b", "tokens": 100},
+              {"agent_name": "QAAgent", "model": "nvidia/nemotron-3-ultra-550b-a55b", "tokens": 50},
+              {"agent_name": "QAAgent", "model": "offline-fallback", "tokens": None},
+              {"agent_name": "Orchestrator", "model": None}]
+    trace = tmp_path / "trace-x.jsonl"
+    trace.write_text("\n".join(_json.dumps(e) for e in events), encoding="utf-8")
+    nemotron_usage.main([str(trace)])
+    out = capsys.readouterr().out
+    assert "2 model calls in 1 traces, 150 tokens; answered by Nemotron: 2/2" in out
+
+
 def test_trace_survives_a_console_that_cannot_print_unicode(tmp_path):
     import io
     from app.tracing import Tracer
