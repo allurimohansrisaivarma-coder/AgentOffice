@@ -6,7 +6,7 @@ import pytest
 
 from app.adapters import http as http_adapter
 from app.adapters.http import AdapterError
-from app.adapters.zetaris import from_settings, split_statements
+from app.adapters.zetaris import coerce, from_settings, split_statements
 
 
 def _uuid(value):
@@ -51,6 +51,27 @@ def test_header_and_list_rows_become_typed_records(make_settings):
     assert rows[0] == {"task_category": "invoice_matching", "hours": 71.54, "people": 4, "code": "007",
                        "ratio": 1000.0}
     assert rows[1] == {"task_category": "x", "hours": -2, "people": 0, "code": "", "ratio": "abc"}
+
+
+def test_arabic_script_and_indic_digits_survive_zetaris_coerce():
+    """Staff-directory keys from UAE/Saudi sheets must stay strings for arabic_* normalizers."""
+    assert coerce("١٢٣") == "١٢٣"
+    assert coerce("۰۱۲۳") == "۰۱۲۳"          # Persian / Extended Arabic-Indic
+    assert coerce("E-١٢٣") == "E-١٢٣"
+    assert coerce("١٢٫٥") == "١٢٫٥"
+    assert coerce("١٬٢٣٤٫٥") == "١٬٢٣٤٫٥"
+    assert coerce("أحمد") == "أحمد"
+    assert coerce("007") == "007" and coerce("42") == 42
+
+
+def test_arabic_directory_rows_round_trip_through_zetaris_records(make_settings):
+    body = {"headers": ["staff_id", "name", "amount"],
+            "data": [["E-١٢٣", "أحمد", "١٬٢٣٤٫٥٠"], ["E-456", "Sara", "12.5"]],
+            "total": 2, "timeUsed": 1}
+    client = from_settings(make_settings(), transport=httpx.MockTransport(lambda r: httpx.Response(200, json=body)))
+    rows = client.run_sql("SELECT staff_id, name, amount FROM people")
+    assert rows[0] == {"staff_id": "E-١٢٣", "name": "أحمد", "amount": "١٬٢٣٤٫٥٠"}
+    assert rows[1]["amount"] == 12.5
 
 
 def test_list_rows_without_headers_are_rejected(make_settings):

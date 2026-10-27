@@ -22,6 +22,52 @@ from typing import Any, Optional
 from app.tasks import runtime
 from app.tasks.runtime import is_blank, is_num
 
+_ASCII_TO_ARABIC_DIGITS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
+_HEH_TO_TEH_MARBUTA = str.maketrans({"ه": "ة"})
+_YEH_TO_ALEF_MAQSURA = str.maketrans({"ي": "ى"})
+
+
+def _as_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _arabic_digit_variant(value: Any) -> Any:
+    """ASCII digits → Arabic-Indic; no-op when there are none to swap."""
+    if not isinstance(value, str) or not any(ch in value for ch in "0123456789"):
+        return value
+    return value.translate(_ASCII_TO_ARABIC_DIGITS)
+
+
+def _arabic_name_variant(value: Any) -> Any:
+    """A different-looking Arabic spelling that arabic_text should still fold."""
+    if not isinstance(value, str) or not value:
+        return value
+    s = value
+    if "ا" in s:
+        s = s.replace("ا", "أ", 1)
+    s = s.translate(_YEH_TO_ALEF_MAQSURA).translate(_HEH_TO_TEH_MARBUTA)
+    if s and "\u0640" not in s:
+        # Insert tatweel after the first Arabic letter when present.
+        for i, ch in enumerate(s):
+            if "\u0600" <= ch <= "\u06FF":
+                s = s[:i + 1] + "\u0640" + s[i + 1:]
+                break
+    if s == value and any("\u0600" <= ch <= "\u06FF" for ch in s):
+        s = s + "\u064E"   # fatha diacritic — stripped by arabic_text
+    return s
+
+
+def _arabic_separator_variant(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    if "." not in value and "," not in value:
+        return value
+    return value.replace(".", "٫").replace(",", "٬")
+
 _RUNTIME_SOURCE = Path(runtime.__file__).read_text(encoding="utf-8")
 
 
@@ -76,8 +122,20 @@ def build_cases(spec: dict, rows: list[dict], reference: dict, *, seed: int = 0,
         variants: list[tuple[str, Any]] = [("blank", None)]
         if isinstance(v, str):
             variants += [("extra whitespace", f"   {v}   "), ("different case", v.swapcase())]
+            digit_v = _arabic_digit_variant(v)
+            if digit_v != v:
+                variants.append(("Arabic-Indic digits", digit_v))
+            name_v = _arabic_name_variant(v)
+            if name_v != v:
+                variants.append(("Arabic name spelling variant", name_v))
+            sep_v = _arabic_separator_variant(v)
+            if sep_v != v:
+                variants.append(("Arabic decimal/thousands separators", sep_v))
         if is_num(v):
             variants += [("zero", 0), ("negative", -abs(v) or -1), ("number typed as text", f"{v}")]
+            as_text = _arabic_digit_variant(f"{v}")
+            if as_text != f"{v}":
+                variants.append(("number as Arabic-Indic digits", as_text))
         for why, value in variants:
             r = pick()
             r[col] = value
@@ -99,11 +157,31 @@ def _edge_cases(step: dict, rows: list[dict], reference: dict, pick) -> list[tup
     if op == "lookup":
         ref_rows = reference.get(step["reference"], [])
         key_field = step["reference_key"]
+        steps = step.get("normalize", [])
         known = next((r for r in ref_rows if not is_blank(r.get(key_field))), None)
         if known is not None:
             r = pick()
             r[step["key"]] = _variant(known[key_field]) if isinstance(known[key_field], str) else known[key_field]
             out.append(("key differs only in case and spaces", [r], None))
+            raw = known[key_field]
+            if "arabic_digits" in steps or "digits_only" in steps:
+                digit_v = _arabic_digit_variant(raw if isinstance(raw, str) else _as_text(raw))
+                if digit_v != raw:
+                    r = pick()
+                    r[step["key"]] = digit_v
+                    out.append(("key uses Arabic-Indic digits", [r], None))
+            if "arabic_text" in steps and isinstance(raw, str):
+                name_v = _arabic_name_variant(raw)
+                if name_v != raw:
+                    r = pick()
+                    r[step["key"]] = name_v
+                    out.append(("key uses an Arabic spelling variant", [r], None))
+            if "arabic_separators" in steps and isinstance(raw, str):
+                sep_v = _arabic_separator_variant(raw)
+                if sep_v != raw:
+                    r = pick()
+                    r[step["key"]] = sep_v
+                    out.append(("key uses Arabic decimal/thousands separators", [r], None))
             r = pick()
             r[step["key"]] = known[key_field]
             for col in step["fields"]:

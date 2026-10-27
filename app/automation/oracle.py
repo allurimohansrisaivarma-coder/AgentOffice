@@ -72,8 +72,15 @@ def _key_variant(value: str, steps: list[str]) -> Optional[str]:
         variant = variant.lower()
     elif "lower" in steps:
         variant = variant.upper()
-    if "digits_only" in steps:
-        variant = f"#{variant[:2]}-{variant[2:]}"
+    if "digits_only" in steps or "arabic_digits" in steps:
+        if any(ch in variant for ch in "0123456789"):
+            variant = variant.translate(str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩"))
+        else:
+            variant = f"#{variant[:2]}-{variant[2:]}"
+    if "arabic_text" in steps and "ا" in variant:
+        variant = variant.replace("ا", "أ", 1)
+    if "arabic_separators" in steps and ("." in variant or "," in variant):
+        variant = variant.replace(".", "٫").replace(",", "٬")
     return variant if variant != value else None
 
 

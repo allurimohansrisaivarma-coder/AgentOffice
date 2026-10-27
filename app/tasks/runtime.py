@@ -17,7 +17,19 @@ import copy
 import re
 from datetime import datetime
 
-NORMALIZERS = ("strip", "upper", "lower", "collapse_spaces", "digits_only")
+NORMALIZERS = (
+    "strip", "upper", "lower", "collapse_spaces", "digits_only",
+    "arabic_digits", "arabic_text", "arabic_separators",
+)
+
+# Arabic-Indic (U+0660..) and Extended Arabic-Indic / Persian (U+06F0..) -> ASCII.
+_ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
+# Alef variants, alef maqsura/yeh, teh marbuta/heh — common UAE/Saudi name spellings.
+_ARABIC_LETTERS = str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا", "ى": "ي", "ة": "ه"})
+# Arabic decimal and thousands separators (U+066B, U+066C).
+_ARABIC_SEPARATORS = str.maketrans({"٫": ".", "٬": ","})
+# Tatweel + harakat / superscript alef (not digits: those start at U+0660).
+_ARABIC_MARKS = frozenset("\u0640" + "".join(chr(c) for c in range(0x064B, 0x0660)) + "\u0670")
 
 
 class SpecError(ValueError):
@@ -41,6 +53,18 @@ def text(v):
     return str(v)
 
 
+def arabic_digits(s):
+    return s.translate(_ARABIC_DIGITS)
+
+
+def arabic_text(s):
+    return "".join(ch for ch in s.translate(_ARABIC_LETTERS) if ch not in _ARABIC_MARKS)
+
+
+def arabic_separators(s):
+    return s.translate(_ARABIC_SEPARATORS)
+
+
 def normalize(v, steps):
     s = text(v)
     for step in steps:
@@ -53,7 +77,13 @@ def normalize(v, steps):
         elif step == "collapse_spaces":
             s = " ".join(s.split())
         elif step == "digits_only":
-            s = "".join(ch for ch in s if ch in "0123456789")
+            s = "".join(ch for ch in arabic_digits(s) if ch in "0123456789")
+        elif step == "arabic_digits":
+            s = arabic_digits(s)
+        elif step == "arabic_text":
+            s = arabic_text(s)
+        elif step == "arabic_separators":
+            s = arabic_separators(s)
     return s
 
 

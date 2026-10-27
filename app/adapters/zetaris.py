@@ -59,6 +59,9 @@ def coerce(value):
     """Zetaris returns every cell as a string; turn number-shaped strings back into numbers.
 
     Codes with leading zeros ("007") stay strings, so identifiers are never mangled.
+    Arabic-Indic / Persian digits (٠١٢٣٤ / ۰۱۲۳۴), Arabic decimal/thousands separators (٫ ٬), and
+    Arabic script names also stay strings — ASCII-only patterns — so UAE/Saudi directory keys survive
+    the REST round-trip for arabic_* normalizers on lookup.
     """
     if not isinstance(value, str):
         return value

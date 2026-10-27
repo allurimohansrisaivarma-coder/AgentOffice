@@ -4,7 +4,7 @@
   "hackathon": "Open Agent Hackathon 2026",
   "primary_track": "Track 3 - Reasoning Architecture",
   "also_addresses": ["Track 1 - Fragmented Intelligence", "Track 2 - Explain Why"],
-  "description": "An AI office team you tell what to do: attach a spreadsheet and describe the repetitive work, and the agents plan it, write the automation, test it on your data and ask you to approve the exact code before handing back the filled file. It also analyses where a team's time goes and proposes what to automate first.",
+  "description": "An AI office team for UAE/Saudi-style spreadsheet work: attach a file, describe the job, and agents plan it, write the automation, QA it against an independent oracle (including Arabic digit/name key variants), and ask you to approve one code hash before writing the filled file. Analysis mode ranks what to automate from Zetaris workforce data; synthetic hours are demo instrumentation, not customer ROI.",
   "repository": "https://github.com/allurimohansrisaivarma-coder/AgentOffice",
   "run": {
     "setup": "Windows: powershell -ExecutionPolicy Bypass -File setup.ps1 (virtual environment, dependencies, .env, shortcut); other platforms and default mode: docs/SETUP.md",
