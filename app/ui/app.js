@@ -246,12 +246,6 @@ function user(text, meta) {
   m.appendChild(document.createTextNode(text));
   if (meta) m.appendChild(el("div", "file-chip", `<span aria-hidden="true">📄</span><span class="name">${esc(meta.filename)}</span>`));
   messages.appendChild(m);
-  if (hasArabic(text)) {
-    applyRtl(input, text);
-    applyRtl(messages, text);
-    const host = $("sheet-grid");
-    if (host) applyRtl(host, text);
-  }
   scrollDown();
 }
 function welcome() {
@@ -1332,9 +1326,9 @@ function sheetRender() {
   const rows = sheet.data[sheet.active] || [];
   const total = sheet.totals[sheet.active] ?? rows.length;
   const shown = rows.slice(0, 200);
-  const sheetHasArabic = cols.some((c) => hasArabic(c)) ||
-    shown.some((r) => cols.some((c) => hasArabic(fmt(r[c]))));
-  applyRtl(host, sheetHasArabic ? "ع" : "");
+  // Mirror the grid like an Arabic Excel sheet only when most headers are Arabic; a mostly English sheet
+  // with an Arabic column stays left-to-right (those cells are right-aligned on their own below).
+  applyRtl(host, cols.filter((c) => hasArabic(c)).length * 2 > cols.length ? "ع" : "");
   let html = `<table><thead><tr><th class="row-num">#</th>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>`;
   for (let i = 0; i < shown.length; i++) {
     const r = shown[i];

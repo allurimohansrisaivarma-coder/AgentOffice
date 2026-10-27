@@ -12,7 +12,7 @@ AgentOffice is an AI office team for real spreadsheet work — including UAE/Sau
 
 We implemented two **Meterless engines** from scratch: the **World Model** (shared state all agents read and write; its conflict records are the Conflict Critic's evidence) and **H-MEM** (cross-run memory: a human's approval lets the same automation run again without asking; a rejection changes what the team proposes next).
 
-The code was built with **Claude Code**; the split-view Team and Sheet panes were built with **Cursor**.
+The code was built with **Claude Code**; the split-view Team and Sheet panes, the macOS desktop island and the extended Arabic support were built with **Cursor**.
 
 ## Full version
 
@@ -56,7 +56,7 @@ The code was built with **Claude Code**; the split-view Team and Sheet panes wer
 
 ### NVIDIA
 - **Nemotron** (`nvidia/nemotron-3-ultra-550b-a55b`, and `nvidia/nemotron-3.5-lightning-30b-a3b` where Nightshift routed a few analysis calls) is served through the Nightshift route `meterless/deep`, hosted, with no local GPU. It powers every model call: routing, planning specs, SQL, code writing and revision, test design, code review, critique, the decision memo, and answers and email drafts. The Spec and Priority Critics are deterministic rules by design; the Insight and Grounding Critics check by rule first, then ask Nemotron for a wording review.
-- **Usage evidence.** In the six saved live runs, **83 of 83 model calls were answered by Nemotron** (626,326 tokens), across **13 agents**. Reproduce it from the traces with `python scripts/nemotron_usage.py`; every model-call event records the model that actually answered.
+- **Usage evidence.** In the seven saved live runs, **91 of 91 model calls were answered by Nemotron** (700,341 tokens), across **13 agents**. Reproduce it from the traces with `python scripts/nemotron_usage.py`; every model-call event records the model that actually answered.
 
   | Live run (`output_examples/`) | Model calls | Answered by |
   |---|---|---|
@@ -72,10 +72,10 @@ The code was built with **Claude Code**; the split-view Team and Sheet panes wer
 
 ### AI coding tool
 - **We built most of the codebase with Claude Code (Anthropic)**, from an empty repository on 23 Oct 2026: scaffolding, adapters, both engines, the agents, the task mode, the chat UI and desktop island, tests and the Docker setup.
-- **Cursor** was used by one team member on 26 Oct 2026 to build the split-view **Team** and **Sheet** panes: the agent canvas and saved-run replay, the per-cell change events behind the Sheet grid, and the macOS sandbox fix. Those commits carry `Co-authored-by: Cursor`.
-- The team reviewed and tested all generated code (221 tests).
+- **Cursor** was used by one team member on 26 Oct 2026 to build the split-view **Team** and **Sheet** panes: the agent canvas and saved-run replay, the per-cell change events behind the Sheet grid, and the macOS sandbox fix. On 27 Oct 2026 the same team member used Cursor for the macOS desktop island (`AgentOffice.command`, `AgentOffice.app`, the macOS half of `scripts/island.py`) and the extended Arabic support (Latin↔Arabic name keys, Arabic and Hijri dates, dirham and riyal amounts, Arabic requests and right-to-left display, `scripts/measure_arabic_lookup.py`). Those commits carry `Co-authored-by: Cursor`.
+- The team reviewed and tested all generated code (227 tests).
 - **No Meterless or NVIDIA credentials** were ever given to either coding tool.
-- **If the form asks how Cursor was used:** for the split-view Team and Sheet panes described above; the rest of the code was written with Claude Code.
+- **If the form asks how Cursor was used:** for the split-view Team and Sheet panes, the macOS desktop island and the extended Arabic support described above; the rest of the code was written with Claude Code.
 
 ### What's unique
 - **Your spreadsheet becomes a Zetaris table.** Uploads are profiled and joined with company data through the same Zetaris SQL path as everything else, with no copies or views.

@@ -594,6 +594,20 @@ def test_a_repeated_request_reuses_the_approved_automation_without_asking_the_mo
     assert pm._same_request(request, {"Sheet1": ["A", "B"]}, approved, set()) is None
 
 
+def test_hijri_and_arabic_month_cases_only_for_columns_that_hold_arabic():
+    """An English date column must not make live code reproduce the Hijri calendar to pass QA."""
+    step = {"op": "format_date", "column": "Date", "input_formats": ["%d/%m/%Y"], "output_format": "%Y-%m-%d"}
+    spec = {"name": "dates", "summary": "fix dates", "input": {"sheet": "S", "columns": ["Date"]},
+            "references": {}, "steps": [step]}
+    purposes = lambda rows: {c["purpose"] for c in qa.build_cases(spec, rows, {})}
+    english = purposes([{"Date": "15/03/2026"}, {"Date": "16/03/2026"}])
+    arabic = purposes([{"Date": "15/03/2026"}, {"Date": "15 رمضان 1447"}])
+    hijri = lambda names: any(n.endswith("Hijri date") for n in names)
+    assert not hijri(english) and hijri(arabic)
+    assert "Date: Arabic-Indic digits" not in english and "Date: Arabic-Indic digits" in arabic
+    assert runtime.parse_date_value("15 رمضان 1447", []).date().isoformat() == "2026-03-04"
+
+
 def test_ui_is_served(make_settings):
     client = TestClient(create_app(make_settings(sample_mode=True)))
     page = client.get("/")

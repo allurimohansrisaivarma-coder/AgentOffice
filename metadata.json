@@ -45,11 +45,11 @@
     "nvidia": {
       "models": ["nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3.5-lightning-30b-a3b"],
       "how": "Served through Meterless Nightshift (route meterless/deep), hosted, no local GPU; powers routing, planning, SQL, code writing and revision, test design, review, critique and decision memos.",
-      "evidence": "83 of 83 model calls in the six saved live runs were answered by Nemotron (75 Nemotron 3 Ultra, 8 Nemotron 3.5 Lightning; 626,326 tokens; 13 agents). Reproduce: python scripts/nemotron_usage.py"
+      "evidence": "91 of 91 model calls in the seven saved live runs were answered by Nemotron (77 Nemotron 3 Ultra, 14 Nemotron 3.5 Lightning; 700,341 tokens; 13 agents). Reproduce: python scripts/nemotron_usage.py"
     }
   },
-  "ai_coding_tool": "Claude Code (Anthropic) for most of the code; Cursor for the split-view Team and Sheet panes",
+  "ai_coding_tool": "Claude Code (Anthropic) for most of the code; Cursor for the split-view Team and Sheet panes, the macOS desktop island and the extended Arabic support",
   "pre_existing_components": "none",
   "data": "Synthetic only (scripts/generate_workforce_data.py, scripts/generate_task_samples.py); example.com / example.org emails.",
-  "tests": 221
+  "tests": 227
 }

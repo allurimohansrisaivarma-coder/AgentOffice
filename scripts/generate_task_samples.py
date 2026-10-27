@@ -10,6 +10,8 @@ Writes data/sample/tasks/:
   leads_and_contacts.xlsx  a Leads sheet and a CRM Contacts sheet to check them against
   uae_site_claims.xlsx     bilingual claims whose staff IDs mix Western, Arabic-Indic and Persian digits
                            (P003 / P٠٠٣ / P۰۰۳), so a plain lookup on workforce.people misses them
+  uae_staff_lookup.xlsx    claims matched to an Arabic-script Directory sheet by staff ID and Latin name
+                           (Mohammed / محمد), with Arabic and Hijri dates and dirham / riyal amounts
 
 Every person, email and company is invented; emails use the reserved example.com/example.org domains.
 """
@@ -143,6 +145,26 @@ def uae_site_claims(rng: random.Random) -> list[list]:
     return rows
 
 
+def uae_staff_lookup() -> tuple[list[list], list[list]]:
+    """Claims keyed by staff ID and a Latin name, against an Arabic-script directory sheet: Indic digits in IDs,
+    Latin spellings of Arabic names, Arabic and Hijri dates, and dirham/riyal amounts."""
+    claims = [["Staff ID", "Name", "Date", "Amount", "Team"],
+              ["Emp-١٢٣", "Mohammed Ali", "١٥ مارس ٢٠٢٦", "د.إ ١٬٢٥٠٫٥٠", None],
+              ["Emp-124", "Muhammad Hassan", "15/03/2026", "AED 980.00", None],
+              ["Emp-١٢٥", "Mohamed Khaled", "15 رمضان 1447", "ر.س ٢٬١٠٠٫٠٠", None],
+              ["Emp-126", "Ahmed Nasser", "07 Mar 2026", "د.إ 450.25", None],
+              ["Emp-١٢٧", "Mohd Omar", "2026-03-10", "SAR 1,100", None],
+              ["Emp-128", "Fatima Sara", "١٠ أبريل ٢٠٢٦", "AED 75.5", None],
+              ["Emp-١٢٩", "Khalid Ibrahim", "1 محرم 1448", "د.إ ٣٠٠", None],
+              ["Emp-130", "Aisha Maryam", "03/04/2026", "ر.س 640", None]]
+    directory = [["id", "name", "team"],
+                 ["Emp-123", "محمد علي", "Finance"], ["Emp-124", "محمد حسن", "Ops"],
+                 ["Emp-125", "محمد خالد", "Finance"], ["Emp-126", "أحمد ناصر", "HR"],
+                 ["Emp-127", "محمد عمر", "Ops"], ["Emp-128", "فاطمة سارة", "Finance"],
+                 ["Emp-129", "خالد ابراهيم", "IT"], ["Emp-130", "عائشة مريم", "HR"]]
+    return claims, directory
+
+
 def _xlsx(path: Path, sheets: dict[str, list[list]]) -> None:
     from openpyxl import Workbook
     from openpyxl.styles import Font
@@ -167,6 +189,8 @@ def main() -> int:
     leads, contacts = leads_and_contacts(rng)
     _xlsx(OUT / "leads_and_contacts.xlsx", {"Leads": leads, "CRM Contacts": contacts})
     _xlsx(OUT / "uae_site_claims.xlsx", {"Claims": uae_site_claims(random.Random(SEED + 1))})
+    claims, directory = uae_staff_lookup()
+    _xlsx(OUT / "uae_staff_lookup.xlsx", {"Claims": claims, "Directory": directory})
     for p in sorted(OUT.iterdir()):
         print(f"wrote {p.relative_to(ROOT)}")
     return 0

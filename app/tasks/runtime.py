@@ -45,7 +45,7 @@ _NAME_AR_TO_CANON = {
 }
 _NAME_LATIN_TO_CANON = {}
 for _canon, _aliases in {
-    "mohammad": ("mohammad", "muhammad", "mohammed", "mohamed", "mohd", "muhamed", "muhammed", "mo"),
+    "mohammad": ("mohammad", "muhammad", "mohammed", "mohamed", "mohd", "muhamed", "muhammed"),
     "mahmoud": ("mahmoud", "mahmud", "mahmood"),
     "ahmad": ("ahmad", "ahmed"),
     "ali": ("ali",),
@@ -71,7 +71,7 @@ for _canon, _aliases in {
     "hamdan": ("hamdan",),
     "fatima": ("fatima", "fatimah", "fatma"),
     "aisha": ("aisha", "aysha", "aishah"),
-    "maryam": ("maryam", "mariam", "mary"),
+    "maryam": ("maryam", "mariam"),
     "noura": ("noura", "nora", "norah"),
     "hind": ("hind",),
     "sara": ("sara", "sarah"),

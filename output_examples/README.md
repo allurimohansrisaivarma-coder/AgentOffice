@@ -8,6 +8,6 @@ For Impact scoring, use:
 
 - Task-mode outcomes (cells filled, QA pass/fail/recover, code-hash approval)
 - Arabic key normalisation on lookups
-- Cited Gulf problem sources in the root README
+- The UAE demos (`task_uae_site_claims.trace.jsonl`; `scripts/measure_arabic_lookup.py`)
 
 …not the demo-corpus hours in these files.

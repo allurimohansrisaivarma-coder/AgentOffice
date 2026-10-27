@@ -13,11 +13,11 @@
 | Criterion | Where to look |
 |---|---|
 | **Impact** (30) | [The problem](#the-problem): office teams re-doing the same spreadsheet work every week, including bilingual Arabic/English sheets. [Results](#results): live runs that filled 119 and 275 cells, and found about 24 hours a week of automatable work in the finance data |
-| **Technical** (20) | [How it works](#how-it-works): 13 agents in capped critique loops, a QA oracle independent of the code, a sandbox, hash-chained traces, and 221 tests |
-| **Innovation** (15) | [What makes it different](#what-makes-it-different): QA that can't flatter the code, approval bound to a code hash, memory that changes behaviour, Arabic-aware key matching |
+| **Technical** (20) | [How it works](#how-it-works): 13 agents in capped critique loops, a QA oracle independent of the code, a sandbox, hash-chained traces, and 227 tests |
+| **Innovation** (15) | [What makes it different](#what-makes-it-different): QA that can't flatter the code, approval bound to a code hash, memory that changes behaviour, Arabic-aware matching of IDs, names, dates and amounts |
 | **Demo** (15) | [Get started](#get-started): one setup command, then sample mode with no keys. The real outputs and traces of every live run are in [`output_examples/`](output_examples/) |
-| **Product & UX** (10) | [The solution](#the-solution): a dynamic island on top of every app (Ctrl+Shift+Space), live Team and Sheet panes, and one approval card |
-| **Sponsor tech** (10) | [Built on our sponsors](#built-on-our-sponsors): Zetaris as the data layer for uploads too, Nightshift serving Nemotron to every agent (83 of 83 live model calls), and two Meterless engines built from scratch |
+| **Product & UX** (10) | [The solution](#the-solution): a dynamic island on top of every app on Windows and macOS (Ctrl+Shift+Space), live Team and Sheet panes, requests in English or Arabic, and one approval card |
+| **Sponsor tech** (10) | [Built on our sponsors](#built-on-our-sponsors): Zetaris as the data layer for uploads too, Nightshift serving Nemotron to every agent (91 of 91 live model calls), and two Meterless engines built from scratch |
 
 ## The problem
 
@@ -36,7 +36,8 @@ AgentOffice is a desktop app with a team of AI agents behind it. It lives at the
 | "Fill in each employee's team and role from the staff directory, fix the dates, add GST, flag claims over 500, total by team" + a spreadsheet | Plans the steps, writes a Python automation, tests it on your file, asks you to approve that exact code, then returns the filled workbook |
 | The same request next week | Remembers your approval, re-tests the automation on the new file and runs it straight away |
 | Look-ups, tidying, mapping, maths, splitting and joining, dates, flags, filters, de-duplication, sorting, group totals | Any combination in one plan, across sheets or against company tables in Zetaris |
-| A sheet whose IDs or names mix Arabic and Western digits (`١٢٣` / `123`) or spellings (`أحمد` / `احمد`) | The Data Profiler spots the variants, the PM normalises the lookup keys, the Spec Critic rejects a plan whose keys would still miss, and QA proves the result doesn't change when digits or spellings are swapped. Try the bundled `uae_site_claims.xlsx` |
+| A sheet whose IDs or names mix Arabic and Western digits (`١٢٣` / `123`), spellings (`أحمد` / `احمد`) or scripts (`Mohammed` / `محمد`) | The Data Profiler spots the variants, the PM normalises the lookup keys, the Spec Critic rejects a plan whose keys would still miss, and QA proves the result doesn't change when digits or spellings are swapped. Try the bundled `uae_site_claims.xlsx` and `uae_staff_lookup.xlsx` |
+| "املأ الفريق لكل موظف من دليل الأسماء، أصلح التواريخ، وحوّل المبالغ" (fill each person's team, fix the dates, convert the amounts) | The same loop for a request typed in Arabic: dates in Arabic month names or the Hijri calendar become ISO dates, and amounts like `د.إ ١٬٢٥٠٫٥٠` or `SAR 1,100` become numbers. Arabic messages and cells are shown right to left |
 | "Where is the finance team losing time, and what should we automate first?" | Finds where the hours go, explains why with cited rows, ranks what to automate, then builds and tests it |
 | "Who are the AP clerks in finance?" or "Draft an email to the finance team about last week's hours" | Looks it up with Zetaris SQL, answers or drafts the email from those rows only, and a critic checks every number and person against the data. Drafts are never sent; you copy them. Needs the model (not sample mode) |
 
@@ -54,7 +55,7 @@ AgentOffice is a desktop app with a team of AI agents behind it. It lives at the
 - **Tests that can't flatter the code.** QA computes the expected result from the plan with an independent reference runtime, never from the code it's testing. It tests your real rows, mutations of every column (including Arabic digit, spelling and separator swaps), edge cases, and a renamed column that must fail.
 - **Approval bound to code.** You approve one exact code hash. Nothing is written before that, the Operator refuses to run code whose hash has changed, and the filled file carries an audit sheet recording who approved which code.
 - **Memory that changes behaviour.** An approval lets the same automation run again next week without asking; a rejection changes what the team proposes next.
-- **Script-aware matching as part of the reasoning.** Arabic normalisation isn't a bolted-on filter. The profiler surfaces the variants, the plan applies them to lookup and de-duplication keys, the critic can reject a plan because keys only match after normalising, and QA checks the result holds.
+- **Script-aware matching as part of the reasoning.** Arabic normalisation isn't a bolted-on filter. The profiler surfaces the variants, the plan applies them to lookup and de-duplication keys (Indic digits, letter variants, separators, and Latin spellings of Arabic names such as Mohammed / Muhammad / محمد), the critic can reject a plan because keys only match after normalising, and QA checks the result holds. Dates in Arabic month names or the Hijri calendar, and dirham or riyal amounts, are parsed the same way.
 - **Evidence for every number.** Findings cite the SQL rows behind them, and every step lands in a hash-chained trace (`logs/trace-<run_id>.jsonl`).
 - **Watch the team work.** Beside the chat, the **Team** pane draws each agent, handoff and critique as it happens, and the **Sheet** pane shows every cell the approved code changed, with its old value and the plan step behind it. Any past run on your machine can be replayed from its trace; hide the pane for a narrow chat.
 - **Runs without keys.** Sample mode runs the real agent logic on bundled synthetic data, with no keys and no network.
@@ -98,7 +99,7 @@ Verified on a local Zetaris 2.4.3 install: all 7 statements succeed, every row c
 
 Every model call in the live runs was answered by NVIDIA Nemotron through the Nightshift route `meterless/deep`: **`nvidia/nemotron-3-ultra-550b-a55b`** for all the spreadsheet tasks and most analysis calls, and `nvidia/nemotron-3.5-lightning-30b-a3b` for the 2 or 3 analysis calls per run that Nightshift routed there. Each trace records which model answered. It's hosted, so no local GPU is needed. Nemotron routes requests, writes the step specs and SQL, writes and revises the code, designs extra test cases, reviews the code, critiques the claims, writes the decision memos, and answers questions and drafts emails from Zetaris rows.
 
-**By the numbers:** in the six saved live runs, **83 of 83 model calls were answered by Nemotron** (75 by Nemotron 3 Ultra, 8 by Nemotron 3.5 Lightning; 626,326 tokens), across **13 agents**, from the Retriever and QA (12 calls each) to the Front Desk. Reproduce it with `python scripts/nemotron_usage.py`.
+**By the numbers:** in the seven saved live runs, **91 of 91 model calls were answered by Nemotron** (77 by Nemotron 3 Ultra, 14 by Nemotron 3.5 Lightning; 700,341 tokens), across **13 agents**, from QA (14 calls) to the Reconciler and Conflict Critic (3 each). Reproduce it with `python scripts/nemotron_usage.py`.
 
 In the live expense-claims run, Nemotron wrote a 7-step plan with lookup SQL on the staff directory. QA rejected its first two versions of the code: v1 broke the sandbox policy, and v2 mishandled blank and text-typed amounts. Version 3 passed **49/49** cases. AgentOffice handles Nemotron as a reasoning model: it strips the reasoning from each reply, gives the model an 8,000-token budget, and detects and retries replies cut off at the length limit. Prompts carry Arabic text as real script, not escape codes, so Nemotron reads the values as written.
 
@@ -168,7 +169,7 @@ flowchart LR
 | 1 Fragmented Intelligence | Discover: reconcile timesheets, tickets and the activity log, and judge which source to trust | Source Mapper, Reconciler, Conflict Critic | World Model |
 | 2 Explain Why | Explain: answer with SQL evidence, and drop any claim a critic can't verify | Research Planner, Retriever, Report Writer, Insight Critic | World Model |
 
-**Built to be reliable:** every external call has a timeout, bounded retries and a structured error; every agent loop has an iteration cap, with at most 40 model calls per analysis run. Generated code runs in a sandbox (a static import and call policy, an isolated subprocess with an empty environment, and a timeout), and 221 tests cover the agents, both engines, the adapters and the sandbox.
+**Built to be reliable:** every external call has a timeout, bounded retries and a structured error; every agent loop has an iteration cap, with at most 40 model calls per analysis run. Generated code runs in a sandbox (a static import and call policy, an isolated subprocess with an empty environment, and a timeout), and 227 tests cover the agents, both engines, the adapters and the sandbox.
 
 Each agent's role, the QA design and the engine internals are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -183,9 +184,10 @@ Everything in [`output_examples/`](output_examples/) is a **real response with i
 | `leads_and_contacts.xlsx`: split names, match leads to the CRM sheet, fill owner | 4-step plan; the code passed **34/34** QA cases on the first try (6 designed by the model); 119 cells filled after approval | 18/18 cases |
 | `expense_claims.xlsx`: team and role from the staff directory in Zetaris, tidy categories, ISO dates, GST, flag > 500, totals by team | 7-step plan with lookup SQL on `workforce.people`, and **three QA rounds** (v3 passed **49/49**); 275 cells filled and a *Totals by Team* sheet after approval | 36/36 cases |
 | `uae_site_claims.xlsx`: team and role by staff ID typed in Western, Arabic-Indic or Persian digits, flag > 1,000 AED, totals by team | Live on 27 Oct, recorded for the demo video ([trace](output_examples/task_uae_site_claims.trace.jsonl)): the request never mentions Arabic, yet the PM put `arabic_digits` on the lookup key after the profiler's note; **17 of 18** IDs matched (the one not on staff is flagged); QA rejected v1 (43/47) and v2 passed **47/47**; 88 cells filled after approval | 17 of 18 matched; 24/24 cases |
+| `uae_staff_lookup.xlsx`: claims matched to an Arabic-script directory sheet by staff ID and by Latin name (`Mohammed Ali` / `محمد علي`), Arabic and Hijri dates, dirham and riyal amounts | Not run live yet. Measured on the file with `python scripts/measure_arabic_lookup.py`: an exact-match name lookup finds **0 of 8**, and with `arabic_names` **8 of 8**; staff IDs go from 4 of 8 to **8 of 8** with `arabic_digits` | 8 of 8 matched by ID and name; 40/40 cases |
 | `vendor_invoices.csv`: dedupe, fill statuses, mark overdue, sort | 6-step plan; the code passed **40/40** QA cases on the first try (6 designed by the model); 34 rows in, 30 out after removing the re-typed duplicates | 24/24 cases |
 
-**Analysis questions** are in [`input_examples/`](input_examples/). Different questions give different answers, measured on the synthetic workforce data:
+**Analysis questions** are in [`input_examples/`](input_examples/). Different questions give different answers, measured on the synthetic workforce data. The hours below show how the Priority Critic caps a claim at the hands-on time the activity log measures; they are not a claim about any real company's savings:
 
 | Question | Live run (Nemotron) | Sample mode |
 |---|---|---|
@@ -203,7 +205,7 @@ cd AgentOffice
 powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
-Open **AgentOffice** from the Start menu and press **Ctrl+Shift+Space**: the island opens over whatever app you're in. With no keys it runs in **sample mode**: pick a demo file, send its suggested request, and watch the team work. Your own CSV or Excel files work too: a rule-based planner maps requests like *"remove duplicate order IDs, standardise order dates, add 10% GST to Amount, flag amounts over 1,000, totals by Region"* onto your columns, and QA tests the result on your file ([what it understands](docs/SETUP.md#3-try-it-in-sample-mode)).
+Open **AgentOffice** from the Start menu and press **Ctrl+Shift+Space**: the island opens over whatever app you're in. On **macOS**, install Chrome or Edge and double-click `AgentOffice.command` (or `AgentOffice.app`); macOS may ask once for Accessibility access to place the window, and without it you get a normal app window. With no keys it runs in **sample mode**: pick a demo file, send its suggested request, and watch the team work. Your own CSV or Excel files work too: a rule-based planner maps requests like *"remove duplicate order IDs, standardise order dates, add 10% GST to Amount, flag amounts over 1,000, totals by Region"* onto your columns, and QA tests the result on your file ([what it understands](docs/SETUP.md#3-try-it-in-sample-mode)).
 
 For testing, the same agent service also runs without the desktop shell:
 
@@ -224,11 +226,11 @@ To connect Zetaris and Meterless Nightshift for live runs on your own files, fol
 - **Models:** Meterless Nightshift (primary; NVIDIA Nemotron lanes). Any OpenAI-compatible endpoint can be used as a secondary provider (`LLM_PROVIDER=openai_compatible`).
 - **Agent framework:** none. The agents are plain Python written for this project.
 - **Libraries:** FastAPI (MIT), Uvicorn (BSD-3-Clause), httpx (BSD-3-Clause), python-dotenv (BSD-3-Clause), openpyxl (MIT), and pytest (MIT, development only).
-- **UI:** plain HTML, CSS and JavaScript written for this project, with no framework or CDN. The desktop island drives Microsoft Edge or Google Chrome in app mode through Python's standard `ctypes`.
+- **UI:** plain HTML, CSS and JavaScript written for this project, with no framework or CDN. The desktop island (Windows and macOS) drives Microsoft Edge or Google Chrome in app mode, through Python's standard `ctypes` on Windows and AppleScript on macOS.
 - **Data:** synthetic only, generated by committed, deterministic scripts; invented people, with `example.com` and `example.org` emails. See [data/README.md](data/README.md).
 - **Open-source code adapted:** none. Design ideas, not code, are listed in [docs/INSPIRATION.md](docs/INSPIRATION.md). The World Model and H-MEM follow the Meterless reference *designs*, reimplemented.
 - **Pre-existing components:** none. All code was written in this repository from 23 Oct 2026.
-- **AI coding tools:** developed with **Claude Code** (Anthropic); the split-view Team and Sheet panes were built with **Cursor**. The team reviewed and tested all AI-generated code; the suite has 221 tests.
+- **AI coding tools:** developed with **Claude Code** (Anthropic); the split-view Team and Sheet panes, the macOS desktop island and the extended Arabic support were built with **Cursor**. The team reviewed and tested all AI-generated code; the suite has 227 tests.
 - **Sample mode and design boundaries:** documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#design-boundaries).
 
 ## Documentation

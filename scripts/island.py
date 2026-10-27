@@ -10,7 +10,7 @@ How it works (standard library only):
     state/island-browser (your normal browser profile is never touched).
   * The window is kept at the top centre of the main screen as a pill (collapsed) or
     a panel (open). The page reports state in the title ("… · island" / "… · panel" /
-    "… · quit"); this script resizes to match.
+    "… · chat" with the Team/Sheet pane hidden / "… · quit"); this script resizes to match.
   * Ctrl+Shift+Space focuses the window (Windows: RegisterHotKey; macOS: Carbon
     hotkey, or click the pill if Accessibility / hotkey registration is denied).
 
@@ -33,6 +33,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ISLAND = (300, 44)            # CSS pixels
 PANEL = (960, 760)            # split view: chat + Team/Sheet
+CHAT = (480, 760)             # the panel with the Team/Sheet pane hidden
+SIZES = {"panel": PANEL, "chat": CHAT}   # open states; anything else is the pill
 TOP_MARGIN = 10
 TITLE_PREFIX = "AgentOffice ·"
 
@@ -46,9 +48,10 @@ def healthy(url: str) -> bool:
 
 
 def parse_title(title: str) -> tuple[str, int]:
-    """"AgentOffice · panel · 33" -> ("panel", 33): page state and browser title-bar height."""
+    """"AgentOffice · panel · 33" -> ("panel", 33): page state and browser title-bar height.
+    "chat" is the open panel with the Team/Sheet pane hidden."""
     parts = [p.strip() for p in title.split("·")]
-    mode = parts[1] if len(parts) > 1 and parts[1] in ("panel", "quit") else "island"
+    mode = parts[1] if len(parts) > 1 and parts[1] in ("panel", "chat", "quit") else "island"
     frame = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
     return mode, min(frame, 120)
 
@@ -355,8 +358,8 @@ def _main_windows(args) -> int:
             if mode == self.mode and frame == self.frame:
                 return
             self.mode, self.frame = mode, frame
-            target = self.px(PANEL if mode == "panel" else ISLAND)
-            radius = int((28 if mode == "panel" else ISLAND[1] / 2) * self.scale)
+            target = self.px(SIZES.get(mode, ISLAND))
+            radius = int((28 if mode in SIZES else ISLAND[1] / 2) * self.scale)
             start = self.size if animate and self.size != (0, 0) else target
             frames = 9 if animate and start != target else 1
             for i in range(1, frames + 1):
@@ -699,9 +702,9 @@ def _main_darwin(args) -> int:
                 user_quit = True
                 break
             if mode != last_mode:
-                place_window(*(PANEL if mode == "panel" else ISLAND))
+                place_window(*SIZES.get(mode, ISLAND))
                 last_mode = mode
-                if mode == "panel":
+                if mode in SIZES:
                     activate_window()
             time.sleep(0.12)
     except KeyboardInterrupt:
