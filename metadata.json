@@ -4,7 +4,7 @@
   "hackathon": "Open Agent Hackathon 2026",
   "primary_track": "Track 3 - Reasoning Architecture",
   "also_addresses": ["Track 1 - Fragmented Intelligence", "Track 2 - Explain Why"],
-  "description": "An AI office team you tell what to do: attach a spreadsheet and describe the repetitive work, and the agents plan it, write the automation, test it on your data and ask you to approve the exact code before handing back the filled file. It also analyses where a team's time goes and proposes what to automate first, and answers everyday questions or drafts emails from the company's data, with every number checked against the rows.",
+  "description": "An AI office team you tell what to do: attach a spreadsheet and describe the repetitive work, and the agents plan it, write the automation, test it on your data (including Arabic digit and spelling variants in lookup keys) and ask you to approve the exact code before handing back the filled file. It also analyses where a team's time goes and proposes what to automate first, and answers everyday questions or drafts emails from the company's data, with every number checked against the rows.",
   "repository": "https://github.com/allurimohansrisaivarma-coder/AgentOffice",
   "run": {
     "setup": "Windows: powershell -ExecutionPolicy Bypass -File setup.ps1 (virtual environment, dependencies, .env, shortcut); other platforms and default mode: docs/SETUP.md",
@@ -51,5 +51,5 @@
   "ai_coding_tool": "Claude Code (Anthropic) for most of the code; Cursor for the split-view Team and Sheet panes",
   "pre_existing_components": "none",
   "data": "Synthetic only (scripts/generate_workforce_data.py, scripts/generate_task_samples.py); example.com / example.org emails.",
-  "tests": 210
+  "tests": 218
 }

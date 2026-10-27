@@ -8,9 +8,24 @@
 
 ![The AgentOffice island at the top of the screen](docs/images/ui-island-idle.png)
 
+## For the judges
+
+| Criterion | Where to look |
+|---|---|
+| **Impact** (30) | [The problem](#the-problem): office teams re-doing the same spreadsheet work every week, including bilingual Arabic/English sheets. [Results](#results): live runs that filled 119 and 275 cells, and found about 24 hours a week of automatable work in the finance data |
+| **Technical** (20) | [How it works](#how-it-works): 13 agents in capped critique loops, a QA oracle independent of the code, a sandbox, hash-chained traces, and 218 tests |
+| **Innovation** (15) | [What makes it different](#what-makes-it-different): QA that can't flatter the code, approval bound to a code hash, memory that changes behaviour, Arabic-aware key matching |
+| **Demo** (15) | [Get started](#get-started): one setup command, then sample mode with no keys. The real outputs and traces of every live run are in [`output_examples/`](output_examples/) |
+| **Product & UX** (10) | [The solution](#the-solution): a dynamic island on top of every app (Ctrl+Shift+Space), live Team and Sheet panes, and one approval card |
+| **Sponsor tech** (10) | [Built on our sponsors](#built-on-our-sponsors): Zetaris as the data layer for uploads too, Nightshift serving Nemotron to every agent (83 of 83 live model calls), and two Meterless engines built from scratch |
+
 ## The problem
 
-Small and medium office teams in finance, operations and admin lose hours every week to the same manual work: looking up who's in which team, fixing dates, tidying categories, flagging the big claims, totalling it up. The work is spread across spreadsheets, tickets and email, and nobody has time to find out which jobs are worth automating, justify it, and build the automation safely.
+Finance, operations and admin teams lose hours every week to the same manual spreadsheet work: looking up who's in which team, fixing dates, tidying categories, flagging the big claims, removing duplicates, totalling it all up. The work is spread across spreadsheets, tickets and email. Nobody has the time to find out which jobs are worth automating, justify it, and build the automation safely.
+
+Generic AI chat doesn't close that gap. It can suggest a formula, but it doesn't test its answer on your file, show you exactly what will change, or ask before it acts. And it breaks quietly on real data. In the UAE and Saudi Arabia, for example, one sheet can hold the same staff ID as `123` and `١٢٣`, or the same name spelled `أحمد` and `احمد`, so a naive lookup simply misses.
+
+**Who it's for:** small and medium office teams with no automation engineer, who need the work done correctly and want to stay in control of what runs on their data.
 
 ## The solution
 
@@ -21,6 +36,7 @@ AgentOffice is a desktop app with a team of AI agents behind it. It lives at the
 | "Fill in each employee's team and role from the staff directory, fix the dates, add GST, flag claims over 500, total by team" + a spreadsheet | Plans the steps, writes a Python automation, tests it on your file, asks you to approve that exact code, then returns the filled workbook |
 | The same request next week | Remembers your approval, re-tests the automation on the new file and runs it straight away |
 | Look-ups, tidying, mapping, maths, splitting and joining, dates, flags, filters, de-duplication, sorting, group totals | Any combination in one plan, across sheets or against company tables in Zetaris |
+| A sheet whose IDs or names mix Arabic and Western digits (`١٢٣` / `123`) or spellings (`أحمد` / `احمد`) | The Data Profiler spots the variants, the PM normalises the lookup keys, the Spec Critic rejects a plan whose keys would still miss, and QA proves the result doesn't change when digits or spellings are swapped |
 | "Where is the finance team losing time, and what should we automate first?" | Finds where the hours go, explains why with cited rows, ranks what to automate, then builds and tests it |
 | "Who are the AP clerks in finance?" or "Draft an email to the finance team about last week's hours" | Looks it up with Zetaris SQL, answers or drafts the email from those rows only, and a critic checks every number and person against the data. Drafts are never sent; you copy them. Needs the model (not sample mode) |
 
@@ -35,9 +51,10 @@ AgentOffice is a desktop app with a team of AI agents behind it. It lives at the
 ### What makes it different
 
 - **A team that argues.** Critics challenge every plan, claim and piece of code, and the work is revised until it passes: Spec Critic → PM, QA → Engineer, Insight Critic → Report Writer, Priority Critic → PM, Grounding Critic → Assistant. Every loop is capped.
-- **Tests that can't flatter the code.** QA computes the expected result from the plan with an independent reference runtime, never from the code it's testing. It tests your real rows, mutations of every column, edge cases, and a renamed column that must fail.
-- **Approval bound to code.** You approve one exact code hash. Nothing is written before that, and the filled file carries an audit sheet recording who approved which code.
+- **Tests that can't flatter the code.** QA computes the expected result from the plan with an independent reference runtime, never from the code it's testing. It tests your real rows, mutations of every column (including Arabic digit, spelling and separator swaps), edge cases, and a renamed column that must fail.
+- **Approval bound to code.** You approve one exact code hash. Nothing is written before that, the Operator refuses to run code whose hash has changed, and the filled file carries an audit sheet recording who approved which code.
 - **Memory that changes behaviour.** An approval lets the same automation run again next week without asking; a rejection changes what the team proposes next.
+- **Script-aware matching as part of the reasoning.** Arabic normalisation isn't a bolted-on filter. The profiler surfaces the variants, the plan applies them to lookup and de-duplication keys, the critic can reject a plan because keys only match after normalising, and QA checks the result holds.
 - **Evidence for every number.** Findings cite the SQL rows behind them, and every step lands in a hash-chained trace (`logs/trace-<run_id>.jsonl`).
 - **Watch the team work.** Beside the chat, the **Team** pane draws each agent, handoff and critique as it happens, and the **Sheet** pane shows every cell the approved code changed, with its old value and the plan step behind it. Any past run on your machine can be replayed from its trace; hide the pane for a narrow chat.
 - **Runs without keys.** Sample mode runs the real agent logic on bundled synthetic data, with no keys and no network.
@@ -59,7 +76,7 @@ In AgentOffice, Zetaris isn't just a database the agents read from. **Your sprea
 - The service exposes every upload as long-format cells, and Zetaris registers them as the **Lightning REST table** `upload_cells`. The Data Profiler profiles your file with Zetaris SQL before the PM plans anything.
 - Lookups join your file with company data in Zetaris. For example, the expense-claims demo fills each claim's team and role from the staff directory in `workforce.people`; the Retriever runs that SQL and the Spec Critic checks that its keys actually match your file.
 - Analysis mode grounds every finding in Zetaris SQL across five workforce tables: timesheets, tickets, email events, the activity log and people.
-- The agents write portable SQL against `workforce.<table>`. The data adapter rewrites each reference to read the REST table at query time, so no views or extra objects are needed, and the trace records the SQL that actually ran.
+- The agents write portable SQL against `workforce.<table>`. The data adapter rewrites each reference to read the REST table at query time, so no views or extra objects are needed, and the trace records the SQL that actually ran. Values written in Arabic digits or script come back as text, so they're never mangled into numbers on the way.
 
 Verified on a local Zetaris 2.4.3 install: all 7 statements succeed, every row count matches the generator's manifest, uploads are queryable immediately, and the analysis pipeline's 15 queries give findings identical to sample mode.
 
@@ -83,7 +100,7 @@ Every model call in the live runs was answered by NVIDIA Nemotron through the Ni
 
 **By the numbers:** in the six saved live runs, **83 of 83 model calls were answered by Nemotron** (75 by Nemotron 3 Ultra, 8 by Nemotron 3.5 Lightning; 626,326 tokens), across **13 agents**, from the Retriever and QA (12 calls each) to the Front Desk. Reproduce it with `python scripts/nemotron_usage.py`.
 
-In the live expense-claims run, Nemotron wrote a 7-step plan with lookup SQL on the staff directory. QA rejected its first two versions of the code: v1 broke the sandbox policy, and v2 mishandled blank and text-typed amounts. Version 3 passed **49/49** cases. AgentOffice handles Nemotron as a reasoning model: it strips the reasoning from each reply, gives the model an 8,000-token budget, and detects and retries replies cut off at the length limit.
+In the live expense-claims run, Nemotron wrote a 7-step plan with lookup SQL on the staff directory. QA rejected its first two versions of the code: v1 broke the sandbox policy, and v2 mishandled blank and text-typed amounts. Version 3 passed **49/49** cases. AgentOffice handles Nemotron as a reasoning model: it strips the reasoning from each reply, gives the model an 8,000-token budget, and detects and retries replies cut off at the length limit. Prompts carry Arabic text as real script, not escape codes, so Nemotron reads the values as written.
 
 **Speed:** each call goes to a Nightshift lane. Light jobs (routing, the first plan, QA's test design and review, the Manager's memo, memory) go to Nemotron 3.5 Lightning with thinking off. Code, and anything a critic rejects, goes to Nemotron 3 Ultra. QA designs its tests while Ultra writes the code. A live expense-claims task now takes about **4 minutes** instead of 5 to 10 (details in [ARCHITECTURE.md](docs/ARCHITECTURE.md#nvidia)).
 
@@ -132,13 +149,26 @@ flowchart LR
   MG -.->|run events mined| HM
 ```
 
+**Questions and email drafts** use a shorter loop: the Assistant plans what to look up, the Retriever runs read-only SQL on Zetaris, the Assistant writes from those rows only (people reach the model as placeholders), and the Grounding Critic sends back any number or person the data doesn't support, then has the model check that each figure is tied to the right week, person or category. Nothing is sent; you copy the draft.
+
+### Why this is Track 3: reasoning, not a linear pipeline
+
+| Pattern the track asks for | Where it lives in AgentOffice |
+|---|---|
+| Planner ↔ critic ↔ revise, capped | PM ↔ Spec Critic on the real file and the Zetaris reference data (2 rounds); Priority Critic on savings claims (2 rounds); Insight Critic on cited numbers (2 rounds) |
+| Executor ↔ evaluator iterate | Engineer ↔ QA (3 revisions). In the live expense-claims run QA rejected v1 and v2 before v3 passed 49/49 ([trace](output_examples/task_expense_claims.trace.jsonl)) |
+| Shared state | The World Model in analysis mode; the upload as the Zetaris table `upload_cells` in task mode |
+| Memory that changes later behaviour | H-MEM: an approval means reuse without asking; a rejection means a different proposal next run |
+| Escalation to a human | The Manager's memo and the code-hash gate; the Manager escalates instead of re-submitting code a human rejected |
+| Recovery from wrong output | Spec Critic rejections force a re-plan; QA's failing cases drive the Engineer's revision; Retriever SQL errors go back to the model (3 attempts); sandbox policy violations fail loudly |
+
 | Track | Where AgentOffice covers it | Agents | Engine |
 |---|---|---|---|
 | **3 Reasoning Architecture (primary)** | Decide and build: rank, specify, build, test, decide, ask a human, remember | PM, Priority Critic, Engineer, QA, Manager, Memory Keeper | H-MEM + World Model |
 | 1 Fragmented Intelligence | Discover: reconcile timesheets, tickets and the activity log, and judge which source to trust | Source Mapper, Reconciler, Conflict Critic | World Model |
 | 2 Explain Why | Explain: answer with SQL evidence, and drop any claim a critic can't verify | Research Planner, Retriever, Report Writer, Insight Critic | World Model |
 
-**Questions and email drafts** use a shorter loop: the Assistant plans what to look up, the Retriever runs read-only SQL on Zetaris, the Assistant writes from those rows only (people reach the model as placeholders), and the Grounding Critic sends back any number or person the data doesn't support, then has the model check that each figure is tied to the right week, person or category. Nothing is sent; you copy the draft.
+**Built to be reliable:** every external call has a timeout, bounded retries and a structured error; every agent loop has an iteration cap, with at most 40 model calls per analysis run. Generated code runs in a sandbox (a static import and call policy, an isolated subprocess with an empty environment, and a timeout), and 218 tests cover the agents, both engines, the adapters and the sandbox.
 
 Each agent's role, the QA design and the engine internals are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -154,7 +184,7 @@ Everything in [`output_examples/`](output_examples/) is a **real response with i
 | `expense_claims.xlsx`: team and role from the staff directory in Zetaris, tidy categories, ISO dates, GST, flag > 500, totals by team | 7-step plan with lookup SQL on `workforce.people`, and **three QA rounds** (v3 passed **49/49**); 275 cells filled and a *Totals by Team* sheet after approval | 36/36 cases |
 | `vendor_invoices.csv`: dedupe, fill statuses, mark overdue, sort | 6-step plan; the code passed **40/40** QA cases on the first try (6 designed by the model); 34 rows in, 30 out after removing the re-typed duplicates | 24/24 cases |
 
-**Analysis questions** are in [`input_examples/`](input_examples/). Different questions give different answers:
+**Analysis questions** are in [`input_examples/`](input_examples/). Different questions give different answers, measured on the synthetic workforce data:
 
 | Question | Live run (Nemotron) | Sample mode |
 |---|---|---|
@@ -197,7 +227,7 @@ To connect Zetaris and Meterless Nightshift for live runs on your own files, fol
 - **Data:** synthetic only, generated by committed, deterministic scripts; invented people, with `example.com` and `example.org` emails. See [data/README.md](data/README.md).
 - **Open-source code adapted:** none. Design ideas, not code, are listed in [docs/INSPIRATION.md](docs/INSPIRATION.md). The World Model and H-MEM follow the Meterless reference *designs*, reimplemented.
 - **Pre-existing components:** none. All code was written in this repository from 23 Oct 2026.
-- **AI coding tools:** developed with **Claude Code** (Anthropic); the split-view Team and Sheet panes were built with **Cursor**. The team reviewed and tested all AI-generated code; the suite has 210 tests.
+- **AI coding tools:** developed with **Claude Code** (Anthropic); the split-view Team and Sheet panes were built with **Cursor**. The team reviewed and tested all AI-generated code; the suite has 218 tests.
 - **Sample mode and design boundaries:** documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#design-boundaries).
 
 ## Documentation

@@ -73,7 +73,7 @@ The code was built with **Claude Code**; the split-view Team and Sheet panes wer
 ### AI coding tool
 - **We built most of the codebase with Claude Code (Anthropic)**, from an empty repository on 23 Oct 2026: scaffolding, adapters, both engines, the agents, the task mode, the chat UI and desktop island, tests and the Docker setup.
 - **Cursor** was used by one team member on 26 Oct 2026 to build the split-view **Team** and **Sheet** panes: the agent canvas and saved-run replay, the per-cell change events behind the Sheet grid, and the macOS sandbox fix. Those commits carry `Co-authored-by: Cursor`.
-- The team reviewed and tested all generated code (210 tests).
+- The team reviewed and tested all generated code (218 tests).
 - **No Meterless or NVIDIA credentials** were ever given to either coding tool.
 - **If the form asks how Cursor was used:** for the split-view Team and Sheet panes described above; the rest of the code was written with Claude Code.
 
