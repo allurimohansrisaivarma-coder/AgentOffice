@@ -32,6 +32,38 @@ def test_lookup_fills_blanks_and_reports_status():
                                                        (None, "missing")]
 
 
+def test_arabic_normalizers_unify_digits_names_and_separators():
+    assert runtime.normalize("Emp-١٢٣", ["arabic_digits"]) == "Emp-123"
+    assert runtime.normalize("Emp-۱۲۳", ["arabic_digits"]) == "Emp-123"          # Persian digits
+    assert runtime.normalize("٠١٢", ["digits_only"]) == "012"
+    assert runtime.normalize("١٢٫٥٬٠٠٠", ["arabic_digits", "arabic_separators"]) == "12.5,000"
+    # أ/إ/آ → ا, ى → ي, ة → ه, tatweel and fatha stripped
+    assert runtime.normalize("أحمدـ عليّة", ["arabic_text"]) == runtime.normalize("احمد عليه", ["arabic_text"])
+    assert runtime.normalize("إياد", ["arabic_text"]) == "اياد"
+    assert runtime.normalize("آمنة", ["arabic_text"]) == "امنه"
+
+
+def test_lookup_matches_arabic_digit_and_name_variants():
+    spec = {"input": {"columns": ["staff_id", "name"]}, "references": {"staff": {"fields": ["id", "name", "team"]}},
+            "steps": [
+                {"op": "lookup", "key": "staff_id", "reference": "staff", "reference_key": "id",
+                 "fields": {"team": "team"}, "normalize": ["strip", "arabic_digits"], "mode": "overwrite",
+                 "status_column": "id_status",
+                 "statuses": {"found": "ok", "not_found": "missing", "ambiguous": "dup"}},
+                {"op": "lookup", "key": "name", "reference": "staff", "reference_key": "name",
+                 "fields": {"team": "team"}, "normalize": ["strip", "arabic_text", "collapse_spaces"],
+                 "mode": "overwrite", "status_column": "name_status",
+                 "statuses": {"found": "ok", "not_found": "missing", "ambiguous": "dup"}},
+            ]}
+    ref = {"staff": [{"id": "E-123", "name": "احمد علي", "team": "Ops"}]}
+    out = runtime.execute(spec, rows(
+        {"staff_id": "E-١٢٣", "name": "x"},
+        {"staff_id": "x", "name": "أحمدـ عليّ"},
+    ), ref)["rows"]
+    assert out[0]["team"] == "Ops" and out[0]["id_status"] == "ok"
+    assert out[1]["team"] == "Ops" and out[1]["name_status"] == "ok"
+
+
 def test_compute_treats_text_and_zero_division_as_blank():
     spec = {"input": {"columns": ["a", "b"]}, "steps": [
         {"op": "compute", "column": "c", "expression": "({a} + 1) / {b}", "round": 2}]}
@@ -84,6 +116,14 @@ def test_validate_spec_checks_columns_against_the_file():
 def test_describe_only_explains_the_ops_used():
     text = describe(DEMO_SPECS["vendor_invoices"])
     assert "dedupe:" in text and "sort:" in text and "lookup:" not in text and "run(rows, reference)" in text
+
+
+def test_nightshift_spec_format_lists_arabic_normalizers():
+    """The PM prompt Nightshift sees must name arabic_* so Nemotron can put them on lookup keys."""
+    from app.tasks.spec import spec_format
+    fmt = spec_format()
+    assert "arabic_digits" in fmt and "arabic_text" in fmt and "arabic_separators" in fmt
+    assert "UAE/Saudi" in fmt or "Zetaris staff directory" in fmt
 
 
 # ------------------------------------------------------------------ files
@@ -140,6 +180,59 @@ def test_critic_flags_a_lookup_that_matches_nothing():
     parsed = files.parse(path.name, path.read_bytes())
     issues, _ = critique(spec, parsed, {"staff": [{"email": "nobody@example.org", "team": "X", "role": "Y"}]})
     assert any("none of the" in i for i in issues)
+
+
+def test_critic_flags_arabic_script_variants_on_lookup_keys():
+    """Keys that only match after arabic_* normalizers get a script-variant issue, not a vague miss."""
+    parsed = {
+        "sheets": [{"name": "Claims", "columns": ["Employee ID", "Name"], "rows": [
+            {"Employee ID": "E-١٢٣", "Name": "أحمد"},
+            {"Employee ID": "E-٤٥٦", "Name": "سارة"},
+        ]}],
+        "format": "csv", "filename": "uae.csv",
+    }
+    spec = {
+        "name": "staff_fill", "summary": "fill from directory",
+        "input": {"sheet": "Claims", "columns": ["Employee ID", "Name"]},
+        "references": {"staff": {"source": "sheet", "sheet": "Staff", "fields": ["id", "name", "team"]}},
+        "steps": [{"op": "lookup", "key": "Employee ID", "reference": "staff", "reference_key": "id",
+                   "fields": {"Team": "team"}, "normalize": ["strip"], "mode": "fill_blanks"}],
+    }
+    ref = {"staff": [{"id": "E-123", "name": "احمد", "team": "Ops"},
+                     {"id": "E-456", "name": "ساره", "team": "HR"}]}
+    issues, _ = critique(spec, parsed, ref)
+    assert any("Arabic script variants" in i and "arabic_digits" in i for i in issues)
+
+    # Same sheet keyed on names: arabic_text is the fix.
+    name_spec = copy.deepcopy(spec)
+    name_spec["steps"][0]["key"] = "Name"
+    name_spec["steps"][0]["reference_key"] = "name"
+    issues, _ = critique(name_spec, parsed, ref)
+    assert any("Arabic script variants" in i and "arabic_text" in i for i in issues)
+
+
+def test_qa_mutations_keep_arabic_lookup_results_unchanged():
+    spec = {"name": "id_lookup", "summary": "match staff ids",
+            "input": {"sheet": "S", "columns": ["id"]},
+            "references": {"staff": {"fields": ["id", "team"]}},
+            "steps": [{"op": "lookup", "key": "id", "reference": "staff", "reference_key": "id",
+                       "fields": {"team": "team"}, "normalize": ["strip", "arabic_digits", "arabic_text"],
+                       "mode": "overwrite", "status_column": "status",
+                       "statuses": {"found": "ok", "not_found": "missing", "ambiguous": "dup"}}]}
+    data = rows({"id": "E-123"}, {"id": "احمد"})
+    ref = {"staff": [{"id": "E-123", "team": "Ops"}, {"id": "احمد", "team": "HR"}]}
+    cases = qa.build_cases(spec, data, ref, full_file=False)
+    arabic_edges = [c for c in cases if c["kind"] == "edge"
+                    and ("Arabic-Indic" in c["purpose"] or "Arabic spelling" in c["purpose"])]
+    assert arabic_edges, "expected edge cases that swap Arabic digits / name spellings"
+    baseline = runtime.execute(spec, data, ref)
+    for case in arabic_edges:
+        got = runtime.execute(spec, case["rows"], case["reference"])
+        # Mutated key still resolves to the same directory hit the oracle expects.
+        assert qa.compare(qa.expected(spec, case["rows"], case["reference"]),
+                          {"ok": True, "output": got}) is None
+        assert got["rows"][0]["status"] == "ok"
+    assert baseline["rows"][0]["team"] == "Ops"
 
 
 @pytest.mark.skipif(__import__("os").name != "nt", reason="the desktop island is Windows-only")
@@ -357,6 +450,39 @@ def test_upload_endpoint_and_reply_intent(make_settings):
                                                        "upload_id": ok["upload_id"]}).json()["job_id"])
     assert unknown["status"] == "failed" and unknown["error"]["type"] == "agent_no_offline_plan"
     assert "remove duplicates" in unknown["error"]["message"]
+
+
+def test_arabic_upload_survives_zetaris_cells_and_directory_lookup(make_settings):
+    """Upload → /data/uploads/cells (what Zetaris pulls) keeps Arabic; lookup with arabic_* matches ASCII directory."""
+    from app.adapters.zetaris import coerce
+
+    client = TestClient(create_app(make_settings(sample_mode=True)))
+    csv = "Staff ID,Name,Amount\nE-١٢٣,أحمد,١٬٢٠٠٫٥٠\nE-٤٥٦,سارة,99\n".encode("utf-8")
+    meta = client.post("/uploads?filename=uae_claims.csv", content=csv).json()
+    cells = client.get("/data/uploads/cells").json()["rows"]
+    ours = [c for c in cells if c["upload_id"] == meta["upload_id"]]
+    assert any(c["cell_value"] == "E-١٢٣" for c in ours)
+    assert any(c["cell_value"] == "أحمد" for c in ours)
+    assert any(c["cell_value"] == "١٬٢٠٠٫٥٠" for c in ours)
+
+    # Zetaris REST returns every cell as a string; coerce must not mangle Arabic keys.
+    staff = [{"id": coerce("E-123"), "name": coerce("احمد"), "team": "Ops"},
+             {"id": coerce("E-456"), "name": coerce("ساره"), "team": "HR"}]
+    spec = {"name": "uae_staff_lookup", "summary": "Match Arabic-Indic staff IDs to the Zetaris directory.",
+            "input": {"columns": ["Staff ID", "Name", "Amount"]},
+            "references": {"staff": {"fields": ["id", "name", "team"]}},
+            "steps": [
+                {"op": "lookup", "key": "Staff ID", "reference": "staff", "reference_key": "id",
+                 "fields": {"Team": "team"}, "normalize": ["strip", "arabic_digits"], "mode": "overwrite",
+                 "status_column": "match",
+                 "statuses": {"found": "ok", "not_found": "missing", "ambiguous": "dup"}},
+            ]}
+    sheet_rows = client.get(f"/uploads/{meta['upload_id']}").json()["rows"][meta["sheets"][0]["name"]]
+    out = runtime.execute(spec, sheet_rows, {"staff": staff})["rows"]
+    assert out[0]["Team"] == "Ops" and out[0]["match"] == "ok"
+    assert out[1]["Team"] == "HR" and out[1]["match"] == "ok"
+    # Engineer prompt Nightshift sees must spell out arabic_* semantics for this spec.
+    assert "arabic_digits" in describe(spec)
 
 
 def test_ui_is_served(make_settings):

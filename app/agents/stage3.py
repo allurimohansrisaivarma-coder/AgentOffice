@@ -32,7 +32,9 @@ SPEC_FORMAT = """SPEC FORMAT (every automation is a record matcher/classifier):
  "left":  {"name": snake_case, "id_field": <field>, "fields": {<field>: "str" | "number"}},
  "right": {"name": snake_case, "id_field": <field>, "fields": {<field>: "str" | "number"}},
  "key":   {"left": <str field>, "right": <str field>,
-           "normalize": [any of "strip", "upper", "lower", "collapse_spaces", "digits_only"]},
+           "normalize": [any of "strip", "upper", "lower", "collapse_spaces", "digits_only",
+                         "arabic_digits", "arabic_text", "arabic_separators"]
+                        (arabic_* for UAE/Saudi digit, name and separator variants)},
  "checks": [{"left": <field>, "right": <field>, "op": "equals" | "equals_ci" | "within_pct" | "within_abs",
              "value": <number, within_* only>, "fail_status": snake_case}],
  "statuses": {"no_match": snake_case, "ambiguous": snake_case, "pass": snake_case}}

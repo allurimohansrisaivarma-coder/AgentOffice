@@ -39,14 +39,18 @@ OP_DOCS = {
                    "value by mapping[k] when k is a key; with 'ci' compare k.strip().casefold() with each key's "
                    ".strip().casefold(). Values with no matching key are unchanged."),
     "lookup": ('{"op": "lookup", "key": col, "reference": ref_name, "reference_key": ref_field, '
-               '"fields": {out_col: ref_field, ...}, "normalize": [..], "mode": "fill_blanks|overwrite", '
+               '"fields": {out_col: ref_field, ...}, '
+               '"normalize": [strip|upper|lower|collapse_spaces|digits_only|arabic_digits|arabic_text|arabic_separators], '
+               '"mode": "fill_blanks|overwrite", '
                '"status_column": col (optional), "statuses": {"found": s, "not_found": s, "ambiguous": s}}',
                "Index the reference rows by normalize(ref[reference_key]), skipping rows whose normalized key is ''. "
                "For each row: k = normalize(row[key]). Every out_col is created (None) if missing. If k is not '' "
                "and exactly one reference row matches, then for each out_col: with mode 'overwrite', or when "
                "row[out_col] is blank, set row[out_col] = match[ref_field]; status = statuses.found. If more than "
                "one matches: status = statuses.ambiguous, fields untouched. Otherwise status = statuses.not_found. "
-               "If status_column is given, set row[status_column] = status."),
+               "If status_column is given, set row[status_column] = status. UAE/Saudi sheets: include arabic_digits "
+               "for IDs/amounts with ٠١٢٣٤, arabic_text for name alef/yeh/teh-marbuta variants, "
+               "arabic_separators for ٫/٬."),
     "compute": ('{"op": "compute", "column": col, "expression": "{Amount} * 1.1", "round": <int digits, optional>}',
                 "Evaluate the arithmetic expression: {Column} references, int/float literals, + - * /, unary minus, "
                 "parentheses, usual precedence. A column reference whose value is not an int/float (bool is not a "
@@ -71,7 +75,9 @@ OP_DOCS = {
              "column = then; otherwise set it to else when 'else' is given, else leave it unchanged."),
     "filter": ('{"op": "filter", "keep_when": [condition, ...], "match": "all|any"}',
                "Keep only the rows where the conditions hold; order is preserved."),
-    "dedupe": ('{"op": "dedupe", "columns": [col, ...], "normalize": [..], "keep": "first|last"}',
+    "dedupe": ('{"op": "dedupe", "columns": [col, ...], '
+               '"normalize": [strip|upper|lower|collapse_spaces|digits_only|arabic_digits|arabic_text|arabic_separators], '
+               '"keep": "first|last"}',
                "key = tuple(normalize(row[c]) for c in columns). Rows whose key parts are all '' are always kept. "
                "Among rows sharing a key keep only the first (or last) occurrence; surviving rows keep their "
                "original relative order."),
@@ -104,12 +110,15 @@ HELPERS_DOC = (
     "Definitions: blank(v) = v is None or (isinstance(v, str) and v.strip() == ''). text(v) = '' for None; "
     "str(int(v)) for a float with v.is_integer(); otherwise str(v). Numbers are int/float but never bool. "
     "normalize(v, steps) = text(v) then each step in order: strip, upper, lower, collapse_spaces "
-    "(' '.join(s.split())), digits_only (keep 0-9)."
+    "(' '.join(s.split())), digits_only (Arabic-Indic digits to 0-9 then keep 0-9), arabic_digits "
+    "(٠١٢٣٤ / ۰۱۲۳۴ → 01234), arabic_text (أ/إ/آ→ا, ى→ي, ة→ه, strip diacritics and tatweel ـ), "
+    "arabic_separators (٫→., ٬→,). UAE/Saudi sheets often need arabic_* on lookup and dedupe keys."
 )
 
 
 def spec_format(columns_hint: str = "") -> str:
     ops = "\n".join(f"- {name}: {sig}" for name, (sig, _) in OP_DOCS.items())
+    norms = ", ".join(NORMALIZERS)
     return f"""SPEC FORMAT (JSON):
 {{"name": snake_case, "summary": one sentence in plain words,
  "input": {{"sheet": <sheet to process>, "columns": [<every input column the steps read>]}},
@@ -120,6 +129,11 @@ def spec_format(columns_hint: str = "") -> str:
 STEPS:
 {ops}
 {CONDITION_DOC}
+LOOKUP / DEDUPE KEY NORMALIZERS (normalize list, in order): {norms}.
+{HELPERS_DOC}
+When the file profile notes Arabic-Indic digits, Arabic script names, or Arabic decimal/thousands separators
+(common in UAE/Saudi sheets), put arabic_digits / arabic_text / arabic_separators on the lookup or dedupe
+normalize list so keys match the Zetaris staff directory (and Spec Critic will reject the plan if you omit them).
 Column names are the sheet's header text exactly (case and spaces matter). A step may use columns created by
 earlier steps. Use references only for data the sheet does not have; "fields" lists the reference fields used.
 {columns_hint}"""

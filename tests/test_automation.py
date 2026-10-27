@@ -32,6 +32,9 @@ def test_check_semantics():
     assert check_passes({"op": "equals_ci"}, " ACME ", "acme")
     assert not check_passes({"op": "equals"}, "ACME", "acme")
     assert normalize_key(" #12-34 ", ["digits_only"]) == "1234"
+    assert normalize_key("Emp-١٢٣", ["arabic_digits"]) == "Emp-123"
+    assert normalize_key("١٢٫٥", ["arabic_digits", "arabic_separators"]) == "12.5"
+    assert normalize_key("أحمد", ["arabic_text"]) == normalize_key("احمد", ["arabic_text"])
 
 
 @pytest.mark.parametrize("routine", sorted(TEMPLATES))

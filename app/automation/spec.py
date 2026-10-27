@@ -29,8 +29,16 @@ NORMALIZERS = {
     "upper": "uppercase",
     "lower": "lowercase",
     "collapse_spaces": "replace runs of whitespace with one space",
-    "digits_only": "keep only the digits 0-9",
+    "digits_only": "Arabic-Indic digits to 0-9, then keep only the digits 0-9",
+    "arabic_digits": "Arabic-Indic / Persian digits (٠١٢٣٤ / ۰۱۲۳۴) to ASCII 01234",
+    "arabic_text": "أ/إ/آ→ا, ى→ي, ة→ه; strip Arabic diacritics and tatweel",
+    "arabic_separators": "Arabic decimal ٫ → . and thousands ٬ → ,",
 }
+
+_ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
+_ARABIC_LETTERS = str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا", "ى": "ي", "ة": "ه"})
+_ARABIC_SEPARATORS = str.maketrans({"٫": ".", "٬": ","})
+_ARABIC_MARKS = frozenset("\u0640" + "".join(chr(c) for c in range(0x064B, 0x0660)) + "\u0670")
 FIELD_TYPES = ("str", "number")
 _IDENT = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
 
@@ -130,7 +138,13 @@ def normalize_key(value: Any, steps: list[str]) -> str:
         elif step == "collapse_spaces":
             text = " ".join(text.split())
         elif step == "digits_only":
-            text = "".join(ch for ch in text if ch in "0123456789")
+            text = "".join(ch for ch in text.translate(_ARABIC_DIGITS) if ch in "0123456789")
+        elif step == "arabic_digits":
+            text = text.translate(_ARABIC_DIGITS)
+        elif step == "arabic_text":
+            text = "".join(ch for ch in text.translate(_ARABIC_LETTERS) if ch not in _ARABIC_MARKS)
+        elif step == "arabic_separators":
+            text = text.translate(_ARABIC_SEPARATORS)
     return text
 
 

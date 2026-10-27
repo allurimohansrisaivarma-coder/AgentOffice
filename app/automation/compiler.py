@@ -16,7 +16,17 @@ _NORMALIZE_CODE = {
     "upper": "text = text.upper()",
     "lower": "text = text.lower()",
     "collapse_spaces": "text = ' '.join(text.split())",
-    "digits_only": "text = ''.join(ch for ch in text if ch in '0123456789')",
+    "digits_only": (
+        "text = ''.join(ch for ch in text.translate("
+        "str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789')) if ch in '0123456789')"
+    ),
+    "arabic_digits": "text = text.translate(str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789'))",
+    "arabic_text": (
+        "_marks = set('\\u0640' + ''.join(chr(c) for c in range(0x064B, 0x0660)) + '\\u0670'); "
+        "text = ''.join(ch for ch in text.translate(str.maketrans({"
+        "'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ٱ': 'ا', 'ى': 'ي', 'ة': 'ه'})) if ch not in _marks)"
+    ),
+    "arabic_separators": "text = text.translate(str.maketrans({'٫': '.', '٬': ','}))",
 }
 
 _CHECK_CODE = {

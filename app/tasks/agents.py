@@ -33,6 +33,12 @@ def _q(value: str) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 
 
+_DIGIT_RE = re.compile(r"[\d٠-٩۰-۹]+")
+_LETTER_RE = re.compile(r"[A-Za-z\u0600-\u06FF]+")
+_ARABIC_SCRIPT_RE = re.compile(r"[\u0600-\u06FF]")
+_ARABIC_NORMALIZE = ("arabic_digits", "arabic_text", "arabic_separators")
+
+
 def _mask(col: str, value: Any) -> Any:
     """Examples shown to the model keep their shape, not their content, for personal-looking columns."""
     if value is None or is_num(value):
@@ -43,14 +49,24 @@ def _mask(col: str, value: Any) -> Any:
         lead = s[:len(s) - len(s.lstrip())]
         return f"{lead}{m.group(1)}***@{m.group(2)}{s[len(s.rstrip()):]}"
     if _PERSONAL_NAME.search(col):
-        return re.sub(r"[A-Za-z]", "x", re.sub(r"\d", "9", s))
+        return _LETTER_RE.sub(lambda m: "x" * len(m.group(0)), _DIGIT_RE.sub(lambda m: "9" * len(m.group(0)), s))
     return s
 
 
 def _shape(value: Any) -> str:
     s = text(value)
-    s = re.sub(r"[A-Za-z]+", "A", re.sub(r"\d+", "9", s))
+    s = _LETTER_RE.sub("A", _DIGIT_RE.sub("9", s))
     return s[:24]
+
+
+def _fold_spelling(value: Any) -> str:
+    """Case/spacing fold used when the profiler counts distinct spellings of one value."""
+    return " ".join(text(value).split()).casefold()
+
+
+def _fold_arabic(value: Any) -> str:
+    """Same as _fold_spelling after Arabic digit/letter/separator normalisation."""
+    return _fold_spelling(normalize(value, _ARABIC_NORMALIZE))
 
 
 def _personal(col: str, values: list) -> bool:
@@ -171,8 +187,13 @@ class DataProfiler(Agent):
                 if (s["name"], col) in tops:
                     pairs = sorted(tops[(s["name"], col)], key=lambda p: (-p[1], p[0]))
                     info["values"] = [f"{v!r} x{n}" for v, n in pairs]
-                    folded = {" ".join(v.split()).casefold() for v, _ in pairs}
-                    if len(folded) < len(pairs):
+                    folded = {_fold_spelling(v) for v, _ in pairs}
+                    arabic_folded = {_fold_arabic(v) for v, _ in pairs}
+                    if len(arabic_folded) < len(folded):
+                        info["note"] = (f"{len(pairs)} spellings of {len(arabic_folded)} values "
+                                        "(Arabic digits/letters/separators differ; use arabic_digits / "
+                                        "arabic_text / arabic_separators on lookup keys)")
+                    elif len(folded) < len(pairs):
                         info["note"] = f"{len(pairs)} spellings of {len(folded)} values (case/spacing differ)"
                 elif info["type"] in ("text", "mixed") and present:
                     shapes: dict[str, int] = {}
@@ -180,9 +201,26 @@ class DataProfiler(Agent):
                         shapes[_shape(v)] = shapes.get(_shape(v), 0) + 1
                     if 1 < len(shapes) <= 6:
                         info["shapes"] = sorted(shapes.items(), key=lambda p: -p[1])
+                    notes = []
                     padded = sum(1 for v in present if isinstance(v, str) and v != v.strip())
                     if padded:
-                        info["note"] = f"{padded} values have leading/trailing spaces"
+                        notes.append(f"{padded} values have leading/trailing spaces")
+                    arabic_n = sum(1 for v in present if isinstance(v, str) and _ARABIC_SCRIPT_RE.search(v))
+                    if arabic_n:
+                        digits_n = sum(1 for v in present if isinstance(v, str)
+                                       and any(ch in v for ch in "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹"))
+                        sep_n = sum(1 for v in present if isinstance(v, str) and ("٫" in v or "٬" in v))
+                        parts = []
+                        if digits_n:
+                            parts.append(f"{digits_n} with Arabic-Indic digits")
+                        if sep_n:
+                            parts.append(f"{sep_n} with Arabic decimal/thousands separators")
+                        if arabic_n > digits_n:
+                            parts.append(f"{arabic_n} with Arabic script")
+                        notes.append("; ".join(parts) + " (normalize with arabic_digits / arabic_text / "
+                                     "arabic_separators for directory lookups)")
+                    if notes:
+                        info["note"] = "; ".join(notes)
                 columns.append(info)
             profile["sheets"].append({"name": s["name"], "rows": len(s["rows"]), "columns": columns})
         self.log("profile_file", target_agent="PMAgent", output_summary=[
@@ -207,6 +245,33 @@ class Retriever(Agent):
         return [{f: r.get(f) for f in ref["fields"]} for r in rows]
 
 
+def _lookup_hit_rate(rows: list[dict], column: str, ref_rows: list[dict], ref_key: str,
+                     steps: list[str]) -> tuple[int, int]:
+    keys = {normalize(r.get(ref_key), steps) for r in ref_rows}
+    present = [normalize(r.get(column), steps) for r in rows if not is_blank(r.get(column))]
+    return sum(1 for k in present if k in keys), len(present)
+
+
+def _arabic_normalize_gap(steps: list[str], rows: list[dict], column: str,
+                          ref_rows: list[dict], ref_key: str) -> Optional[list[str]]:
+    """Arabic normalizers that would raise the lookup hit rate if added to `steps`."""
+    missing = [s for s in _ARABIC_NORMALIZE if s not in steps]
+    if not missing:
+        return None
+    hits, total = _lookup_hit_rate(rows, column, ref_rows, ref_key, steps)
+    if total == 0:
+        return None
+    helpful = []
+    for step in missing:
+        alone_hits, _ = _lookup_hit_rate(rows, column, ref_rows, ref_key, list(steps) + [step])
+        if alone_hits > hits:
+            helpful.append(step)
+    if helpful:
+        return helpful
+    boosted_hits, _ = _lookup_hit_rate(rows, column, ref_rows, ref_key, list(steps) + missing)
+    return missing if boosted_hits > hits else None
+
+
 def critique(spec: dict, parsed: dict, reference: dict) -> tuple[list[str], list[str]]:
     """The Spec Critic: (issues the PM must fix, advisories for the approver), from the real data."""
     issues, advisories = [], []
@@ -218,18 +283,29 @@ def critique(spec: dict, parsed: dict, reference: dict) -> tuple[list[str], list
         where = f"step {i + 1} ({step['op']})"
         if step["op"] == "lookup" and reference.get(step["reference"]):
             steps = step.get("normalize", [])
-            keys = {normalize(r.get(step["reference_key"]), steps) for r in reference[step["reference"]]}
             column = step["key"]
+            ref_rows = reference[step["reference"]]
+            ref_key = step["reference_key"]
             if column in files.sheet_columns(parsed)[spec["input"]["sheet"]]:
-                present = [normalize(r.get(column), steps) for r in rows if not is_blank(r.get(column))]
-                hits = sum(1 for k in present if k in keys)
-                if present and hits == 0:
-                    issues.append(f"{where}: none of the {len(present)} {column!r} values match "
-                                  f"{step['reference']}.{step['reference_key']} after normalize {steps}; check the "
-                                  "key columns and the normalization")
-                elif present and hits < len(present):
-                    advisories.append(f"{where}: {hits} of {len(present)} {column!r} values match the reference; "
-                                      "the rest get the not_found status")
+                hits, total = _lookup_hit_rate(rows, column, ref_rows, ref_key, steps)
+                arabic_fix = _arabic_normalize_gap(steps, rows, column, ref_rows, ref_key)
+                if total and hits == 0:
+                    if arabic_fix:
+                        issues.append(f"{where}: none of the {total} {column!r} values match "
+                                      f"{step['reference']}.{ref_key} after normalize {steps}; keys don't match "
+                                      f"because of Arabic script variants — add {arabic_fix} to normalize")
+                    else:
+                        issues.append(f"{where}: none of the {total} {column!r} values match "
+                                      f"{step['reference']}.{ref_key} after normalize {steps}; check the "
+                                      "key columns and the normalization")
+                elif total and hits < total:
+                    if arabic_fix:
+                        issues.append(f"{where}: only {hits} of {total} {column!r} values match the reference; "
+                                      f"keys don't match because of Arabic script variants — add {arabic_fix} "
+                                      "to normalize")
+                    else:
+                        advisories.append(f"{where}: {hits} of {total} {column!r} values match the reference; "
+                                          "the rest get the not_found status")
         elif step["op"] == "format_date":
             column = step["column"]
             if column in files.sheet_columns(parsed)[spec["input"]["sheet"]]:
@@ -267,9 +343,11 @@ class TaskPlanner(Agent):
     SYSTEM = ("You are the PM agent in AgentOffice, an AI office team that automates repetitive spreadsheet work. "
               "Turn the user's request into a precise step spec over their file, using only the step types given. "
               "Use the file profile (exact column names and values) and, for data the file lacks, the company tables "
-              "in Zetaris (the catalog lists exact column values; filter values are case-sensitive). Do only what "
-              "was asked. If a request cannot be expressed with the steps, do the closest useful part and say what "
-              "was left out in 'assumptions'. Think briefly. Reply with only a compact JSON object.")
+              "in Zetaris (the catalog lists exact column values; filter values are case-sensitive). When the profile "
+              "notes Arabic digits, Arabic name spellings, or Arabic separators, put arabic_digits / arabic_text / "
+              "arabic_separators on lookup and dedupe normalize lists so keys match the Zetaris directory. Do only "
+              "what was asked. If a request cannot be expressed with the steps, do the closest useful part and say "
+              "what was left out in 'assumptions'. Think briefly. Reply with only a compact JSON object.")
 
     def _validate(self, obj: Any, sheets: dict, approved: dict, tables: set) -> list[str]:
         if not isinstance(obj, dict):
@@ -328,20 +406,26 @@ class TaskPlanner(Agent):
         workforce = [{"table": t["ref"], "rows": t["rows"], "columns": t["columns"]} for t in catalog()]
         reusable = [{"name": n, "summary": a["spec"]["summary"], "input": a["spec"]["input"],
                      "approved": a["memory"]} for n, a in approved.items()]
+        # ensure_ascii=False so Nightshift/Nemotron sees real Arabic script in profile notes and examples
+        # (UAE/Saudi digit and name variants), not \\uXXXX escapes.
+        def _json(obj, limit: Optional[int] = None) -> str:
+            text_ = json.dumps(obj, ensure_ascii=False, default=str)
+            return text_ if limit is None or len(text_) <= limit else text_[:limit]
+
         prompt = (f"User request: {task}\n\nUploaded file profile (from Zetaris SQL over upload_cells; personal "
-                  f"values masked):\n{json.dumps(profile, default=str)[:6000]}\n\nCompany tables in Zetaris "
-                  f"(catalog):\n{json.dumps(workforce)[:3500]}\n\n"
+                  f"values masked):\n{_json(profile, 6000)}\n\nCompany tables in Zetaris "
+                  f"(catalog):\n{_json(workforce, 3500)}\n\n"
                   + (f"Automations a human already approved (H-MEM); if one does exactly what is asked on this "
                      f"file, reply {{\"reuse\": <name>, \"understanding\": ...}} instead of a new spec:\n"
-                     f"{json.dumps(reusable)[:2500]}\n\n" if reusable else "")
+                     f"{_json(reusable, 2500)}\n\n" if reusable else "")
                   + ("Lessons from earlier runs (H-MEM):\n- " + "\n- ".join(lessons) + "\n\n" if lessons else "")
                   + spec_format()
-                  + "\nEXAMPLE (another file):\n" + json.dumps(DEMO_SPECS["expense_claims"])
+                  + "\nEXAMPLE (another file):\n" + _json(DEMO_SPECS["expense_claims"])
                   + "\n\nReply with JSON: {\"understanding\": <what you will do, one sentence>, \"assumptions\": "
                     "[...], \"spec\": <spec>}")
         if revise_with:
             previous, issues = revise_with
-            prompt += ("\n\nYour previous spec:\n" + json.dumps(previous) + "\n\nThe Spec Critic checked it "
+            prompt += ("\n\nYour previous spec:\n" + _json(previous) + "\n\nThe Spec Critic checked it "
                        "against the real file and data and rejected it:\n- " + "\n- ".join(issues)
                        + "\nReply with the corrected JSON.")
         # First drafts go to the draft lane; a plan the Spec Critic rejected, or a draft that never validated,
@@ -400,7 +484,8 @@ class TaskEngineer(Agent):
             self.log("revise_code", model=OFFLINE_MODEL, status="error",
                      output_summary="offline compiled code failed QA; recompiling cannot change it")
             return self._draft(qa.compile_spec(spec), version, "recompiled from the spec (offline)")
-        failures = "\n".join(f"- {f['purpose']}: {f['problem']}\n  input rows: {json.dumps(f['input'], default=str)[:600]}"
+        failures = "\n".join(f"- {f['purpose']}: {f['problem']}\n  input rows: "
+                             f"{json.dumps(f['input'], ensure_ascii=False, default=str)[:600]}"
                              for f in report["failures"][:6])
         problems = "\n".join(f"- {c['name']}: {c['detail']}" for c in report["checks"] if not c["passed"])
         prompt = (f"{describe(spec)}\n\nYour code (v{draft['version']}):\n```python\n{draft['code']}```\n\n"
@@ -452,8 +537,9 @@ class TaskQA(Agent):
                     errs.append(f"cases[{i}].row values must be strings, numbers or null")
             return errs
         try:
-            obj = self.chat_json(self.CASES_SYSTEM, f"{describe(spec)}\n\nInput columns: {json.dumps(columns)}\n"
-                                 f"Example row (masked): {json.dumps(example, default=str)}",
+            obj = self.chat_json(self.CASES_SYSTEM, f"{describe(spec)}\n\nInput columns: "
+                                 f"{json.dumps(columns, ensure_ascii=False)}\n"
+                                 f"Example row (masked): {json.dumps(example, ensure_ascii=False, default=str)}",
                                  action="design_tests", validate=validate)
         except (AgentError, AdapterError) as e:   # optional model call: degrade, never fail the run
             self.log("design_tests", status="error", output_summary=f"model cases unusable, continuing without: "
@@ -601,7 +687,8 @@ class TaskManager(Agent):
                     + ["an AgentOffice sheet recording the approval and code hash"]}
             self.log("decide", model=OFFLINE_MODEL, output_summary=memo, confidence=confidence)
         else:
-            memo = self.chat_json(self.SYSTEM, json.dumps(facts, indent=1, default=str), action="decide",
+            memo = self.chat_json(self.SYSTEM, json.dumps(facts, indent=1, ensure_ascii=False, default=str),
+                                  action="decide",
                                   validate=lambda o: [] if isinstance(o, dict) and isinstance(o.get("rationale"), str)
                                   and "decision" in o else ["reply must include 'decision' and 'rationale'"])
         if memo.get("decision") != allowed:
