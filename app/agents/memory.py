@@ -26,6 +26,7 @@ def record_approval(store: MemoryStoreService, approval: dict) -> dict:
 
 class MemoryKeeper(Agent):
     name = "MemoryKeeperAgent"
+    tier = "fast"
 
     SYSTEM = ("You are the Memory Keeper agent in AgentOffice. From this run's events, write at most 5 short, "
               "durable lessons that would help the team next time (what failed and why, which source to trust, "

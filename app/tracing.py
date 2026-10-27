@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import sys
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,6 +52,7 @@ class Tracer:
         self._stream = stream
         self._listener = listener      # e.g. a UI job following the run live; gets the masked event
         self._prev_hash = GENESIS_HASH
+        self._lock = threading.Lock()  # agents may log from parallel threads; the hash chain must stay ordered
 
     def mask(self, text: str) -> str:
         for secret in self._secrets:
@@ -92,18 +94,19 @@ class Tracer:
             "status": status,
         }
         event.update(self._clean(extra))
-        event["prev_hash"] = self._prev_hash
-        event["hash"] = _event_hash(event)
-        self._prev_hash = event["hash"]
-
-        line = json.dumps(event, ensure_ascii=False, default=str)
-        with self.path.open("a", encoding="utf-8") as f:
-            f.write(line + "\n")
-        if self._stream is not None:
-            # ASCII-escaped for the console: a Windows code page can't print every character a model writes
-            print(json.dumps(event, ensure_ascii=True, default=str), file=self._stream, flush=True)
-        if self._listener is not None:
-            self._listener(event)
+        with self._lock:
+            event["timestamp"] = _utc_now()
+            event["prev_hash"] = self._prev_hash
+            event["hash"] = _event_hash(event)
+            self._prev_hash = event["hash"]
+            line = json.dumps(event, ensure_ascii=False, default=str)
+            with self.path.open("a", encoding="utf-8") as f:
+                f.write(line + "\n")
+            if self._stream is not None:
+                # ASCII-escaped for the console: a Windows code page can't print every character a model writes
+                print(json.dumps(event, ensure_ascii=True, default=str), file=self._stream, flush=True)
+            if self._listener is not None:
+                self._listener(event)
         return event
 
 

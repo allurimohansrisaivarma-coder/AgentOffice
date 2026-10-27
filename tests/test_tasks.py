@@ -345,10 +345,18 @@ def test_upload_endpoint_and_reply_intent(make_settings):
     assert any(c["upload_id"] == ok["upload_id"] and c["col_name"] == "Score" for c in cells)
     reply = _wait(client, client.post("/chat", json={"message": "hello"}).json()["job_id"])
     assert reply["result"]["type"] == "reply"
-    # sample mode cannot plan an arbitrary file: a clear, structured error, not a fake plan
-    unknown = _wait(client, client.post("/chat", json={"message": "sort by score",
+    # sample mode plans any file with the rule-based planner...
+    sort = _wait(client, client.post("/chat", json={"message": "sort by score, highest first",
+                                                    "upload_id": ok["upload_id"]}).json()["job_id"])
+    task = sort["result"]["task"]
+    assert task["status"] == "awaiting_approval" and task["qa"]["passed"]
+    assert task["spec"]["steps"] == [{"op": "sort", "by": [{"column": "Score", "descending": True}]}]
+    assert [r["Name"] for r in task["qa"]["preview"]["rows"]] == ["B", "A"]
+    # ...and says what it understands when nothing matches: a clear, structured error, not a fake plan
+    unknown = _wait(client, client.post("/chat", json={"message": "write a poem about this list",
                                                        "upload_id": ok["upload_id"]}).json()["job_id"])
     assert unknown["status"] == "failed" and unknown["error"]["type"] == "agent_no_offline_plan"
+    assert "remove duplicates" in unknown["error"]["message"]
 
 
 def test_ui_is_served(make_settings):

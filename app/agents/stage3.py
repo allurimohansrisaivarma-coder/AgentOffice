@@ -291,6 +291,7 @@ class Engineer(Agent):
 
 class QAAgent(Agent):
     name = "QAAgent"
+    tier = "fast"
 
     CASES_SYSTEM = ("You are the QA agent in AgentOffice. You design tests from the spec only; you never see the "
                     "Engineer's code. Propose tricky LEFT records that a careless implementation would get wrong "
@@ -414,6 +415,7 @@ class QAAgent(Agent):
 
 class Manager(Agent):
     name = "ManagerAgent"
+    tier = "fast"
 
     SYSTEM = ("You are the Manager agent in AgentOffice. Write the decision memo for a human approver. Your decision "
               "is constrained to the allowed value given; explain it from the evidence and QA results, name the "

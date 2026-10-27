@@ -18,9 +18,9 @@ from typing import Any, Optional
 from app.adapters.http import AdapterError
 from app.agents.base import OFFLINE_MODEL, Agent, AgentError, extract_code
 from app.approvals import sha256
-from app.automation.sandbox import ALLOWED_IMPORTS, find_secrets, policy_violations, run_batch
+from app.automation.sandbox import ALLOWED_IMPORTS, MAX_CODE_CHARS, find_secrets, policy_violations, run_batch
 from app.data import catalog
-from app.tasks import files, qa, runtime
+from app.tasks import files, offline_planner, qa, runtime
 from app.tasks.runtime import is_blank, is_num, normalize, text
 from app.tasks.spec import DEMO_SPECS, demo_spec_for, describe, spec_format, validate_spec
 
@@ -59,6 +59,7 @@ def _personal(col: str, values: list) -> bool:
 
 class FrontDesk(Agent):
     name = "FrontDeskAgent"
+    tier = "fast"
 
     SYSTEM = ("You are the front desk of AgentOffice, an AI office team. Route the user's message. intents: "
               "'task' = they want something done to a spreadsheet/CSV (fill, clean, match, look up, format, flag, "
@@ -281,23 +282,49 @@ class TaskPlanner(Agent):
         errors = [] if isinstance(obj.get("understanding"), str) else ["'understanding' must be a sentence"]
         return errors + [f"spec: {e}" for e in validate_spec(obj.get("spec"), sheets, catalog_tables=tables)]
 
+    def _plan_offline(self, task: str, profile: dict, sheets: dict, approved: dict, tables: set,
+                      revise_with: Optional[tuple[dict, list[str]]]) -> dict:
+        """Sample mode: the built-in spec for a bundled demo file, otherwise the rule-based planner for any file."""
+        if revise_with:
+            previous, issues = revise_with
+            smaller = offline_planner.drop_criticized(previous, issues, sheets, tables)
+            if smaller is None:
+                raise AgentError(self.name, "spec_rejected", "the plan does not fit the file: " + "; ".join(issues[:3]),
+                                 recoverable=True)
+            spec, removed = smaller
+            self.log("revise_plan", model=OFFLINE_MODEL, target_agent="SpecCritic", input_summary=issues,
+                     output_summary=f"dropped the step(s) the critic rejected ({', '.join(removed)}); "
+                                    f"{len(spec['steps'])} left")
+            return {"understanding": spec["summary"], "origin": offline_planner.ORIGIN, "spec": spec,
+                    "assumptions": [f"sample mode: planned by the {offline_planner.ORIGIN}, not a model",
+                                    f"dropped {', '.join(removed)}: {'; '.join(issues[:2])}"]}
+        spec = demo_spec_for(sheets)
+        if spec is not None:
+            plan = {"understanding": spec["summary"], "spec": spec,
+                    "assumptions": ["sample mode: the PM used the built-in spec for this demo file"]}
+        else:
+            plan = offline_planner.rule_plan(task, profile, sheets, catalog())
+            if plan is None:
+                raise AgentError(self.name, "no_offline_plan", "sample mode plans with simple rules, and none "
+                                 "matched this request. It understands requests like: "
+                                 + "; ".join(offline_planner.UNDERSTOOD[:8]) + " (use the exact column names). "
+                                 "Connect Meterless Nightshift to plan anything else.", recoverable=True)
+            plan["origin"] = offline_planner.ORIGIN
+            spec = plan["spec"]
+        reuse = next((n for n, a in approved.items() if a["spec"] == spec), None)
+        if reuse:
+            plan["reuse"] = reuse
+        self.log("plan_task", model=OFFLINE_MODEL, input_summary=task, target_agent="SpecCritic",
+                 output_summary={"reuse": reuse} if reuse else {
+                     "spec": spec["name"], "steps": [s["op"] for s in spec["steps"]],
+                     "origin": plan.get("origin", "built-in demo spec"), "left_out": plan.get("left_out") or "none"})
+        return plan
+
     def plan(self, task: str, profile: dict, sheets: dict, approved: dict, lessons: list[str],
              revise_with: Optional[tuple[dict, list[str]]] = None) -> dict:
         tables = {t["table"] for t in catalog()}
         if self.offline:
-            spec = demo_spec_for(sheets)
-            reuse = next((n for n, a in approved.items() if spec and a["spec"] == spec), None)
-            if spec is None:
-                raise AgentError(self.name, "no_offline_plan", "sample mode can plan only the bundled demo files "
-                                 f"({', '.join(DEMO_SPECS)}); connect Meterless Nightshift to plan your own tasks",
-                                 recoverable=True)
-            plan = {"understanding": spec["summary"], "assumptions": ["sample mode: the PM used the built-in spec "
-                                                                      "for this demo file"], "spec": spec}
-            if reuse:
-                plan["reuse"] = reuse
-            self.log("plan_task", model=OFFLINE_MODEL, input_summary=task, target_agent="SpecCritic",
-                     output_summary={"reuse": reuse} if reuse else {"spec": spec["name"], "steps": len(spec["steps"])})
-            return plan
+            return self._plan_offline(task, profile, sheets, approved, tables, revise_with)
         workforce = [{"table": t["ref"], "rows": t["rows"], "columns": t["columns"]} for t in catalog()]
         reusable = [{"name": n, "summary": a["spec"]["summary"], "input": a["spec"]["input"],
                      "approved": a["memory"]} for n, a in approved.items()]
@@ -317,8 +344,22 @@ class TaskPlanner(Agent):
             prompt += ("\n\nYour previous spec:\n" + json.dumps(previous) + "\n\nThe Spec Critic checked it "
                        "against the real file and data and rejected it:\n- " + "\n- ".join(issues)
                        + "\nReply with the corrected JSON.")
-        obj = self.chat_json(self.SYSTEM, prompt, action="revise_plan" if revise_with else "plan_task",
-                             target_agent="SpecCritic", validate=lambda o: self._validate(o, sheets, approved, tables))
+        # First drafts go to the draft lane; a plan the Spec Critic rejected, or a draft that never validated,
+        # escalates to the deep model.
+        action = "revise_plan" if revise_with else "plan_task"
+
+        def validate(o: Any) -> list[str]:
+            return self._validate(o, sheets, approved, tables)
+        try:
+            obj = self.chat_json(self.SYSTEM, prompt, action=action, target_agent="SpecCritic", validate=validate,
+                                 tier="deep" if revise_with else "draft")
+        except AgentError as e:
+            if revise_with or e.type != "invalid_model_output" or not self.ctx.lane("draft"):
+                raise
+            self.log("escalate", status="retry", target_agent=self.name,
+                     output_summary="the draft model's plan never validated; asking the deep model")
+            obj = self.chat_json(self.SYSTEM, prompt, action=action, target_agent="SpecCritic", validate=validate,
+                                 tier="deep")
         if obj.get("reuse"):
             obj["spec"] = approved[obj["reuse"]]["spec"]
         obj.setdefault("assumptions", [])
@@ -331,8 +372,10 @@ class TaskEngineer(Agent):
     SYSTEM = ("You are the Engineer agent in AgentOffice. Write one self-contained Python 3.11 module implementing "
               "the spreadsheet automation spec exactly. Rules: define a top-level function run(rows, reference) "
               f"returning the dict described; import only from {sorted(ALLOWED_IMPORTS)}; no file, network, "
-              "environment or process access; no eval, exec, getattr or dunder access; deterministic; never "
-              "special-case particular test values. Follow the stated semantics literally (blank rule, text(), "
+              "environment or process access; no eval, exec, getattr, global, nonlocal or dunder access; "
+              "deterministic; never "
+              f"special-case particular test values; stay under {MAX_CODE_CHARS} characters (implement only the "
+              "step types this spec uses, no docstrings or long comments). Follow the stated semantics literally (blank rule, text(), "
               "types). Reply with only the code in one ```python block.")
 
     def _draft(self, code: str, version: int, origin: str) -> dict:
@@ -345,8 +388,10 @@ class TaskEngineer(Agent):
                      output_summary=f"v1 {draft['code_hash'][:12]}, {len(draft['code'])} chars")
             return draft
         extra = ("\n\nLessons from earlier runs (H-MEM):\n- " + "\n- ".join(lessons)) if lessons else ""
+        # Code is the one job the deep model does from the start: measured live, the fast lane's code broke the
+        # sandbox rules or the spec and cost more in QA rounds than it saved.
         text_ = self.chat(self.SYSTEM, describe(spec) + extra, action="write_code", target_agent="QAAgent",
-                          temperature=0.1)
+                          temperature=0.1, tier="deep")
         return self._draft(extract_code(text_), 1, f"written by {self.ctx.model_name}")
 
     def revise(self, spec: dict, draft: dict, report: dict) -> dict:
@@ -364,12 +409,13 @@ class TaskEngineer(Agent):
                      if failures else "")
                   + "Fix the root cause (do not special-case these inputs) and reply with the full corrected module.")
         text_ = self.chat(self.SYSTEM, prompt, action="revise_code", target_agent="QAAgent", temperature=0.1,
-                          retry_count=draft["version"])
+                          retry_count=draft["version"], tier="deep")
         return self._draft(extract_code(text_), version, f"revised by {self.ctx.model_name}")
 
 
 class TaskQA(Agent):
     name = "QAAgent"
+    tier = "fast"
 
     CASES_SYSTEM = ("You are the QA agent in AgentOffice. You design tests from the spec only; you never see the "
                     "Engineer's code. Propose tricky input rows a careless implementation would get wrong (blanks, "
@@ -416,6 +462,12 @@ class TaskQA(Agent):
         self._model_cases = [{"row": c["row"], "why": str(c.get("why", ""))[:160]} for c in obj["cases"][:6]]
         return self._model_cases
 
+    def design_tests(self, spec: dict, rows: list[dict]) -> list[dict]:
+        """QA's own test cases from the spec alone; the pipeline runs this while the Engineer writes the code."""
+        columns = list(rows[0]) if rows else spec["input"]["columns"]
+        example = {c: _mask(c, rows[0].get(c)) for c in columns} if rows else {}
+        return self._cases_from_model(spec, columns, example)
+
     def review(self, spec: dict, draft: dict, rows: list[dict], reference: dict, *, round_no: int) -> dict:
         code = draft["code"]
         checks: list[dict] = []
@@ -432,8 +484,7 @@ class TaskQA(Agent):
 
         cases = qa.build_cases(spec, rows, reference, seed=round_no)
         columns = list(rows[0]) if rows else spec["input"]["columns"]
-        example = {c: _mask(c, rows[0].get(c)) for c in columns} if rows else {}
-        for mc in self._cases_from_model(spec, columns, example):
+        for mc in self.design_tests(spec, rows):
             base = dict(rows[0]) if rows else {c: None for c in columns}
             base.update(mc["row"])
             cases.append({"purpose": f"QA model case: {mc['why']}", "kind": "model", "rows": [base],
@@ -504,6 +555,7 @@ class TaskQA(Agent):
 
 class TaskManager(Agent):
     name = "ManagerAgent"
+    tier = "fast"
 
     SYSTEM = ("You are the Manager agent in AgentOffice. Write the decision memo for the human approver of a "
               "spreadsheet automation. Your decision is constrained to the allowed value given; explain it from the "

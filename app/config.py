@@ -80,6 +80,12 @@ class Settings:
     log_dir: Path
     port: int
     world_db_path: Path = ROOT / "state" / "world.db"
+    # Nightshift lanes: quick jobs (routing, test design, reviews, memos) and first plans go to the fast model with
+    # thinking off; code, and work a critic rejects, go to METERLESS_MODEL. Empty = the route for everything.
+    meterless_fast_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    meterless_fast_thinking: bool = False
+    # Retried once with this model when the route's choice is unavailable (e.g. NVIDIA answers 404).
+    meterless_fallback_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
     http_timeout_s: float = 30.0
     model_timeout_s: float = 90.0
     max_retries: int = 2
@@ -146,4 +152,7 @@ def load_settings(env_file: Optional[Path] = ROOT / ".env") -> Settings:
         log_dir=log_dir,
         port=_get_int("PORT", 8000),
         world_db_path=Path(_get("WORLD_DB_PATH") or ROOT / "state" / "world.db"),
+        meterless_fast_model=_get("METERLESS_FAST_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b"),
+        meterless_fast_thinking=_get_bool("METERLESS_FAST_THINKING"),
+        meterless_fallback_model=_get("METERLESS_FALLBACK_MODEL", "nvidia/nemotron-3-ultra-550b-a55b"),
     )

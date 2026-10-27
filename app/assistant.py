@@ -176,6 +176,7 @@ class Assistant(Agent):
 
 class GroundingCritic(Agent):
     name = "GroundingCritic"
+    tier = "fast"
 
     # Rules prove every figure and person exists in the rows; this review checks they are attached to the right
     # row: the right week, person or category, ties and groupings as the rows show them.

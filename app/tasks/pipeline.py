@@ -92,6 +92,31 @@ def _fetch_references(retriever: Retriever, spec: dict, parsed: dict) -> tuple[d
     return reference, issues
 
 
+def _build_while_qa_designs(engineer: TaskEngineer, qa_agent: TaskQA, spec: dict, rows: list[dict],
+                            lessons: list[str]) -> dict:
+    """QA designs its tests from the spec alone, so it can do that while the Engineer writes the code:
+    two model calls in parallel instead of one after the other."""
+    if engineer.offline:
+        return engineer.build(spec, lessons)
+    failed: list[BaseException] = []
+
+    def design() -> None:
+        try:
+            qa_agent.design_tests(spec, rows)
+        except BaseException as e:   # surfaced on the main thread below
+            failed.append(e)
+
+    worker = threading.Thread(target=design, name="qa-design-tests", daemon=True)
+    worker.start()
+    try:
+        draft = engineer.build(spec, lessons)
+    finally:
+        worker.join()
+    if failed:
+        raise failed[0]
+    return draft
+
+
 def run_task(task: str, upload_id: str, *, settings: Settings, tracer: Tracer, generator: Optional[Generator],
              sample_mode: bool, store: WorldStoreService, pipeline: IngestPipelineService,
              builder: ContextBuilderService, approvals: ApprovalLedger, uploads: files.UploadStore,
@@ -146,7 +171,8 @@ def run_task(task: str, upload_id: str, *, settings: Settings, tracer: Tracer, g
                          output_summary=issues or (advisories or "the spec fits the file and the reference data"))
             if not issues:
                 break
-            if rounds >= MAX_SPEC_ROUNDS or ctx.generator is None or plan.get("reuse"):
+            offline_fixed = ctx.generator is None and plan.get("origin") is None   # a built-in demo spec
+            if rounds >= MAX_SPEC_ROUNDS or offline_fixed or plan.get("reuse"):
                 raise AgentError("SpecCritic", "spec_rejected", "the plan does not fit the file: "
                                  + "; ".join(issues[:3]), recoverable=True)
             rounds += 1
@@ -166,7 +192,7 @@ def run_task(task: str, upload_id: str, *, settings: Settings, tracer: Tracer, g
         else:
             orchestrator.log("handoff", target_agent="EngineerAgent", output_summary=f"spec {spec['name']}: "
                              f"{len(spec['steps'])} steps, references {sorted(reference) or 'none'}")
-            draft = engineer.build(spec, lessons)
+            draft = _build_while_qa_designs(engineer, qa_agent, spec, rows, lessons)
         history = []
         for round_no in range(1, max_revisions + 2):
             report = qa_agent.review(spec, draft, rows, reference, round_no=round_no)

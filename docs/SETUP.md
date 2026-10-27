@@ -107,7 +107,11 @@ With no keys in `.env`, the UI switches to sample mode by itself; the badge in t
 5. Ask an analysis question without a file:
    > Where is the finance team losing time, and what should we automate first?
 
-In sample mode no model is called. Each agent uses a deterministic fallback, and only the three demo files can be planned; any other file returns `agent_no_offline_plan`. Your own files need default mode.
+In sample mode no model is called. Each agent uses a deterministic fallback. The three demo files use their built-in plans. **Any other CSV or Excel file is planned by a rule-based planner** ([`app/tasks/offline_planner.py`](../app/tasks/offline_planner.py)). It reads your request clause by clause and maps each clause to a step, using your file's real column names and values. Then the Spec Critic, Engineer and QA check that plan against your file, exactly as they check a model's plan. It understands requests like these (use your column names):
+
+> remove duplicate order IDs, tidy customer names, standardise order dates, fill blank Status with Pending, add 10% GST to Amount, flag amounts over 1,000, keep only rows where Region is North, split Name into first and last name, sort by Order Date descending, totals by Region
+
+The planner lists any clause it couldn't map under the plan's assumptions instead of guessing. A request with no clause it can map returns `agent_no_offline_plan`, along with the phrasings it understands. Free-form requests need default mode.
 
 To run all the saved examples without the UI:
 
@@ -173,7 +177,7 @@ This registers the five synthetic workforce tables and `upload_cells` (every upl
 
 Restart AgentOffice so it reads the new `.env`. The panel's badge now shows the model route and Zetaris, and the sample-mode switch can be turned off. Attach any CSV or Excel file (up to 5 MB or 20,000 rows) and describe the work.
 
-Live runs take time: Nemotron reasons for minutes on a large plan, so a spreadsheet task takes about 5 to 10 minutes end to end. The panel shows each step as it happens.
+Live runs take a few minutes. Light jobs (routing, the first plan, QA's test design and review, the Manager's memo, memory) run on Nemotron 3.5 Lightning with thinking off, in seconds each. Nemotron 3 Ultra writes the code while QA designs its tests in parallel. A measured run of the expense-claims task took **4 minutes** end to end, down from 5 to 10, and about 3 of those minutes were Ultra writing the code. Each QA rejection adds an Ultra revision. The panel shows each step as it happens.
 
 To save live examples: `.\.venv\Scripts\python.exe scripts\run_examples.py --url http://localhost:8000` (add `--tasks` for the spreadsheet tasks).
 
@@ -188,7 +192,10 @@ All settings come from environment variables or the private `.env` file; real en
 | `METERLESS_BASE_URL` | `http://127.0.0.1:8088/v1` in `.env.example` | Nightshift's runtime URL; pasted URLs are normalised to `<host>/v1` |
 | `METERLESS_RUNTIME_TOKEN` | none | Nightshift runtime token |
 | `METERLESS_CONNECT_LINK` | none | a Nightshift connect link, instead of the two above |
-| `METERLESS_MODEL` | `meterless/auto` | the Nightshift route every agent uses |
+| `METERLESS_MODEL` | `meterless/auto` | the deep lane: the Nightshift route for work a critic or QA rejected |
+| `METERLESS_FAST_MODEL` | `nvidia/nemotron-3.5-lightning-30b-a3b` | the fast lane, with thinking off: routing, the first plan, test design, reviews, memos. Code and rejected work go to `METERLESS_MODEL`; `route` sends everything there |
+| `METERLESS_FAST_THINKING` | `false` | `true` keeps thinking on for the fast lane too |
+| `METERLESS_FALLBACK_MODEL` | `nvidia/nemotron-3-ultra-550b-a55b` | retried once when the provider answers 404 for the chosen model |
 | `METERLESS_APP` | `agentoffice` | sent as the `meterless-app` header |
 | `MODEL_BASE_URL`, `MODEL_API_KEY`, `MODEL_NAME` | none | any OpenAI-compatible endpoint, with `LLM_PROVIDER=openai_compatible` |
 | `ZETARIS_REST_URL` | `http://localhost:8888/api/v1.0` in `.env.example` | Zetaris REST API |
@@ -227,7 +234,7 @@ To start fresh, quit AgentOffice and delete `state/` and the files in `logs/`.
 | *"AgentOffice could not start its background service"* | Read `logs/agentoffice-server.log`. Usually another program is using port 8000. Close it, or set `PORT` as a Windows environment variable: the desktop app reads `PORT` from the environment, not from `.env`. |
 | The island doesn't appear | The desktop app needs Microsoft Edge or Google Chrome. Use the browser UI meanwhile. |
 | *"Ctrl+Shift+Space is taken by another app"* | Another app registered the shortcut first. Click the island to open it instead. |
-| `agent_no_offline_plan` | Sample mode only plans the three demo files. Your own files need default mode. |
+| `agent_no_offline_plan` | Sample mode's rule-based planner found no step it understands in the request. Rephrase with your column names (the message lists examples) or use default mode. |
 | `agent_not_configured` from the API | Default mode is missing settings (the message lists them). Pass `"options": {"sample_mode": true}` or set `SAMPLE_MODE=true`. |
 | `check_connections.py` fails for Zetaris | Check that `docker ps` shows the Zetaris containers as healthy, and that the API key is current. A 401 means a bad or expired key. |
 | `check_connections.py` fails for Nightshift | Check that Nightshift is open and that an NVIDIA provider is connected. `--detect` scans ports 8088, 8090, 8787 and 11434. |

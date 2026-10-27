@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
@@ -54,10 +55,24 @@ class RunContext:
     model_calls: int = 0
     queries: int = 0
     agents_used: list = field(default_factory=list)
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False)   # agents may call the model in parallel
 
     @property
     def model_name(self) -> str:
         return self.generator.name if self.generator else OFFLINE_MODEL
+
+    def lane(self, tier: str) -> dict:
+        """Request parameters for a tier of work (only Meterless has lanes; other providers use their one model):
+        'fast'  - short structured jobs (routing, test design, reviews, memos): the fast model, thinking off;
+        'draft' - first plans and code: the same fast lane (measured: Lightning with thinking on was slower
+                  than Ultra on a full plan), escalated to 'deep' when rejected;
+        'deep'  - work a critic or QA rejected: the configured route (Nemotron 3 Ultra)."""
+        fast = (self.settings.meterless_fast_model or "").strip()
+        if self.settings.llm_provider != "meterless" or tier == "deep" or fast.lower() in ("", "off", "none", "route"):
+            return {}
+        if self.settings.meterless_fast_thinking:
+            return {"model": fast}
+        return {"model": fast, "chat_template_kwargs": {"enable_thinking": False}}
 
 
 def strip_reasoning(text: str) -> str:
@@ -88,8 +103,14 @@ def extract_code(text: str) -> str:
     return (max(blocks, key=len) if blocks else text).strip() + "\n"
 
 
+def _unavailable(e: AdapterError) -> bool:
+    """The provider has no such model/function right now (NVIDIA answers 404 'Function ... Not found')."""
+    return e.status_code == 404 or "404" in e.message or "not found" in e.message.lower()
+
+
 class Agent:
     name = "Agent"
+    tier = "deep"    # which Nightshift lane this agent's calls use by default; see RunContext.model_for
 
     def __init__(self, ctx: RunContext):
         self.ctx = ctx
@@ -106,26 +127,46 @@ class Agent:
     # ---------------------------------------------------------------- model
 
     def chat(self, system: str, user: str, *, action: str, target_agent: Optional[str] = None,
-             temperature: float = 0.2, max_tokens: int = MAX_TOKENS, retry_count: int = 0) -> str:
+             temperature: float = 0.2, max_tokens: int = MAX_TOKENS, retry_count: int = 0,
+             tier: Optional[str] = None) -> str:
         ctx = self.ctx
         if ctx.generator is None:
             raise AgentError(self.name, "no_model", "no model available (sample mode)")
-        if ctx.model_calls >= ctx.max_model_calls:
-            raise AgentError(self.name, "model_budget", f"model call cap of {ctx.max_model_calls} per run reached")
-        ctx.model_calls += 1
-        started = time.monotonic()
-        try:
-            result = ctx.generator.chat([{"role": "system", "content": system}, {"role": "user", "content": user}],
-                                        temperature=temperature, max_tokens=max_tokens)
-        except AdapterError as e:
-            self.log(action, status="error", model=ctx.generator.name, input_summary=user,
-                     output_summary=e.message, error_type=e.to_dict()["type"], retry_count=retry_count,
-                     elapsed_s=round(time.monotonic() - started, 2))
-            raise
+        tier = tier or self.tier
+        params = ctx.lane(tier)
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        for attempt in (1, 2):
+            with ctx.lock:
+                if ctx.model_calls >= ctx.max_model_calls:
+                    raise AgentError(self.name, "model_budget",
+                                     f"model call cap of {ctx.max_model_calls} per run reached")
+                ctx.model_calls += 1
+            started = time.monotonic()
+            try:
+                result = ctx.generator.chat(messages, temperature=temperature, max_tokens=max_tokens, **params)
+                break
+            except AdapterError as e:
+                model = params.get("model")
+                self.log(action, status="error", model=model or ctx.generator.name, input_summary=user,
+                         output_summary=e.message, error_type=e.to_dict()["type"], retry_count=retry_count,
+                         tier=tier, elapsed_s=round(time.monotonic() - started, 2))
+                fallback = ctx.settings.meterless_fallback_model if ctx.settings.llm_provider == "meterless" else ""
+                if attempt == 1 and _unavailable(e) and fallback and fallback != model:
+                    self.log("model_fallback", status="retry", target_agent=self.name, output_summary=
+                             f"{model or 'the route'} is unavailable at the provider; retrying once on {fallback}")
+                    params = dict(params, model=fallback)
+                    continue
+                if attempt == 1 and params and tier != "deep" and "timeout" not in e.type:
+                    # e.g. the fast model's empty_response: the deep lane gets one try
+                    self.log("model_fallback", status="retry", target_agent=self.name, output_summary=
+                             f"the {tier} lane failed ({e.message[:120]}); retrying once on the deep lane")
+                    params, tier = ctx.lane("deep"), "deep"
+                    continue
+                raise
         self._cut_off = result.finish_reason == "length"
         self.log(action, model=result.model, input_summary=user, output_summary=result.content,
                  target_agent=target_agent, retry_count=retry_count, tokens=result.usage.get("total_tokens"),
-                 provider=ctx.generator.name, elapsed_s=round(time.monotonic() - started, 2),
+                 provider=ctx.generator.name, tier=tier, elapsed_s=round(time.monotonic() - started, 2),
                  status="truncated" if self._cut_off else "ok")
         return result.content
 

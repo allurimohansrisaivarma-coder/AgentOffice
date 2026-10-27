@@ -44,7 +44,8 @@ def isolated_env(monkeypatch):
                  "METERLESS_MODEL", "METERLESS_APP", "MODEL_BASE_URL", "MODEL_API_KEY",
                  "MODEL_NAME", "ZETARIS_REST_URL", "ZETARIS_ORG_ID", "ZETARIS_API_KEY",
                  "SAMPLE_MODE", "LOG_LEVEL", "LOG_DIR", "PORT", "WORLD_DB_PATH", "AGENTOFFICE_IN_DOCKER",
-                 "AGENTOFFICE_NO_HOST_REWRITE"):
+                 "AGENTOFFICE_NO_HOST_REWRITE", "METERLESS_FAST_MODEL", "METERLESS_FAST_THINKING",
+                 "METERLESS_FALLBACK_MODEL"):
         monkeypatch.delenv(name, raising=False)
     # Behave the same on a laptop and inside the Docker image: tests opt in to "in a container".
     monkeypatch.setattr(config, "in_container", lambda: False)

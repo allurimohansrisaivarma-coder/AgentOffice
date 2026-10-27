@@ -51,5 +51,5 @@
   "ai_coding_tool": "Claude Code (Anthropic) for most of the code; Cursor for the split-view Team and Sheet panes",
   "pre_existing_components": "none",
   "data": "Synthetic only (scripts/generate_workforce_data.py, scripts/generate_task_samples.py); example.com / example.org emails.",
-  "tests": 201
+  "tests": 210
 }
