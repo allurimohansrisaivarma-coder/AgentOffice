@@ -96,6 +96,9 @@ class FrontDesk(Agent):
     EMAIL_ASK = re.compile(r"\b(draft|compose)\b|\b(write|send)\s+(an?\s+)?(e-?mail|message|note|reply)\b"
                            r"|\b(e-?mail|reply|write)\s+to\b", re.I)
     QUESTION_WORDS = ("who ", "how many", "which ", "list ", "what is", "what's", "show me", "tell me")
+    # An explicit ask for an email ("Draft an email to the Finance team ...") is always an email draft,
+    # whatever the fast routing model makes of the words about hours or teams that follow.
+    EMAIL_DRAFT = re.compile(r"\b(draft|write|compose|prepare)\b.{0,30}\b(e-?mail|message)\b", re.I)
 
     def route(self, message: str, *, has_file: bool) -> dict:
         if self.offline:
@@ -123,6 +126,11 @@ class FrontDesk(Agent):
                              action="route", validate=lambda o: [] if isinstance(o, dict) and o.get("intent") in
                              self.INTENTS and isinstance(o.get("reply"), str)
                              else [f"reply must be {{\"intent\": {'|'.join(self.INTENTS)}, \"reply\": str}}"])
+        if obj["intent"] != "email" and not has_file and self.EMAIL_DRAFT.search(message):
+            self.log("route", status="retry", input_summary=message,
+                     output_summary={"intent": "email", "corrected_from": obj["intent"],
+                                     "why": "the message asks for an email to be drafted"})
+            return {"intent": "email", "reply": "Drafting it from your data; you get a draft to copy, nothing is sent."}
         return {"intent": obj["intent"], "reply": obj["reply"].strip()[:600]}
 
 
@@ -398,9 +406,31 @@ class TaskPlanner(Agent):
                      "origin": plan.get("origin", "built-in demo spec"), "left_out": plan.get("left_out") or "none"})
         return plan
 
+    # "Same as last week, on this week's file: <the request>" asks for the approved automation again.
+    REPEAT_PREFIX = re.compile(r"^\s*(same as|again|like|as)\b[^:]{0,60}:\s*", re.I)
+
+    @classmethod
+    def _request_key(cls, text: str) -> str:
+        return " ".join(cls.REPEAT_PREFIX.sub("", text).lower().split()).rstrip(".!")
+
+    def _same_request(self, task: str, sheets: dict, approved: dict, tables: set) -> Optional[str]:
+        """The approved automation this request repeats word for word, if its spec still fits this file."""
+        key = self._request_key(task)
+        return next((n for n, a in approved.items() if a.get("request") and self._request_key(a["request"]) == key
+                     and not validate_spec(a["spec"], sheets, catalog_tables=tables)), None)
+
     def plan(self, task: str, profile: dict, sheets: dict, approved: dict, lessons: list[str],
              revise_with: Optional[tuple[dict, list[str]]] = None) -> dict:
         tables = {t["table"] for t in catalog()}
+        repeat = None if revise_with else self._same_request(task, sheets, approved, tables)
+        if repeat:
+            # A human approved this exact request before: reuse that automation (QA still re-tests it on this
+            # file) instead of letting the model re-plan it into a slightly different spec that needs asking again.
+            self.log("plan_task", target_agent="SpecCritic", input_summary=task,
+                     output_summary={"reuse": repeat, "why": "the same request a human approved before"})
+            return {"reuse": repeat, "spec": approved[repeat]["spec"],
+                    "understanding": approved[repeat]["spec"]["summary"],
+                    "assumptions": ["the same request as an automation you approved before"]}
         if self.offline:
             return self._plan_offline(task, profile, sheets, approved, tables, revise_with)
         workforce = [{"table": t["ref"], "rows": t["rows"], "columns": t["columns"]} for t in catalog()]

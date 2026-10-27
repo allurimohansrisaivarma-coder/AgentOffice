@@ -164,6 +164,20 @@ def test_front_desk_routes_email_and_question_requests_offline(tmp_path, make_se
     assert desk.route("check each lead against the CRM Contacts sheet by email", has_file=True)["intent"] == "task"
 
 
+def test_front_desk_keeps_an_explicit_email_ask_when_the_model_routes_it_elsewhere(tmp_path, make_settings):
+    """Seen live: the fast routing model sent 'Draft an email ... hours per week' to a full analysis run."""
+    from app.agents.base import RunContext
+    model = ScriptedModel({"intent": "analysis", "reply": "Let me pull the data."},
+                          {"intent": "analysis", "reply": "Looking into it."})
+    ctx = RunContext(run_id="r2", settings=make_settings(), tracer=Tracer("r2", tmp_path, stream=None),
+                     generator=model, data=None, store=None, pipeline=None, builder=None, sample_mode=False)
+    desk = FrontDesk(ctx)
+    msg = "Draft an email to the Finance team summarising which task categories took the most hours per week."
+    assert desk.route(msg, has_file=False)["intent"] == "email"
+    # a real analysis question stays with the model's routing
+    assert desk.route("Where is the finance team losing time?", has_file=False)["intent"] == "analysis"
+
+
 def test_sample_mode_says_it_needs_the_model_instead_of_guessing(make_settings):
     client = TestClient(create_app(make_settings(sample_mode=True)))
     job = client.post("/chat", json={"message": "Draft an email to the finance team"}).json()

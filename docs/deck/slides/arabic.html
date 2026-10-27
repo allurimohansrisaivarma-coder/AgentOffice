@@ -1,0 +1,41 @@
+<section id="arabic" data-transition="fade" style="background:#F6F4EE;color:#15202B;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;gap:56px">
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#15202B">One staff ID, three ways to write it</h2>
+<div style="display:flex;gap:64px">
+<div style="flex:1;display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#F6F4EE;background:#2459B8;width:64px;height:64px;border-radius:50%;text-align:center;line-height:2">1</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">The profiler spots it</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Querying your file through Zetaris, it notes Arabic-Indic and Persian digits in the Staff ID column.</p>
+</div>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#F6F4EE;background:#2459B8;width:64px;height:64px;border-radius:50%;text-align:center;line-height:2">2</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">The plan normalises the key</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">Nemotron puts arabic_digits on the lookup. If it forgets, the Spec Critic rejects the plan and names the fix.</p>
+</div>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#F6F4EE;background:#2459B8;width:64px;height:64px;border-radius:50%;text-align:center;line-height:2">3</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:600;line-height:1.2">QA proves it holds</h3>
+<p style="font-size:24px;line-height:1.4;color:#3D4A56">It swaps digits, spellings and separators in its test cases; the result must not change.</p>
+</div>
+</div>
+</div>
+<div style="width:720px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:12px;background:#15202B;padding:40px;border-radius:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#E07A2E">uae_site_claims.xlsx · Staff ID</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:28px;line-height:1.5;color:#F6F4EE">P004 &nbsp;·&nbsp; P٠٠٤ &nbsp;·&nbsp; P۰۰۴</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#9FB0C0">Western · Arabic-Indic · Persian</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#F6F4EE">→ P004 → Finance · Finance manager</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.4;color:#F6F4EE">also: <bdi>أحمد</bdi> = <bdi>احمد</bdi> &nbsp;·&nbsp; <bdi>١٢٫٥</bdi> = 12.5</p>
+</div>
+<div style="display:flex;flex-direction:column;background:#ECE7DB;padding:32px 40px;border-radius:16px;border-left:8px solid #E07A2E">
+<p style="font-size:32px;line-height:1.4;color:#15202B">Live: nobody mentioned Arabic, yet the plan normalised the key. 17 of 18 matched; the one ID not on staff is flagged.</p>
+</div>
+</div>
+</div>
+<aside>A problem generic tools miss. In the UAE and Saudi Arabia one spreadsheet can hold the same staff ID typed in Western, Arabic-Indic or Persian digits, and the same name spelled two ways, so a plain lookup quietly misses rows. In AgentOffice this is part of the reasoning, not a filter bolted on. The Data Profiler notices the variants while it queries your file through Zetaris. The PM puts the arabic_digits normaliser on the lookup key; if it leaves it out, the Spec Critic finds that the keys only match after normalising, rejects the plan and names the fix. QA then swaps digits, spellings and separators in its test cases and requires the same result. On our bundled UAE demo, 17 of 18 claims match the staff directory, and the one ID that is not on staff is flagged rather than guessed.</aside>
+</section>

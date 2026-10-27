@@ -99,7 +99,7 @@ Use `.venv/bin/python run.py` on macOS and Linux. Then open http://localhost:800
 
 With no keys in `.env`, the UI switches to sample mode by itself; the badge in the panel says so.
 
-1. Open the panel and pick one of the three demo files (or drop one from [`data/sample/tasks/`](../data/sample/tasks/)). Each comes with a suggested request; for example, for `expense_claims.xlsx`:
+1. Open the panel and pick one of the four demo files (or drop one from [`data/sample/tasks/`](../data/sample/tasks/)). Each comes with a suggested request; for example, for `expense_claims.xlsx`:
    > Fill in each employee's team and role from our staff directory, tidy the category names, convert the dates to YYYY-MM-DD, add the amount including 10% GST, flag claims over 500 for approval and give me totals by team on a separate sheet.
 2. Watch the team at work: profiler, PM, spec critic, engineer, QA and manager each post their step.
 3. Review the approval card: the plan, the QA results, and a preview of your file after the change. Type your name and click **Approve & run**.
@@ -107,7 +107,7 @@ With no keys in `.env`, the UI switches to sample mode by itself; the badge in t
 5. Ask an analysis question without a file:
    > Where is the finance team losing time, and what should we automate first?
 
-In sample mode no model is called. Each agent uses a deterministic fallback. The three demo files use their built-in plans. **Any other CSV or Excel file is planned by a rule-based planner** ([`app/tasks/offline_planner.py`](../app/tasks/offline_planner.py)). It reads your request clause by clause and maps each clause to a step, using your file's real column names and values. Then the Spec Critic, Engineer and QA check that plan against your file, exactly as they check a model's plan. It understands requests like these (use your column names):
+In sample mode no model is called. Each agent uses a deterministic fallback. The four demo files use their built-in plans. **Any other CSV or Excel file is planned by a rule-based planner** ([`app/tasks/offline_planner.py`](../app/tasks/offline_planner.py)). It reads your request clause by clause and maps each clause to a step, using your file's real column names and values. Then the Spec Critic, Engineer and QA check that plan against your file, exactly as they check a model's plan. It understands requests like these (use your column names):
 
 > remove duplicate order IDs, tidy customer names, standardise order dates, fill blank Status with Pending, add 10% GST to Amount, flag amounts over 1,000, keep only rows where Region is North, split Name into first and last name, sort by Order Date descending, totals by Region
 

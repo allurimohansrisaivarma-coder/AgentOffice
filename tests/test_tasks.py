@@ -485,6 +485,52 @@ def test_arabic_upload_survives_zetaris_cells_and_directory_lookup(make_settings
     assert "arabic_digits" in describe(spec)
 
 
+def test_uae_demo_matches_staff_ids_in_every_digit_system(make_settings):
+    """The bundled UAE demo: IDs typed as P002, P٠٠٢, P۰۰۲ or ' p002' all find the same directory row."""
+    import csv
+    from app.tasks.spec import DEMO_SPECS, demo_spec_for
+
+    client = TestClient(create_app(make_settings(sample_mode=True)))
+    meta = client.get("/uploads/demo_uae_site_claims").json()
+    rows = meta["rows"]["Claims"]
+    spec = demo_spec_for({"Claims": list(rows[0])})
+    assert spec == DEMO_SPECS["uae_site_claims"]
+    with open("data/sample/workforce/people.csv", encoding="utf-8") as f:
+        staff = [{"person_id": p["person_id"], "team": p["team"], "role": p["role"]} for p in csv.DictReader(f)]
+    out = runtime.execute(spec, rows, {"staff": staff})["rows"]
+    missed = [r["Staff ID"] for r in out if r["Directory Match"] != "matched"]
+    assert missed == ["P٠٩٩"]                                    # the one ID that isn't on staff
+    assert any(not r["Staff ID"].isascii() for r in out if r["Directory Match"] == "matched")
+
+
+def test_a_repeated_request_reuses_the_approved_automation_without_asking_the_model(tmp_path, make_settings):
+    """Seen live: 'Same as last week, on this week's file: <request>' was re-planned into a new spec, so the
+    human was asked again. A repeat of an approved request now reuses it (QA still re-tests it)."""
+    from app.agents.base import RunContext
+    from app.tasks.agents import TaskPlanner
+    from app.tasks.spec import DEMO_SPECS
+    from app.tracing import Tracer
+
+    class NoModel:
+        name = "must-not-be-called"
+
+        def chat(self, messages, **params):
+            raise AssertionError("the model should not re-plan an approved request")
+
+    spec = DEMO_SPECS["vendor_invoices"]
+    request = "Remove duplicate invoices, fill blank statuses with Pending and sort by due date."
+    approved = {spec["name"]: {"spec": spec, "request": request, "memory": "approved by Priya"}}
+    sheets = {"vendor_invoices": ["Invoice No", "Vendor", "Invoice Date", "Due Date", "Amount", "Status"]}
+    ctx = RunContext(run_id="r3", settings=make_settings(), tracer=Tracer("r3", tmp_path, stream=None),
+                     generator=NoModel(), data=None, store=None, pipeline=None, builder=None, sample_mode=False)
+    pm = TaskPlanner(ctx)
+    plan = pm.plan("Same as last week, on this week's file: " + request, {}, sheets, approved, [])
+    assert plan["reuse"] == spec["name"] and plan["spec"] == spec
+    assert TaskPlanner._request_key(request + "  ") == TaskPlanner._request_key(request.upper())
+    # the same words on a file the spec doesn't fit are planned afresh
+    assert pm._same_request(request, {"Sheet1": ["A", "B"]}, approved, set()) is None
+
+
 def test_ui_is_served(make_settings):
     client = TestClient(create_app(make_settings(sample_mode=True)))
     page = client.get("/")

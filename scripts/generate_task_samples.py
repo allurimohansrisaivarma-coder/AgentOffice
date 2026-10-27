@@ -8,6 +8,8 @@ Writes data/sample/tasks/:
                            (which Zetaris serves as workforce.people), plus two that are not on staff
   vendor_invoices.csv      an invoice register with duplicate invoice numbers and missing statuses
   leads_and_contacts.xlsx  a Leads sheet and a CRM Contacts sheet to check them against
+  uae_site_claims.xlsx     bilingual claims whose staff IDs mix Western, Arabic-Indic and Persian digits
+                           (P003 / P٠٠٣ / P۰۰۳), so a plain lookup on workforce.people misses them
 
 Every person, email and company is invented; emails use the reserved example.com/example.org domains.
 """
@@ -111,6 +113,36 @@ def leads_and_contacts(rng: random.Random) -> tuple[list[list], list[list]]:
     return leads, contacts
 
 
+ARABIC_DIGITS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
+PERSIAN_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
+
+
+def uae_site_claims(rng: random.Random) -> list[list]:
+    """Claims from a UAE site: the same staff IDs typed in Western, Arabic-Indic and Persian digits."""
+    people = _people()
+    items = [("Taxi to client site", "تاكسي إلى موقع العميل"), ("Team lunch", "غداء الفريق"),
+             ("Printer paper", "ورق طابعة"), ("Site visit parking", "موقف زيارة الموقع"),
+             ("Online course", "دورة تدريبية")]
+    header = ["Claim ID", "Staff ID", "Date", "Description", "الوصف", "Amount (AED)", "Team", "Role"]
+    rows = [header]
+    for i in range(1, 19):
+        staff_id = rng.choice(people)["person_id"]
+        style = i % 3 if i not in (7, 15) else 3
+        if style == 1:
+            staff_id = staff_id.translate(ARABIC_DIGITS)
+        elif style == 2 and i % 2:
+            staff_id = staff_id.translate(PERSIAN_DIGITS)
+        elif style == 3:
+            staff_id = f" {staff_id.lower()}"
+        if i == 12:
+            staff_id = "P٠٩٩"                    # not on staff
+        english, arabic = rng.choice(items)
+        day = date(2026, 10, 1) + timedelta(days=rng.randint(0, 20))
+        rows.append([f"UAE-{500 + i}", staff_id, day.isoformat(), english, arabic,
+                     round(rng.uniform(40, 2400), 2), None, None])
+    return rows
+
+
 def _xlsx(path: Path, sheets: dict[str, list[list]]) -> None:
     from openpyxl import Workbook
     from openpyxl.styles import Font
@@ -134,6 +166,7 @@ def main() -> int:
         csv.writer(f).writerows(vendor_invoices(rng))
     leads, contacts = leads_and_contacts(rng)
     _xlsx(OUT / "leads_and_contacts.xlsx", {"Leads": leads, "CRM Contacts": contacts})
+    _xlsx(OUT / "uae_site_claims.xlsx", {"Claims": uae_site_claims(random.Random(SEED + 1))})
     for p in sorted(OUT.iterdir()):
         print(f"wrote {p.relative_to(ROOT)}")
     return 0

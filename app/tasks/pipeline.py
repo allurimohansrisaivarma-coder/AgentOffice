@@ -76,7 +76,7 @@ def approved_automations(approvals: ApprovalLedger, tasks: TaskStore, memory: Op
         if record:
             out[record["spec"]["name"]] = {"spec": record["spec"], "code_hash": approval["code_hash"],
                                            "approval_id": approval["approval_id"], "memory": m["content"],
-                                           "memory_id": m["id"]}
+                                           "memory_id": m["id"], "request": record.get("task", "")}
     return out
 
 

@@ -471,6 +471,25 @@ DEMO_SPECS: dict[str, dict] = {
                           "ambiguous": "Duplicate in CRM"}},
         ],
     },
+    "uae_site_claims": {
+        "name": "uae_claims_filler",
+        "summary": "Fill each claim's team and role from the staff directory in Zetaris, matching staff IDs typed "
+                   "in Western, Arabic-Indic or Persian digits, flag large claims and total by team.",
+        "input": {"sheet": "Claims", "columns": ["Claim ID", "Staff ID", "Amount (AED)"]},
+        "references": {"staff": {"source": "zetaris", "sql": "SELECT person_id, team, role FROM workforce.people",
+                                 "fields": ["person_id", "team", "role"]}},
+        "steps": [
+            {"op": "lookup", "key": "Staff ID", "reference": "staff", "reference_key": "person_id",
+             "fields": {"Team": "team", "Role": "role"}, "normalize": ["strip", "upper", "arabic_digits"],
+             "mode": "fill_blanks", "status_column": "Directory Match",
+             "statuses": {"found": "matched", "not_found": "not in directory", "ambiguous": "check manually"}},
+            {"op": "flag", "column": "Needs Approval", "when": [{"column": "Amount (AED)", "op": "gt", "value": 1000}],
+             "match": "all", "then": "Yes", "else": "No"},
+            {"op": "summarize", "sheet": "Totals by Team", "group_by": ["Team"],
+             "values": [{"column": "Claim ID", "agg": "count", "as": "Claims"},
+                        {"column": "Amount (AED)", "agg": "sum", "as": "Total (AED)"}], "round": 2},
+        ],
+    },
 }
 
 

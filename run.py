@@ -65,6 +65,8 @@ DEMO_PROMPTS = {
                             "before 2026-10-15 as Overdue and sort by due date.",
     "demo_leads_and_contacts": "Split the full names into first and last name, check each lead against the CRM "
                                "Contacts sheet by email, fill in the owner and mark new leads as 'Create contact'.",
+    "demo_uae_site_claims": "Fill in each person's team and role from our staff directory using the Staff ID, "
+                            "flag claims over 1,000 AED for approval and give me totals by team on a separate sheet.",
 }
 
 
