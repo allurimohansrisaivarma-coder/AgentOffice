@@ -100,12 +100,13 @@ Inside the container, `localhost` would mean the container itself, so `localhost
 - The power button in the panel quits everything. Opening AgentOffice a second time just opens the island.
 - Windows Firewall may ask about `pythonw.exe` the first time. Allow it on private networks: in default mode, Zetaris (in Docker) reads your uploads from the service.
 
-**Desktop island (macOS).** Double-click **`AgentOffice.command`** in Finder (or run `./AgentOffice.command` in Terminal).
+**Desktop island (macOS).** Double-click **`AgentOffice.command`** or **`AgentOffice.app`** in Finder (or run `./AgentOffice.command` in Terminal).
 
-- Same floating pill / panel as Windows, via Chrome or Edge in app mode.
-- The first time, macOS may ask for **Accessibility** permission (System Settings → Privacy & Security → Accessibility) so the island can position its window — allow Terminal or the Python binary you used.
+- Opens a **visible panel-sized** Chrome/Edge app window first (not a tiny pill), then you can collapse to the top island.
+- Starts the API if needed; if something else already owns `:8000`, it picks the next free port (`8010`, …) instead of attaching to a foreign service.
+- The first time, macOS may ask for **Accessibility** (System Settings → Privacy & Security → Accessibility) so the island can position its window — allow Terminal / Python / AgentOffice. Without it, the script still opens the UI in a normal Chrome window as a fallback.
 - Click the pill to open it; with the window focused, **⌃⇧Space** also toggles. Quit from the power button in the panel.
-- Opening `AgentOffice.command` again focuses the running island.
+- Opening `AgentOffice.command` / `AgentOffice.app` again focuses the running island.
 
 **Browser (any OS).**
 
@@ -254,7 +255,7 @@ To start fresh, quit AgentOffice and delete `state/` and the files in `logs/`.
 | *".venv uses Python 3.x"* | Delete the `.venv` folder and run setup again. |
 | Double-clicking `AgentOffice.pyw` does nothing | Windows has no program associated with `.pyw` files. Use the shortcut that setup creates, or run `.venv\Scripts\pythonw.exe AgentOffice.pyw`. |
 | *"AgentOffice could not start its background service"* | Read `logs/agentoffice-server.log`. Usually another program is using port 8000. Close it, or set `PORT` as a Windows environment variable: the desktop app reads `PORT` from the environment, not from `.env`. |
-| The island doesn't appear | Needs Google Chrome or Microsoft Edge. On Mac, grant Accessibility if prompted, or open http://localhost:8000 in a browser. |
+| The island doesn't appear | Needs Google Chrome or Microsoft Edge. On Mac, grant Accessibility if prompted; without it AgentOffice opens a normal Chrome window. Or open http://localhost:8000 (or `:8010` if `:8000` was taken) in a browser. |
 | *"Ctrl+Shift+Space is taken by another app"* | Another app registered the shortcut first. Click the island to open it instead. |
 | `agent_no_offline_plan` | Sample mode's rule-based planner found no step it understands in the request. Rephrase with your column names (the message lists examples) or use default mode. |
 | `agent_not_configured` from the API | Default mode is missing settings (the message lists them). Pass `"options": {"sample_mode": true}` or set `SAMPLE_MODE=true`. |

@@ -64,18 +64,71 @@ def venv_python() -> str:
     return str(candidate if candidate.exists() else Path(sys.executable))
 
 
+def _port_of(url: str) -> str:
+    return url.rstrip("/").rsplit(":", 1)[-1]
+
+
+def is_agentoffice(url: str) -> bool:
+    """True when /health is our API (not some other service on the same port)."""
+    try:
+        with urllib.request.urlopen(f"{url.rstrip('/')}/health", timeout=2) as r:
+            body = r.read().decode("utf-8", errors="replace")
+            return r.status == 200 and '"status"' in body and ("sample_mode" in body or "llm_provider" in body)
+    except OSError:
+        return False
+
+
+def port_free(port: int) -> bool:
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
+def resolve_serve_url(preferred: str) -> str:
+    """Prefer an already-running AgentOffice; else a free port (skip foreign listeners)."""
+    base = preferred.rstrip("/")
+    host = base.rsplit(":", 1)[0]
+    try:
+        start = int(_port_of(base))
+    except ValueError:
+        start = 8000
+    candidates = [start, 8010, 8020, 8030, 8040, 8050]
+    seen = set()
+    ordered = []
+    for p in candidates:
+        if p not in seen:
+            seen.add(p)
+            ordered.append(p)
+    for port in ordered:
+        url = f"{host}:{port}"
+        if is_agentoffice(url):
+            return url
+    for port in ordered:
+        if port_free(port):
+            return f"{host}:{port}"
+    return f"{host}:{start}"
+
+
 def start_server(url: str) -> subprocess.Popen:
     """run.py in the background; log to logs/agentoffice-server.log."""
     (ROOT / "logs").mkdir(exist_ok=True)
     log = (ROOT / "logs" / "agentoffice-server.log").open("ab")
-    kwargs: dict = {"cwd": ROOT, "stdout": log, "stderr": subprocess.STDOUT, "stdin": subprocess.DEVNULL}
+    env = os.environ.copy()
+    env["PORT"] = _port_of(url)
+    kwargs: dict = {"cwd": ROOT, "stdout": log, "stderr": subprocess.STDOUT, "stdin": subprocess.DEVNULL,
+                    "env": env}
     if os.name == "nt":
         kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
     else:
         kwargs["start_new_session"] = True
     server = subprocess.Popen([venv_python(), str(ROOT / "run.py")], **kwargs)
     for _ in range(90):
-        if healthy(url) or server.poll() is not None:
+        if is_agentoffice(url) or healthy(url) or server.poll() is not None:
             break
         time.sleep(0.5)
     return server
@@ -84,14 +137,15 @@ def start_server(url: str) -> subprocess.Popen:
 def notify(message: str, error: bool = False) -> None:
     if sys.stdout is not None and sys.stdout.isatty():
         print(message, flush=True)
+    if sys.platform == "darwin":
+        kind = "display alert \"AgentOffice\" message " + repr(message) + (" as critical" if error else "")
+        note = f'display notification {message.splitlines()[0]!r} with title "AgentOffice"'
+        subprocess.run(["osascript", "-e", note], check=False)
+        if error:
+            subprocess.run(["osascript", "-e", kind], check=False)
     elif error and os.name == "nt":
         import ctypes
         ctypes.windll.user32.MessageBoxW(None, message, "AgentOffice", 0x10)
-    elif error and sys.platform == "darwin":
-        subprocess.run(
-            ["osascript", "-e", f'display alert "AgentOffice" message {message!r} as critical'],
-            check=False,
-        )
 
 
 def screen_size() -> tuple[int, int]:
@@ -423,35 +477,26 @@ def _osascript_ok(script: str) -> bool:
         return False
 
 
-def _main_darwin(args) -> int:
-    screen_w, screen_h = screen_size()
+def _ours_title(title: str) -> bool:
+    t = (title or "").strip()
+    return t.startswith("AgentOffice") or t.startswith(TITLE_PREFIX)
 
-    def find_running() -> bool:
-        script = f'''
-        tell application "System Events"
-          repeat with proc in (every process whose background only is false)
-            repeat with w in windows of proc
-              try
-                if name of w starts with "{TITLE_PREFIX}" then return "yes"
-              end try
-            end repeat
-          end repeat
-        end tell
-        return "no"
-        '''
-        try:
-            return _osascript(script) == "yes"
-        except (OSError, subprocess.CalledProcessError):
-            return False
+
+def _main_darwin(args) -> int:
+    """Hardened Mac shell: visible panel on launch, port failover, keep-alive, relaunch."""
+    screen_w, screen_h = screen_size()
+    (ROOT / "logs").mkdir(exist_ok=True)
+    pid_path = ROOT / "logs" / "agentoffice-island.pid"
+    pid_path.write_text(str(os.getpid()), encoding="utf-8")
 
     def read_title() -> str:
-        script = f'''
+        script = '''
         tell application "System Events"
           repeat with proc in (every process whose background only is false)
             repeat with w in windows of proc
               try
-                set n to name of w
-                if n starts with "{TITLE_PREFIX}" then return n
+                set n to name of w as text
+                if n starts with "AgentOffice" then return n
               end try
             end repeat
           end repeat
@@ -465,17 +510,18 @@ def _main_darwin(args) -> int:
 
     def place_window(css_w: int, css_h: int) -> None:
         h = min(css_h, screen_h - 2 * TOP_MARGIN - 40)
-        x = max(0, (screen_w - css_w) // 2)
+        w = min(css_w, screen_w - 40)
+        x = max(0, (screen_w - w) // 2)
         y = TOP_MARGIN
-        # System Events uses top-left origin for position on modern macOS.
         script = f'''
         tell application "System Events"
           repeat with proc in (every process whose background only is false)
-            repeat with w in windows of proc
+            repeat with win in windows of proc
               try
-                if name of w starts with "{TITLE_PREFIX}" then
-                  set position of w to {{{x}, {y}}}
-                  set size of w to {{{css_w}, {h}}}
+                set n to name of win as text
+                if n starts with "AgentOffice" then
+                  set position of win to {{{x}, {y}}}
+                  set size of win to {{{w}, {h}}}
                   return
                 end if
               end try
@@ -486,131 +532,185 @@ def _main_darwin(args) -> int:
         _osascript_ok(script)
 
     def activate_window() -> None:
-        script = f'''
+        _osascript_ok('''
         tell application "System Events"
           repeat with proc in (every process whose background only is false)
-            repeat with w in windows of proc
+            repeat with win in windows of proc
               try
-                if name of w starts with "{TITLE_PREFIX}" then
+                set n to name of win as text
+                if n starts with "AgentOffice" then
                   set frontmost of proc to true
-                  perform action "AXRaise" of w
+                  try
+                    perform action "AXRaise" of win
+                  end try
                   return
                 end if
               end try
             end repeat
           end repeat
         end tell
-        '''
-        _osascript_ok(script)
+        ''')
+        # Also poke Chrome by name — app-mode windows often live here.
+        _osascript_ok('tell application "Google Chrome" to activate')
 
     def close_window() -> None:
-        script = f'''
+        _osascript_ok('''
         tell application "System Events"
           repeat with proc in (every process whose background only is false)
-            repeat with w in windows of proc
+            repeat with win in windows of proc
               try
-                if name of w starts with "{TITLE_PREFIX}" then
+                set n to name of win as text
+                if n starts with "AgentOffice" then
                   try
-                    click button 1 of w
-                  on error
-                    -- fall through
+                    click button 1 of win
                   end try
                 end if
               end try
             end repeat
           end repeat
         end tell
-        '''
-        _osascript_ok(script)
+        ''')
 
-    if find_running():
+    def launch_browser(exe: str, url: str) -> subprocess.Popen:
+        profile = ROOT / "state" / "island-browser"
+        profile.mkdir(parents=True, exist_ok=True)
+        # Start at PANEL size so the window is impossible to miss (not a 44px pill).
+        x = max(0, (screen_w - PANEL[0]) // 2)
+        y = max(40, TOP_MARGIN + 20)
+        app_url = f"{url.rstrip('/')}/?shell=desktop"
+        return subprocess.Popen([
+            exe,
+            f"--app={app_url}",
+            f"--user-data-dir={str(profile)}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-features=Translate",
+            f"--window-size={PANEL[0]},{PANEL[1]}",
+            f"--window-position={x},{y}",
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # Second launch: just raise the existing window.
+    existing = read_title()
+    if _ours_title(existing):
         activate_window()
+        place_window(*PANEL)
+        notify("AgentOffice is already running — brought it to the front.")
         return 0
 
+    # Port failover: don't attach to a foreign service on :8000.
+    if args.serve:
+        args.url = resolve_serve_url(args.url)
     server = None
-    if not healthy(args.url):
+    if not is_agentoffice(args.url):
         if not args.serve:
-            notify(f"The AgentOffice API is not running at {args.url}. Start it with `python run.py`, "
-                   "or pass --serve.", error=True)
+            notify(f"The AgentOffice API is not running at {args.url}.\n"
+                   "Start it with `python run.py`, or pass --serve.", error=True)
             return 1
+        if not port_free(int(_port_of(args.url))) and not is_agentoffice(args.url):
+            args.url = resolve_serve_url(args.url)
         server = start_server(args.url)
-        if not healthy(args.url):
-            notify("AgentOffice could not start its background service. See logs/agentoffice-server.log.",
-                   error=True)
-            server.terminate()
+        if not is_agentoffice(args.url):
+            notify("AgentOffice could not start its background service.\n"
+                   "See logs/agentoffice-server.log (is another app using the port?).", error=True)
+            if server is not None:
+                server.terminate()
             return 1
 
-    # Chrome first on Mac — more reliable --app windows than Edge.
-    prefer = "chrome" if args.browser == "edge" else args.browser
-    exe = browser_path(prefer) or browser_path("chrome")
+    prefer = args.browser if args.browser in ("chrome", "edge") else "chrome"
+    exe = browser_path(prefer) or browser_path("chrome") or browser_path("edge")
     if exe is None:
-        notify("Google Chrome or Microsoft Edge is needed for the AgentOffice island on Mac.\n"
-               "Install Chrome, or open http://localhost:8000 in any browser.", error=True)
+        notify("Google Chrome or Microsoft Edge is required for the Mac app.\n"
+               f"Install Chrome, or open {args.url} in any browser.", error=True)
         if server is not None:
             server.terminate()
         return 1
 
-    profile = ROOT / "state" / "island-browser"
-    profile.mkdir(parents=True, exist_ok=True)
-    x = max(0, (screen_w - ISLAND[0]) // 2)
-    browser = subprocess.Popen([
-        exe,
-        f"--app={args.url}/?shell=desktop",
-        f"--user-data-dir={profile}",
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-features=Translate",
-        f"--window-size={ISLAND[0]},{ISLAND[1]}",
-        f"--window-position={x},{TOP_MARGIN}",
-    ])
-
-    # Wait for the app window; macOS may prompt for Accessibility the first time.
-    deadline = time.monotonic() + 25
+    browser = launch_browser(exe, args.url)
+    # Wait for document.title from the page (JS sets "AgentOffice · …").
     title = ""
+    deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         title = read_title()
-        if title.startswith(TITLE_PREFIX):
+        if _ours_title(title):
             break
         if browser.poll() is not None:
             break
-        time.sleep(0.3)
+        time.sleep(0.25)
 
-    if not title.startswith(TITLE_PREFIX):
-        notify("Could not find the AgentOffice window.\n"
-               "If macOS asked for Accessibility permission, allow Terminal/Python "
-               "under System Settings → Privacy & Security → Accessibility, then try again.\n"
-               f"Meanwhile open {args.url} in your browser.", error=True)
-        if browser.poll() is None:
-            browser.terminate()
-        if server is not None:
-            server.terminate()
+    if not _ours_title(title):
+        # Last resort: open a normal Chrome window so the user always sees something.
+        subprocess.run(["open", "-a", "Google Chrome", args.url], check=False)
+        notify("Could not attach to the floating app window (Accessibility may be required).\n"
+               f"Opened {args.url} in Chrome instead.\n"
+               "System Settings → Privacy & Security → Accessibility → allow Terminal/Python, "
+               "then run AgentOffice.command again.", error=True)
+        # Keep supervising the API until Ctrl+C so --serve stays useful.
+        try:
+            while True:
+                if server is not None and server.poll() is not None:
+                    break
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if browser.poll() is None:
+                browser.terminate()
+            if server is not None:
+                server.terminate()
         return 1
 
-    mode, _ = parse_title(title)
-    place_window(*(PANEL if mode == "panel" else ISLAND))
-    notify("AgentOffice island is running at the top of your screen on Mac.\n"
-           "Click the pill to open it (or focus it and press Ctrl+Shift+Space / ⌃⇧Space).\n"
-           "Quit from the power button in the panel, or Ctrl+C here.\n"
-           "First run may need Accessibility permission for window positioning.")
+    place_window(*PANEL)
+    activate_window()
+    notify(f"AgentOffice is open on Mac ({args.url}).\n"
+           "Use the panel; collapse to the top pill when you want.\n"
+           "Quit from the power button in the panel.")
 
-    last_mode = None
+    last_mode = "panel"
+    place_window(*PANEL)
+    missing = 0
+    relaunches = 0
+    user_quit = False
     try:
-        while browser.poll() is None:
-            title = read_title()
-            if not title:
-                # Window gone
-                break
-            if title.startswith(TITLE_PREFIX):
-                mode, _ = parse_title(title)
-                if mode == "quit":
+        while not user_quit:
+            if browser.poll() is not None:
+                if relaunches >= 3:
+                    notify("The AgentOffice window closed repeatedly. Open "
+                           f"{args.url} in Chrome, or run AgentOffice.command again.", error=True)
                     break
-                if mode != last_mode:
-                    place_window(*(PANEL if mode == "panel" else ISLAND))
-                    last_mode = mode
+                relaunches += 1
+                browser = launch_browser(exe, args.url)
+                time.sleep(1.5)
+                activate_window()
+                place_window(*PANEL)
+                continue
+
+            title = read_title()
+            if not _ours_title(title):
+                missing += 1
+                # Brief AX glitches shouldn't kill the app.
+                if missing > 25:   # ~3s of misses
+                    missing = 0
+                    activate_window()
+                time.sleep(0.12)
+                continue
+            missing = 0
+            mode, _ = parse_title(title)
+            if mode == "quit":
+                user_quit = True
+                break
+            if mode != last_mode:
+                place_window(*(PANEL if mode == "panel" else ISLAND))
+                last_mode = mode
+                if mode == "panel":
+                    activate_window()
             time.sleep(0.12)
     except KeyboardInterrupt:
         pass
     finally:
+        try:
+            pid_path.unlink(missing_ok=True)
+        except OSError:
+            pass
         close_window()
         if browser.poll() is None:
             browser.terminate()
@@ -635,13 +735,11 @@ def main(argv=None) -> int:
     if os.name == "nt":
         return _main_windows(args)
     if sys.platform == "darwin":
-        # Prefer Chrome on Mac unless the user asked for Edge explicitly via --browser edge
-        # and Edge is installed; default argparse is edge for Windows parity — remap default
-        # when invoked without an explicit preference by checking argv.
-        if argv is None and "--browser" not in sys.argv:
+        argv_list = sys.argv if argv is None else list(argv)
+        if "--browser" not in argv_list:
             args.browser = "chrome"
-        elif isinstance(argv, list) and "--browser" not in argv:
-            args.browser = "chrome"
+        if args.serve:
+            args.url = resolve_serve_url(args.url)
         return _main_darwin(args)
 
     print(f"The floating desktop island runs on Windows and macOS. "

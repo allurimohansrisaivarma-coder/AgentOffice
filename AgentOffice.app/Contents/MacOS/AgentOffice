@@ -1,0 +1,6 @@
+#!/bin/bash
+# Repo-root AgentOffice.app → Contents/MacOS → ../../.. is wrong; ../.. is AgentOffice.app, ../../.. is parent of app.
+# We place the .app inside the repo, so repo root is dirname/../../..
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$ROOT"
+exec "$ROOT/AgentOffice.command" "$@"
