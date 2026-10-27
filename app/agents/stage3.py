@@ -87,21 +87,20 @@ class ProductManager(Agent):
             return ["reply must be a JSON object"]
         errors = []
         ranking = obj.get("ranking")
-        if not isinstance(ranking, list) or not ranking:
-            errors.append("'ranking' must be a non-empty list")
-        else:
-            for i, item in enumerate(ranking):
-                if not isinstance(item, dict) or item.get("routine") not in names:
-                    errors.append(f"ranking[{i}].routine must be one of {sorted(names)}")
-                    continue
-                v = item.get("estimated_hours_saved_per_week")
-                if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
-                    errors.append(f"ranking[{i}].estimated_hours_saved_per_week must be a number >= 0")
-                if item.get("risk") not in RISK_ORDER:
-                    errors.append(f"ranking[{i}].risk must be one of {RISK_ORDER}")
-        ranked = {i.get("routine") for i in ranking or [] if isinstance(i, dict)}
-        if obj.get("chosen") not in ranked:
-            errors.append("'chosen' must be one of the ranked routines")
+        # Rows for routines outside this question's candidates (the World Model also remembers other teams'
+        # routines) are not errors: plan() drops them. Only in-scope rows must be well formed.
+        in_scope = [(i, item) for i, item in enumerate(ranking) if isinstance(item, dict)
+                    and item.get("routine") in names] if isinstance(ranking, list) else []
+        if not in_scope:
+            errors.append(f"'ranking' must rank at least one of {sorted(names)}")
+        for i, item in in_scope:
+            v = item.get("estimated_hours_saved_per_week")
+            if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
+                errors.append(f"ranking[{i}].estimated_hours_saved_per_week must be a number >= 0")
+            if item.get("risk") not in RISK_ORDER:
+                errors.append(f"ranking[{i}].risk must be one of {RISK_ORDER}")
+        if obj.get("chosen") not in {item["routine"] for _, item in in_scope}:
+            errors.append(f"'chosen' must be one of the ranked candidates {sorted(names)}")
         spec_errors = validate_spec(obj.get("spec"))
         errors += [f"spec: {e}" for e in spec_errors]
         if not spec_errors and obj["spec"]["routine"] != obj.get("chosen"):
@@ -121,6 +120,15 @@ class ProductManager(Agent):
             raise AgentError(self.name, "no_template", "offline mode has no spec template for any candidate")
         return {"ranking": ranking, "chosen": chosen, "spec": template_for(chosen),
                 "spec_origin": "built-in template (offline)"}
+
+    def _in_scope(self, proposal: dict, names: set[str]) -> dict:
+        """Drop ranking rows for routines that are not this question's candidates, and say so in the trace."""
+        dropped = [i.get("routine") for i in proposal["ranking"] if i.get("routine") not in names]
+        if dropped:
+            proposal["ranking"] = [i for i in proposal["ranking"] if i.get("routine") in names]
+            self.log("ranking_trimmed", status="applied", output_summary=f"dropped {dropped}: not among this "
+                     f"question's candidates {sorted(names)} (the World Model also remembers other routines)")
+        return proposal
 
     def _clamp(self, proposal: dict, candidates: list[dict]) -> dict:
         by_name = {c["routine"]: c for c in candidates}
@@ -162,6 +170,8 @@ class ProductManager(Agent):
         prompt = (f"Question from the office team: {query}\n\nEvidence over {evidence['weeks']:g} weeks (computed from "
                   f"the activity log, timesheets and ticket system):\n{json.dumps(_evidence_table(candidates), indent=1)}"
                   f"\n\nRelevant context from the shared World Model:\n{json.dumps(context, default=str)[:3000]}"
+                  f"\n\nRank ONLY these candidate routines: {sorted(names)}. Routines that appear only in the World "
+                  f"Model context are out of scope for this question; do not rank or choose them."
                   f"\n\n{SPEC_FORMAT}\n\nReply with JSON: {{\"ranking\": [{{\"routine\", "
                   f"\"estimated_hours_saved_per_week\", \"risk\": \"low|medium|high\", \"reason\"}}], "
                   f"\"chosen\": <routine>, \"spec\": <spec for the chosen routine>}}")
@@ -170,8 +180,9 @@ class ProductManager(Agent):
             self.log("propose_plan", model=OFFLINE_MODEL, target_agent="PriorityCritic",
                      output_summary={"chosen": proposal["chosen"], "ranking": proposal["ranking"]})
         else:
-            proposal = self.chat_json(self.SYSTEM, prompt, action="propose_plan", target_agent="PriorityCritic",
-                                      validate=lambda o: self._validate(o, names))
+            proposal = self._in_scope(self.chat_json(self.SYSTEM, prompt, action="propose_plan",
+                                                     target_agent="PriorityCritic",
+                                                     validate=lambda o: self._validate(o, names)), names)
             proposal["spec_origin"] = f"written by {self.ctx.model_name}"
 
         rounds = 0
@@ -197,8 +208,9 @@ class ProductManager(Agent):
             revise = (prompt + "\n\nYour previous reply:\n" + json.dumps(proposal, default=str)
                       + "\n\nThe Priority Critic rejected it:\n- " + "\n- ".join(issues)
                       + "\nRevise the ranking (and choice/spec if needed) so every claim is within the evidence.")
-            proposal = self.chat_json(self.SYSTEM, revise, action="revise_plan", target_agent="PriorityCritic",
-                                      validate=lambda o: self._validate(o, names))
+            proposal = self._in_scope(self.chat_json(self.SYSTEM, revise, action="revise_plan",
+                                                     target_agent="PriorityCritic",
+                                                     validate=lambda o: self._validate(o, names)), names)
             proposal["spec_origin"] = f"written by {self.ctx.model_name} (revision {rounds})"
 
         self._record(candidates, proposal, query)

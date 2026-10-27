@@ -120,6 +120,40 @@ def test_model_path_critique_revision_and_rule_gate(tmp_path, make_settings):
     assert automation_entity["attributes"]["qa_passed"] is True
 
 
+def test_out_of_scope_routines_in_the_ranking_are_dropped_not_fatal(tmp_path, make_settings):
+    # Live failure on 27 Oct: a Finance question leaves one candidate, but the World Model also remembers other
+    # teams' routines and Nemotron ranked those too. Two rejected replies used to stop the whole run.
+    spec = _spec()
+    reply = "```json\n" + json.dumps({
+        "ranking": [{"routine": "invoice_matching", "estimated_hours_saved_per_week": 20, "risk": "high",
+                     "reason": "volume"},
+                    {"routine": "crm_data_entry", "estimated_hours_saved_per_week": 7, "risk": "medium"},
+                    {"routine": "order_status_updates", "estimated_hours_saved_per_week": 5, "risk": "medium"}],
+        "chosen": "invoice_matching", "spec": spec}) + "\n```"
+    generator = ScriptedGenerator({
+        "PM agent": [reply],
+        "Engineer agent": [_code_block(compile_spec(spec))],
+        "QA agent in AgentOffice. You design": [json.dumps({"cases": []})],
+        "QA agent in AgentOffice reviewing": [json.dumps({"advisories": []})],
+        "Manager agent": [json.dumps({"decision": "approve_for_human_review", "rationale": "Within evidence."})],
+    })
+    settings = make_settings()
+    store, pipeline, builder = open_world(settings)
+    tracer = Tracer("scope01", settings.log_dir, stream=None)
+    result = run_pipeline("Where is the finance team losing time, and what should we automate first?", {},
+                          settings=settings, tracer=tracer, generator=generator, sample_mode=True, store=store,
+                          pipeline=pipeline, builder=builder, approvals=ApprovalLedger(settings.world_db_path.parent),
+                          stages=["build"])
+    assert [r["routine"] for r in result["result"]["ranking"]] == ["invoice_matching"]
+    assert result["approval"]["status"] == "pending"                                # the run went all the way
+    assert len([k for k, _ in generator.prompts if k == "PM agent"]) == 1           # accepted first time
+    pm_prompt = next(p for k, p in generator.prompts if k == "PM agent")
+    assert "Rank ONLY these candidate routines: ['invoice_matching']" in pm_prompt
+    trimmed = [json.loads(line) for line in tracer.path.read_text(encoding="utf-8").splitlines()
+               if '"ranking_trimmed"' in line]
+    assert len(trimmed) == 1 and "crm_data_entry" in trimmed[0]["output_summary"]
+
+
 def test_reasoning_with_only_a_closing_tag_is_dropped():
     from app.agents.base import extract_json, strip_reasoning
     assert strip_reasoning('The user wants JSON. {"a": 0}</think>{"a": 1}') == '{"a": 1}'
