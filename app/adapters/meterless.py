@@ -22,6 +22,7 @@ the contract's 180 s) because Nightshift may buffer a long reply until it is don
 from __future__ import annotations
 
 import json
+import socket
 import threading
 import time
 from dataclasses import dataclass, field
@@ -64,6 +65,18 @@ class _StreamError(Exception):
     def __init__(self, error: Any, status: int, *, retry: bool):
         super().__init__(str(error))
         self.detail, self.status, self.retry = str(error)[:300], status, retry
+
+
+def _interrupt(response: httpx.Response) -> None:
+    """Shut the socket down so a recv() blocked in another thread returns at once. Closing alone is not enough on
+    Linux (the read waits for the read timeout or the server), and Docker runs on Linux."""
+    stream = response.extensions.get("network_stream")
+    sock = stream.get_extra_info("socket") if stream is not None else None
+    if sock is not None:
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
 
 
 def _deadline_error(service: str, attempts: int) -> AdapterError:
@@ -156,7 +169,8 @@ class ChatClient:
                 with self._client.stream("POST", url, json=body, headers=self._chat_headers) as response:
                     def expire(resp=response):
                         expired.set()
-                        resp.close()        # unblocks a read that is waiting on a silent connection
+                        _interrupt(resp)    # unblocks a read that is waiting on a silent connection
+                        resp.close()
                     watchdog = threading.Timer(max(0.0, MAX_STREAM_S - (time.monotonic() - started)), expire)
                     watchdog.daemon = True
                     watchdog.start()
