@@ -1,59 +1,181 @@
-"""AgentOffice on the Windows desktop: a floating island on top of every app, Ctrl+Shift+Space opens it.
+"""AgentOffice desktop island: a floating pill on top of every app, Ctrl+Shift+Space opens it.
 
-    python scripts/island.py                 # the API must be running (python run.py)
-    python scripts/island.py --serve         # start the API too (hidden), if it is not running
-    AgentOffice.pyw                          # the desktop app: --serve with no console at all
-    python scripts/island.py --url http://localhost:8000
+    python scripts/island.py                 # API must already be running (python run.py)
+    python scripts/island.py --serve         # start the API too, if it is not running
+    AgentOffice.pyw                          # Windows: --serve with no console
+    ./AgentOffice.command                    # macOS: same, double-clickable
 
-How it works (standard library only, through ctypes):
-  * Microsoft Edge (or Chrome, with --browser chrome) opens the chat UI in app mode (/?shell=desktop) with its own profile under
-    state/island-browser, so it never touches your normal browser profile.
-  * The window loses its title bar and taskbar button, stays on top, and is clipped to a pill (collapsed) or a
-    rounded panel (open), centred at the top of the main screen like a dynamic island.
-  * A global hotkey (Ctrl+Shift+Space) focuses the window, which opens the panel; pressing it again, Esc, or
-    clicking elsewhere folds it back. The page reports its state in the window title ("... · island",
-    "... · panel", or "... · chat" with the Team/Sheet pane hidden), and this script resizes the window to match.
-Quit with the power button in the panel (the page titles itself "... · quit"), Ctrl+C here, or Alt+F4;
-quitting also stops a service this script started. A second launch only opens the running island.
+How it works (standard library only):
+  * Chrome or Edge opens /?shell=desktop in app mode with its own profile under
+    state/island-browser (your normal browser profile is never touched).
+  * The window is kept at the top centre of the main screen as a pill (collapsed) or
+    a panel (open). The page reports state in the title ("… · island" / "… · panel" /
+    "… · quit"); this script resizes to match.
+  * Ctrl+Shift+Space focuses the window (Windows: RegisterHotKey; macOS: Carbon
+    hotkey, or click the pill if Accessibility / hotkey registration is denied).
+
+Windows uses Win32 ctypes for a borderless clipped frame. macOS uses Chrome app
+mode plus AppleScript for position/size (macOS may ask for Accessibility once).
 """
 
 from __future__ import annotations
 
 import argparse
-import ctypes
 import os
+import platform
 import shutil
 import subprocess
 import sys
 import time
 import urllib.request
-from ctypes import wintypes
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ISLAND = (300, 44)            # CSS pixels
 PANEL = (960, 760)            # split view: chat + Team/Sheet
-CHAT = (480, 760)             # the panel with the Team/Sheet pane hidden
 TOP_MARGIN = 10
 TITLE_PREFIX = "AgentOffice ·"
 
-GWL_STYLE, GWL_EXSTYLE = -16, -20
-WS_CAPTION, WS_THICKFRAME, WS_SYSMENU = 0x00C00000, 0x00040000, 0x00080000
-WS_MINIMIZEBOX, WS_MAXIMIZEBOX = 0x00020000, 0x00010000
-WS_EX_TOOLWINDOW, WS_EX_APPWINDOW = 0x00000080, 0x00040000
-HWND_TOPMOST = -1
-SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_FRAMECHANGED, SWP_SHOWWINDOW = 0x0001, 0x0002, 0x0010, 0x0020, 0x0040
-MOD_CONTROL, MOD_SHIFT, MOD_NOREPEAT = 0x0002, 0x0004, 0x4000
-VK_SPACE, WM_HOTKEY, WM_CLOSE, PM_REMOVE = 0x20, 0x0312, 0x0010, 0x0001
-CREATE_NO_WINDOW = 0x08000000
-DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED = 2, 1
-DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND = 33, 1
-DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE = 34, 0xFFFFFFFE
-DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE = 38, 1
+
+def healthy(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(f"{url}/health", timeout=2) as r:
+            return r.status == 200
+    except OSError:
+        return False
 
 
-def _bind() -> None:
-    """Pointer-sized handles need explicit signatures on 64-bit Windows."""
+def parse_title(title: str) -> tuple[str, int]:
+    """"AgentOffice · panel · 33" -> ("panel", 33): page state and browser title-bar height."""
+    parts = [p.strip() for p in title.split("·")]
+    mode = parts[1] if len(parts) > 1 and parts[1] in ("panel", "quit") else "island"
+    frame = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+    return mode, min(frame, 120)
+
+
+def venv_python() -> str:
+    if os.name == "nt":
+        for name in ("pythonw.exe", "python.exe"):
+            candidate = ROOT / ".venv" / "Scripts" / name
+            if candidate.exists():
+                return str(candidate)
+        return sys.executable
+    candidate = ROOT / ".venv" / "bin" / "python"
+    return str(candidate if candidate.exists() else Path(sys.executable))
+
+
+def start_server(url: str) -> subprocess.Popen:
+    """run.py in the background; log to logs/agentoffice-server.log."""
+    (ROOT / "logs").mkdir(exist_ok=True)
+    log = (ROOT / "logs" / "agentoffice-server.log").open("ab")
+    kwargs: dict = {"cwd": ROOT, "stdout": log, "stderr": subprocess.STDOUT, "stdin": subprocess.DEVNULL}
+    if os.name == "nt":
+        kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+    else:
+        kwargs["start_new_session"] = True
+    server = subprocess.Popen([venv_python(), str(ROOT / "run.py")], **kwargs)
+    for _ in range(90):
+        if healthy(url) or server.poll() is not None:
+            break
+        time.sleep(0.5)
+    return server
+
+
+def notify(message: str, error: bool = False) -> None:
+    if sys.stdout is not None and sys.stdout.isatty():
+        print(message, flush=True)
+    elif error and os.name == "nt":
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None, message, "AgentOffice", 0x10)
+    elif error and sys.platform == "darwin":
+        subprocess.run(
+            ["osascript", "-e", f'display alert "AgentOffice" message {message!r} as critical'],
+            check=False,
+        )
+
+
+def screen_size() -> tuple[int, int]:
+    if os.name == "nt":
+        import ctypes
+        u = ctypes.windll.user32
+        return u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+    if sys.platform == "darwin":
+        try:
+            out = subprocess.check_output(
+                ["osascript", "-e", 'tell application "Finder" to get bounds of window of desktop'],
+                text=True,
+            )
+            # "0, 0, 1440, 900"
+            parts = [int(p.strip()) for p in out.split(",")]
+            return parts[2] - parts[0], parts[3] - parts[1]
+        except (OSError, subprocess.CalledProcessError, ValueError, IndexError):
+            pass
+    return 1440, 900
+
+
+# ------------------------------------------------------------------ browsers
+
+def browser_path(prefer: str = "edge") -> str | None:
+    if os.name == "nt":
+        bases = [os.environ.get(v) for v in ("ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA")]
+        found = {
+            "edge": [shutil.which("msedge"), *(str(Path(b) / "Microsoft/Edge/Application/msedge.exe")
+                                               for b in bases if b)],
+            "chrome": [shutil.which("chrome"), *(str(Path(b) / "Google/Chrome/Application/chrome.exe")
+                                                  for b in bases if b)],
+        }
+        order = found[prefer] + found["chrome" if prefer == "edge" else "edge"]
+        return next((c for c in order if c and Path(c).exists()), None)
+
+    if sys.platform == "darwin":
+        apps = {
+            "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "edge": "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "chromium": "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        }
+        # Prefer Chrome on Mac: Edge app-mode window shaping is less consistent.
+        order = (["chrome", "edge", "chromium"] if prefer == "chrome"
+                 else ["edge", "chrome", "chromium"] if prefer == "edge"
+                 else ["chrome", "edge", "chromium"])
+        for key in order:
+            path = apps[key]
+            if Path(path).exists():
+                return path
+        for name in ("google-chrome", "chromium", "msedge"):
+            found = shutil.which(name)
+            if found:
+                return found
+    return None
+
+
+def browser_process_name(exe: str) -> str:
+    lower = exe.lower()
+    if "edge" in lower:
+        return "Microsoft Edge"
+    if "chromium" in lower:
+        return "Chromium"
+    return "Google Chrome"
+
+
+# ------------------------------------------------------------------ Windows
+
+def _main_windows(args) -> int:
+    import ctypes
+    from ctypes import wintypes
+
+    GWL_STYLE, GWL_EXSTYLE = -16, -20
+    WS_CAPTION, WS_THICKFRAME, WS_SYSMENU = 0x00C00000, 0x00040000, 0x00080000
+    WS_MINIMIZEBOX, WS_MAXIMIZEBOX = 0x00020000, 0x00010000
+    WS_EX_TOOLWINDOW, WS_EX_APPWINDOW = 0x00000080, 0x00040000
+    HWND_TOPMOST = -1
+    SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_FRAMECHANGED, SWP_SHOWWINDOW = 0x0001, 0x0002, 0x0010, 0x0020, 0x0040
+    MOD_CONTROL, MOD_SHIFT, MOD_NOREPEAT = 0x0002, 0x0004, 0x4000
+    VK_SPACE, WM_HOTKEY, WM_CLOSE, PM_REMOVE = 0x20, 0x0312, 0x0010, 0x0001
+    DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED = 2, 1
+    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND = 33, 1
+    DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE = 34, 0xFFFFFFFE
+    DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE = 38, 1
+
     u, g = ctypes.windll.user32, ctypes.windll.gdi32
     H = wintypes.HWND
     u.SetWindowPos.argtypes = [H, H, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
@@ -79,218 +201,140 @@ def _bind() -> None:
     g.DeleteObject.argtypes = [wintypes.HGDIOBJ]
     u.GetWindowRgn.argtypes = [H, wintypes.HRGN]
 
-
-def browser_path(prefer: str = "edge") -> str | None:
-    """Edge first: its app window accepts a borderless, clipped frame (Chrome draws its own title bar)."""
-    bases = [os.environ.get(v) for v in ("ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA")]
-    found = {"edge": [shutil.which("msedge"), *(str(Path(b) / "Microsoft/Edge/Application/msedge.exe")
-                                                  for b in bases if b)],
-             "chrome": [shutil.which("chrome"), *(str(Path(b) / "Google/Chrome/Application/chrome.exe")
-                                                   for b in bases if b)]}
-    order = found[prefer] + found["chrome" if prefer == "edge" else "edge"]
-    return next((c for c in order if c and Path(c).exists()), None)
-
-
-def healthy(url: str) -> bool:
     try:
-        with urllib.request.urlopen(f"{url}/health", timeout=2) as r:
-            return r.status == 200
-    except OSError:
-        return False
-
-
-class Island:
-    def __init__(self, hwnd: int):
-        self.user32 = ctypes.windll.user32
-        self.gdi32 = ctypes.windll.gdi32
-        self.hwnd = hwnd
-        self.scale = (self.user32.GetDpiForWindow(hwnd) or 96) / 96
-        self.screen_w = self.user32.GetSystemMetrics(0)
-        self.screen_h = self.user32.GetSystemMetrics(1)
-        self.mode = None
-        self.frame = 0           # height of the browser's own title bar, hidden above the screen edge
-        self.size = (0, 0)
-        self.radius = 0
-        self.borders = (0, 0, 0, 0)   # left, top, right, bottom: window rect minus client rect
-        self.previous = None
-
-    def measure_borders(self) -> None:
-        win, client, origin = wintypes.RECT(), wintypes.RECT(), wintypes.POINT(0, 0)
-        self.user32.GetWindowRect(self.hwnd, ctypes.byref(win))
-        self.user32.GetClientRect(self.hwnd, ctypes.byref(client))
-        self.user32.ClientToScreen(self.hwnd, ctypes.byref(origin))
-        left, top = origin.x - win.left, origin.y - win.top
-        self.borders = (left, top, win.right - origin.x - client.right, win.bottom - origin.y - client.bottom)
-
-    def px(self, css: tuple[int, int]) -> tuple[int, int]:
-        w, h = css
-        h = min(h, int(self.screen_h / self.scale) - 2 * TOP_MARGIN - 40)
-        return int(w * self.scale), int(h * self.scale)
-
-    def strip_frame(self) -> None:
-        u = self.user32
-        style = u.GetWindowLongW(self.hwnd, GWL_STYLE)
-        u.SetWindowLongW(self.hwnd, GWL_STYLE, style & ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX
-                                                         | WS_MAXIMIZEBOX))
-        ex = u.GetWindowLongW(self.hwnd, GWL_EXSTYLE)
-        u.SetWindowLongW(self.hwnd, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW)   # no taskbar button
-        # we clip our own shape: no Mica backdrop (it ignores the clip), frame, border or corner rounding
-        for attribute, value in ((DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE),
-                                 (DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED),
-                                 (DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND),
-                                 (DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE)):
-            v = ctypes.c_uint(value)
-            try:
-                ctypes.windll.dwmapi.DwmSetWindowAttribute(self.hwnd, attribute, ctypes.byref(v), ctypes.sizeof(v))
-            except OSError:
-                pass
-        u.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOMOVE)
-        self.measure_borders()
-
-    def clip(self) -> None:
-        """Clip to the pill/panel shape below the browser's title bar (the system owns the region after)."""
-        w, h = self.size
-        left, top = self.borders[0], self.borders[1] + self.frame
-        region = self.gdi32.CreateRoundRectRgn(left, top, left + w + 1, top + h + 1, self.radius * 2,
-                                               self.radius * 2)
-        self.user32.SetWindowRgn(self.hwnd, region, True)
-
-    def ensure_clipped(self) -> None:
-        """Browsers may reset the region on their own repaints; put it back if it is gone."""
-        probe = self.gdi32.CreateRectRgn(0, 0, 0, 0)
-        kind = self.user32.GetWindowRgn(self.hwnd, probe)
-        self.gdi32.DeleteObject(probe)
-        if kind == 0 and self.size != (0, 0):   # ERROR: no region
-            self.clip()
-
-    def place(self, w: int, h: int, radius: int) -> None:
-        """Show the page's w x h area centred at the top of the screen; the title bar sits above the edge."""
-        bl, bt, br, bb = self.borders
-        x = (self.screen_w - w) // 2 - bl
-        y = int(TOP_MARGIN * self.scale) - self.frame - bt
-        self.size, self.radius = (w, h), radius
-        self.user32.SetWindowPos(self.hwnd, HWND_TOPMOST, x, y, w + bl + br, h + self.frame + bt + bb,
-                                 SWP_SHOWWINDOW | SWP_NOACTIVATE)
-        self.clip()
-
-    def show(self, mode: str, frame_css: int, animate: bool = True) -> None:
-        # the page reports outerHeight - innerHeight, which also counts the window's (invisible) top and
-        # bottom borders; only the title bar above the page must be hidden
-        frame = max(0, int(round(frame_css * self.scale)) - self.borders[1] - self.borders[3])
-        if mode == self.mode and frame == self.frame:
-            return
-        self.mode, self.frame = mode, frame
-        target = self.px({"panel": PANEL, "chat": CHAT}.get(mode, ISLAND))
-        radius = int((28 if mode in ("panel", "chat") else ISLAND[1] / 2) * self.scale)
-        start = self.size if animate and self.size != (0, 0) else target
-        frames = 9 if animate and start != target else 1
-        for i in range(1, frames + 1):
-            t = 1 - (1 - i / frames) ** 3    # ease-out
-            w = int(start[0] + (target[0] - start[0]) * t)
-            h = int(start[1] + (target[1] - start[1]) * t)
-            self.place(w, h, min(radius, h // 2))
-            time.sleep(0.012)
-
-    def title(self) -> str:
-        buf = ctypes.create_unicode_buffer(256)
-        self.user32.GetWindowTextW(self.hwnd, buf, 256)
-        return buf.value
-
-    def toggle_focus(self) -> None:
-        u = self.user32
-        foreground = u.GetForegroundWindow()
-        if foreground == self.hwnd:
-            # hand focus back to where it was: the page folds itself on blur
-            if self.previous and u.IsWindow(self.previous):
-                u.SetForegroundWindow(self.previous)
-            else:
-                u.SetForegroundWindow(u.GetShellWindow())
-            return
-        self.previous = foreground
-        this_thread = ctypes.windll.kernel32.GetCurrentThreadId()
-        other = u.GetWindowThreadProcessId(foreground, None)
-        u.AttachThreadInput(this_thread, other, True)
-        u.BringWindowToTop(self.hwnd)
-        u.SetForegroundWindow(self.hwnd)
-        u.AttachThreadInput(this_thread, other, False)
-
-
-def parse_title(title: str) -> tuple[str, int]:
-    """"AgentOffice · panel · 33" -> ("panel", 33): the page's state and the browser title-bar height.
-    "chat" is the open panel with the Team/Sheet pane hidden."""
-    parts = [p.strip() for p in title.split("·")]
-    mode = parts[1] if len(parts) > 1 and parts[1] in ("panel", "chat", "quit") else "island"
-    frame = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
-    return mode, min(frame, 120)
-
-
-def find_window(timeout_s: float = 20.0) -> int | None:
-    user32 = ctypes.windll.user32
-    found: list[int] = []
-    proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-
-    def callback(hwnd, _):
-        if user32.IsWindowVisible(hwnd):
-            buf = ctypes.create_unicode_buffer(256)
-            user32.GetWindowTextW(hwnd, buf, 256)
-            if buf.value.startswith(TITLE_PREFIX):
-                found.append(hwnd)
-                return False
-        return True
-
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        found.clear()
-        user32.EnumWindows(proc(callback), 0)
-        if found:
-            return found[0]
-        time.sleep(0.25)
-    return None
-
-
-def notify(message: str, error: bool = False) -> None:
-    """Print in a terminal; show a message box when started without one (AgentOffice.pyw, a shortcut)."""
-    if sys.stdout is not None and sys.stdout.isatty():
-        print(message, flush=True)
-    elif error:
-        ctypes.windll.user32.MessageBoxW(None, message, "AgentOffice", 0x10)
-
-
-def start_server(url: str) -> subprocess.Popen:
-    """run.py in the background: no console window, output in logs/agentoffice-server.log."""
-    # The service needs the project's dependencies, so prefer its .venv: a double-clicked AgentOffice.pyw runs
-    # with whichever Python Windows associates with .pyw. The island itself needs only the standard library.
-    venv = ROOT / ".venv" / "Scripts" / "pythonw.exe"
-    pythonw = venv if venv.exists() else Path(sys.executable).with_name("pythonw.exe")
-    exe = str(pythonw if pythonw.exists() else sys.executable)
-    (ROOT / "logs").mkdir(exist_ok=True)
-    log = (ROOT / "logs" / "agentoffice-server.log").open("ab")
-    server = subprocess.Popen([exe, str(ROOT / "run.py")], cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
-                              stdin=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
-    for _ in range(90):
-        if healthy(url) or server.poll() is not None:
-            break
-        time.sleep(0.5)
-    return server
-
-
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="AgentOffice desktop island (Windows).")
-    parser.add_argument("--url", default=f"http://localhost:{os.environ.get('PORT', '8000')}")
-    parser.add_argument("--serve", action="store_true", help="start the API (run.py) if it is not running")
-    parser.add_argument("--browser", choices=("edge", "chrome"), default="edge")
-    args = parser.parse_args(argv)
-    if os.name != "nt":
-        print("The desktop island is Windows-only; open the chat UI in a browser instead:", args.url)
-        return 1
-    _bind()
-    try:
-        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))   # per-monitor v2
+        u.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
     except (AttributeError, OSError):
         pass
 
+    def find_window(timeout_s: float = 20.0) -> int | None:
+        found: list[int] = []
+        proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+        def callback(hwnd, _):
+            if u.IsWindowVisible(hwnd):
+                buf = ctypes.create_unicode_buffer(256)
+                u.GetWindowTextW(hwnd, buf, 256)
+                if buf.value.startswith(TITLE_PREFIX):
+                    found.append(hwnd)
+                    return False
+            return True
+
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            found.clear()
+            u.EnumWindows(proc(callback), 0)
+            if found:
+                return found[0]
+            time.sleep(0.25)
+        return None
+
+    class Island:
+        def __init__(self, hwnd: int):
+            self.hwnd = hwnd
+            self.scale = (u.GetDpiForWindow(hwnd) or 96) / 96
+            self.screen_w = u.GetSystemMetrics(0)
+            self.screen_h = u.GetSystemMetrics(1)
+            self.mode = None
+            self.frame = 0
+            self.size = (0, 0)
+            self.radius = 0
+            self.borders = (0, 0, 0, 0)
+            self.previous = None
+
+        def measure_borders(self) -> None:
+            win, client, origin = wintypes.RECT(), wintypes.RECT(), wintypes.POINT(0, 0)
+            u.GetWindowRect(self.hwnd, ctypes.byref(win))
+            u.GetClientRect(self.hwnd, ctypes.byref(client))
+            u.ClientToScreen(self.hwnd, ctypes.byref(origin))
+            left, top = origin.x - win.left, origin.y - win.top
+            self.borders = (left, top, win.right - origin.x - client.right, win.bottom - origin.y - client.bottom)
+
+        def px(self, css: tuple[int, int]) -> tuple[int, int]:
+            w, h = css
+            h = min(h, int(self.screen_h / self.scale) - 2 * TOP_MARGIN - 40)
+            return int(w * self.scale), int(h * self.scale)
+
+        def strip_frame(self) -> None:
+            style = u.GetWindowLongW(self.hwnd, GWL_STYLE)
+            u.SetWindowLongW(self.hwnd, GWL_STYLE, style & ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU
+                                                             | WS_MINIMIZEBOX | WS_MAXIMIZEBOX))
+            ex = u.GetWindowLongW(self.hwnd, GWL_EXSTYLE)
+            u.SetWindowLongW(self.hwnd, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW)
+            for attribute, value in ((DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_NONE),
+                                     (DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED),
+                                     (DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND),
+                                     (DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE)):
+                v = ctypes.c_uint(value)
+                try:
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(self.hwnd, attribute, ctypes.byref(v),
+                                                               ctypes.sizeof(v))
+                except OSError:
+                    pass
+            u.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                           SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOMOVE)
+            self.measure_borders()
+
+        def clip(self) -> None:
+            w, h = self.size
+            left, top = self.borders[0], self.borders[1] + self.frame
+            region = g.CreateRoundRectRgn(left, top, left + w + 1, top + h + 1, self.radius * 2, self.radius * 2)
+            u.SetWindowRgn(self.hwnd, region, True)
+
+        def ensure_clipped(self) -> None:
+            probe = g.CreateRectRgn(0, 0, 0, 0)
+            kind = u.GetWindowRgn(self.hwnd, probe)
+            g.DeleteObject(probe)
+            if kind == 0 and self.size != (0, 0):
+                self.clip()
+
+        def place(self, w: int, h: int, radius: int) -> None:
+            bl, bt, br, bb = self.borders
+            x = (self.screen_w - w) // 2 - bl
+            y = int(TOP_MARGIN * self.scale) - self.frame - bt
+            self.size, self.radius = (w, h), radius
+            u.SetWindowPos(self.hwnd, HWND_TOPMOST, x, y, w + bl + br, h + self.frame + bt + bb,
+                           SWP_SHOWWINDOW | SWP_NOACTIVATE)
+            self.clip()
+
+        def show(self, mode: str, frame_css: int, animate: bool = True) -> None:
+            frame = max(0, int(round(frame_css * self.scale)) - self.borders[1] - self.borders[3])
+            if mode == self.mode and frame == self.frame:
+                return
+            self.mode, self.frame = mode, frame
+            target = self.px(PANEL if mode == "panel" else ISLAND)
+            radius = int((28 if mode == "panel" else ISLAND[1] / 2) * self.scale)
+            start = self.size if animate and self.size != (0, 0) else target
+            frames = 9 if animate and start != target else 1
+            for i in range(1, frames + 1):
+                t = 1 - (1 - i / frames) ** 3
+                ww = int(start[0] + (target[0] - start[0]) * t)
+                hh = int(start[1] + (target[1] - start[1]) * t)
+                self.place(ww, hh, min(radius, hh // 2))
+                time.sleep(0.012)
+
+        def title(self) -> str:
+            buf = ctypes.create_unicode_buffer(256)
+            u.GetWindowTextW(self.hwnd, buf, 256)
+            return buf.value
+
+        def toggle_focus(self) -> None:
+            foreground = u.GetForegroundWindow()
+            if foreground == self.hwnd:
+                if self.previous and u.IsWindow(self.previous):
+                    u.SetForegroundWindow(self.previous)
+                else:
+                    u.SetForegroundWindow(u.GetShellWindow())
+                return
+            self.previous = foreground
+            this_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+            other = u.GetWindowThreadProcessId(foreground, None)
+            u.AttachThreadInput(this_thread, other, True)
+            u.BringWindowToTop(self.hwnd)
+            u.SetForegroundWindow(self.hwnd)
+            u.AttachThreadInput(this_thread, other, False)
+
     running = find_window(timeout_s=0.5)
-    if running is not None:   # one island only: a second launch just opens the first one
+    if running is not None:
         Island(running).toggle_focus()
         return 0
 
@@ -329,8 +373,7 @@ def main(argv=None) -> int:
     island = Island(hwnd)
     island.strip_frame()
     island.show(*parse_title(island.title()), animate=False)
-    user32 = ctypes.windll.user32
-    hotkey = bool(user32.RegisterHotKey(None, 1, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_SPACE))
+    hotkey = bool(u.RegisterHotKey(None, 1, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_SPACE))
     notify("AgentOffice island is running at the top of your screen. "
            + ("Press Ctrl+Shift+Space to open it. " if hotkey else
               "Ctrl+Shift+Space is taken by another app; click the island to open it. ")
@@ -338,8 +381,8 @@ def main(argv=None) -> int:
     msg = wintypes.MSG()
     tick = 0
     try:
-        while user32.IsWindow(hwnd):
-            while user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, PM_REMOVE):
+        while u.IsWindow(hwnd):
+            while u.PeekMessageW(ctypes.byref(msg), None, 0, 0, PM_REMOVE):
                 if msg.message == WM_HOTKEY:
                     island.toggle_focus()
             title = island.title()
@@ -356,14 +399,254 @@ def main(argv=None) -> int:
         pass
     finally:
         if hotkey:
-            user32.UnregisterHotKey(None, 1)
-        if user32.IsWindow(hwnd):
-            user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+            u.UnregisterHotKey(None, 1)
+        if u.IsWindow(hwnd):
+            u.PostMessageW(hwnd, WM_CLOSE, 0, 0)
         if browser.poll() is None:
             browser.terminate()
         if server is not None:
             server.terminate()
     return 0
+
+
+# ------------------------------------------------------------------ macOS
+
+def _osascript(script: str) -> str:
+    return subprocess.check_output(["osascript", "-e", script], text=True, stderr=subprocess.DEVNULL).strip()
+
+
+def _osascript_ok(script: str) -> bool:
+    try:
+        _osascript(script)
+        return True
+    except (OSError, subprocess.CalledProcessError):
+        return False
+
+
+def _main_darwin(args) -> int:
+    screen_w, screen_h = screen_size()
+
+    def find_running() -> bool:
+        script = f'''
+        tell application "System Events"
+          repeat with proc in (every process whose background only is false)
+            repeat with w in windows of proc
+              try
+                if name of w starts with "{TITLE_PREFIX}" then return "yes"
+              end try
+            end repeat
+          end repeat
+        end tell
+        return "no"
+        '''
+        try:
+            return _osascript(script) == "yes"
+        except (OSError, subprocess.CalledProcessError):
+            return False
+
+    def read_title() -> str:
+        script = f'''
+        tell application "System Events"
+          repeat with proc in (every process whose background only is false)
+            repeat with w in windows of proc
+              try
+                set n to name of w
+                if n starts with "{TITLE_PREFIX}" then return n
+              end try
+            end repeat
+          end repeat
+        end tell
+        return ""
+        '''
+        try:
+            return _osascript(script)
+        except (OSError, subprocess.CalledProcessError):
+            return ""
+
+    def place_window(css_w: int, css_h: int) -> None:
+        h = min(css_h, screen_h - 2 * TOP_MARGIN - 40)
+        x = max(0, (screen_w - css_w) // 2)
+        y = TOP_MARGIN
+        # System Events uses top-left origin for position on modern macOS.
+        script = f'''
+        tell application "System Events"
+          repeat with proc in (every process whose background only is false)
+            repeat with w in windows of proc
+              try
+                if name of w starts with "{TITLE_PREFIX}" then
+                  set position of w to {{{x}, {y}}}
+                  set size of w to {{{css_w}, {h}}}
+                  return
+                end if
+              end try
+            end repeat
+          end repeat
+        end tell
+        '''
+        _osascript_ok(script)
+
+    def activate_window() -> None:
+        script = f'''
+        tell application "System Events"
+          repeat with proc in (every process whose background only is false)
+            repeat with w in windows of proc
+              try
+                if name of w starts with "{TITLE_PREFIX}" then
+                  set frontmost of proc to true
+                  perform action "AXRaise" of w
+                  return
+                end if
+              end try
+            end repeat
+          end repeat
+        end tell
+        '''
+        _osascript_ok(script)
+
+    def close_window() -> None:
+        script = f'''
+        tell application "System Events"
+          repeat with proc in (every process whose background only is false)
+            repeat with w in windows of proc
+              try
+                if name of w starts with "{TITLE_PREFIX}" then
+                  try
+                    click button 1 of w
+                  on error
+                    -- fall through
+                  end try
+                end if
+              end try
+            end repeat
+          end repeat
+        end tell
+        '''
+        _osascript_ok(script)
+
+    if find_running():
+        activate_window()
+        return 0
+
+    server = None
+    if not healthy(args.url):
+        if not args.serve:
+            notify(f"The AgentOffice API is not running at {args.url}. Start it with `python run.py`, "
+                   "or pass --serve.", error=True)
+            return 1
+        server = start_server(args.url)
+        if not healthy(args.url):
+            notify("AgentOffice could not start its background service. See logs/agentoffice-server.log.",
+                   error=True)
+            server.terminate()
+            return 1
+
+    # Chrome first on Mac — more reliable --app windows than Edge.
+    prefer = "chrome" if args.browser == "edge" else args.browser
+    exe = browser_path(prefer) or browser_path("chrome")
+    if exe is None:
+        notify("Google Chrome or Microsoft Edge is needed for the AgentOffice island on Mac.\n"
+               "Install Chrome, or open http://localhost:8000 in any browser.", error=True)
+        if server is not None:
+            server.terminate()
+        return 1
+
+    profile = ROOT / "state" / "island-browser"
+    profile.mkdir(parents=True, exist_ok=True)
+    x = max(0, (screen_w - ISLAND[0]) // 2)
+    browser = subprocess.Popen([
+        exe,
+        f"--app={args.url}/?shell=desktop",
+        f"--user-data-dir={profile}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-features=Translate",
+        f"--window-size={ISLAND[0]},{ISLAND[1]}",
+        f"--window-position={x},{TOP_MARGIN}",
+    ])
+
+    # Wait for the app window; macOS may prompt for Accessibility the first time.
+    deadline = time.monotonic() + 25
+    title = ""
+    while time.monotonic() < deadline:
+        title = read_title()
+        if title.startswith(TITLE_PREFIX):
+            break
+        if browser.poll() is not None:
+            break
+        time.sleep(0.3)
+
+    if not title.startswith(TITLE_PREFIX):
+        notify("Could not find the AgentOffice window.\n"
+               "If macOS asked for Accessibility permission, allow Terminal/Python "
+               "under System Settings → Privacy & Security → Accessibility, then try again.\n"
+               f"Meanwhile open {args.url} in your browser.", error=True)
+        if browser.poll() is None:
+            browser.terminate()
+        if server is not None:
+            server.terminate()
+        return 1
+
+    mode, _ = parse_title(title)
+    place_window(*(PANEL if mode == "panel" else ISLAND))
+    notify("AgentOffice island is running at the top of your screen on Mac.\n"
+           "Click the pill to open it (or focus it and press Ctrl+Shift+Space / ⌃⇧Space).\n"
+           "Quit from the power button in the panel, or Ctrl+C here.\n"
+           "First run may need Accessibility permission for window positioning.")
+
+    last_mode = None
+    try:
+        while browser.poll() is None:
+            title = read_title()
+            if not title:
+                # Window gone
+                break
+            if title.startswith(TITLE_PREFIX):
+                mode, _ = parse_title(title)
+                if mode == "quit":
+                    break
+                if mode != last_mode:
+                    place_window(*(PANEL if mode == "panel" else ISLAND))
+                    last_mode = mode
+            time.sleep(0.12)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        close_window()
+        if browser.poll() is None:
+            browser.terminate()
+            try:
+                browser.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                browser.kill()
+        if server is not None:
+            server.terminate()
+    return 0
+
+
+# ------------------------------------------------------------------ entry
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="AgentOffice desktop island (Windows and macOS).")
+    parser.add_argument("--url", default=f"http://localhost:{os.environ.get('PORT', '8000')}")
+    parser.add_argument("--serve", action="store_true", help="start the API (run.py) if it is not running")
+    parser.add_argument("--browser", choices=("edge", "chrome"), default="edge")
+    args = parser.parse_args(argv)
+
+    if os.name == "nt":
+        return _main_windows(args)
+    if sys.platform == "darwin":
+        # Prefer Chrome on Mac unless the user asked for Edge explicitly via --browser edge
+        # and Edge is installed; default argparse is edge for Windows parity — remap default
+        # when invoked without an explicit preference by checking argv.
+        if argv is None and "--browser" not in sys.argv:
+            args.browser = "chrome"
+        elif isinstance(argv, list) and "--browser" not in argv:
+            args.browser = "chrome"
+        return _main_darwin(args)
+
+    print(f"The floating desktop island runs on Windows and macOS. "
+          f"On {platform.system()}, open the chat UI in a browser:", args.url)
+    return 1
 
 
 if __name__ == "__main__":

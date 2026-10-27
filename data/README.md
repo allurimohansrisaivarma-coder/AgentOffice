@@ -1,5 +1,9 @@
 # Data
 
+## Impact note (for judges)
+
+This folder is a **demo corpus**, not a customer dataset. Hands-on “h/week” figures derived from it exercise the Priority Critic (evidence-capped ranking). They are **not** AgentOffice’s claim of value. Product impact is: filled spreadsheets, Arabic-aware lookups, QA + code-hash approval — see the README Impact section.
+
 ## `sample/workforce/` (synthetic)
 
 All of it is **synthetic**. The people, emails, tickets and activity are invented. Emails use the reserved `example.com` domain. No real or personal data is included.

@@ -197,8 +197,9 @@ def _result(ctx, stages, evidence, discovered, explained, built, conflicts, data
                                                                        "draft"))
         chosen = next(i for i in plan["ranking"] if i["routine"] == plan["chosen"])
         summary_parts.append(
-            f"Automate {plan['chosen']} first: about {chosen['estimated_hours_saved_per_week']:g} h/week saved "
-            f"({chosen['risk']} risk). The {spec['name']} automation "
+            f"Automate {plan['chosen']} first: Priority Critic caps estimated savings at "
+            f"{chosen['estimated_hours_saved_per_week']:g} measured hands-on h/week on the connected activity log "
+            f"({chosen['risk']} risk; demo corpus when sample mode). The {spec['name']} automation "
             + (f"passed all {report['cases']} spec-derived QA cases" if report["passed"]
                else f"still failed QA ({', '.join(history[-1]['failed_checks'])})")
             + f" after {len(history)} QA round(s); Manager decision: {memo['decision']}.")

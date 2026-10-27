@@ -1,6 +1,6 @@
 # Setup guide
 
-AgentOffice runs on your own computer. A small local service (`run.py`) hosts the agents, and you use it in one of three ways: the **Windows desktop app**, the same chat UI in **any browser**, or the **HTTP API**.
+AgentOffice runs on your own computer. A small local service (`run.py`) hosts the agents, and you use it in one of three ways: the **desktop island** (Windows and macOS), the same chat UI in **any browser**, or the **HTTP API**.
 
 It starts in **sample mode**, which needs no keys and no network: the real agents run on the bundled synthetic data. **Default mode** connects the two sponsor services (Zetaris for data, Meterless Nightshift for the model) and works on your own files.
 
@@ -20,11 +20,11 @@ It starts in **sample mode**, which needs no keys and no network: the real agent
 |---|---|---|
 | **Python 3.11 or newer** ([python.org](https://www.python.org/downloads/)) | yes | yes |
 | **Git** | yes | yes |
-| **Microsoft Edge or Google Chrome** | for the desktop app (Edge is on every Windows 11 PC) | same |
+| **Google Chrome or Microsoft Edge** | for the desktop island (Chrome preferred on Mac; Edge is fine on Windows) | same |
 | **Docker Desktop** with 8 GB RAM and 4 CPUs for Docker, plus 15 GB free disk | no | yes, for Zetaris |
 | **Zetaris** (local install) and **Meterless Nightshift** with an NVIDIA API key | no | yes |
 
-The desktop app is Windows-only. On macOS and Linux, use the browser UI or Docker.
+The floating desktop island runs on **Windows and macOS**. On Linux, use the browser UI or Docker (same agents).
 
 ## 1. Install
 
@@ -53,15 +53,30 @@ It is safe to run again, for example after `git pull`.
 | `-Startup` | also starts AgentOffice when you sign in to Windows |
 | `-NoShortcut` | skips the shortcuts |
 
-### macOS and Linux
+### macOS
 
 ```bash
 git clone https://github.com/allurimohansrisaivarma-coder/AgentOffice.git
 cd AgentOffice
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-cp .env.example .env
+cp -n .env.example .env
+chmod +x AgentOffice.command
 ```
+
+Install [Google Chrome](https://www.google.com/chrome/) (or Microsoft Edge) if you want the floating island.
+
+### Linux
+
+```bash
+git clone https://github.com/allurimohansrisaivarma-coder/AgentOffice.git
+cd AgentOffice
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+cp -n .env.example .env
+```
+
+Use the browser UI or Docker on Linux (no floating island yet).
 
 ### Docker (any OS)
 
@@ -78,12 +93,19 @@ Inside the container, `localhost` would mean the container itself, so `localhost
 
 ## 2. Start it
 
-**Desktop app (Windows).** Open **AgentOffice** from the Start menu or the Desktop. With `-NoShortcut`, run `.venv\Scripts\pythonw.exe AgentOffice.pyw` instead.
+**Desktop island (Windows).** Open **AgentOffice** from the Start menu or the Desktop. With `-NoShortcut`, run `.venv\Scripts\pythonw.exe AgentOffice.pyw` instead.
 
 - A dark pill appears at the top of the screen. **Ctrl+Shift+Space** opens it from any app; **Esc** or clicking elsewhere folds it back.
 - The service runs hidden in the background and writes its log to `logs/agentoffice-server.log`. There's no terminal window and no browser tab.
 - The power button in the panel quits everything. Opening AgentOffice a second time just opens the island.
 - Windows Firewall may ask about `pythonw.exe` the first time. Allow it on private networks: in default mode, Zetaris (in Docker) reads your uploads from the service.
+
+**Desktop island (macOS).** Double-click **`AgentOffice.command`** in Finder (or run `./AgentOffice.command` in Terminal).
+
+- Same floating pill / panel as Windows, via Chrome or Edge in app mode.
+- The first time, macOS may ask for **Accessibility** permission (System Settings → Privacy & Security → Accessibility) so the island can position its window — allow Terminal or the Python binary you used.
+- Click the pill to open it; with the window focused, **⌃⇧Space** also toggles. Quit from the power button in the panel.
+- Opening `AgentOffice.command` again focuses the running island.
 
 **Browser (any OS).**
 
@@ -91,7 +113,7 @@ Inside the container, `localhost` would mean the container itself, so `localhost
 .\.venv\Scripts\python.exe run.py
 ```
 
-Use `.venv/bin/python run.py` on macOS and Linux. Then open http://localhost:8000. Click the pill, or press **Ctrl+Shift+Space** or **Ctrl+K**.
+Use `.venv/bin/python run.py` on macOS and Linux. Then open http://localhost:8000. Click the pill, or press **Ctrl+Shift+Space** / **⌃⇧Space** or **Ctrl+K**.
 
 **API.** Everything the UI does is plain HTTP. See [API.md](API.md).
 
@@ -232,7 +254,7 @@ To start fresh, quit AgentOffice and delete `state/` and the files in `logs/`.
 | *".venv uses Python 3.x"* | Delete the `.venv` folder and run setup again. |
 | Double-clicking `AgentOffice.pyw` does nothing | Windows has no program associated with `.pyw` files. Use the shortcut that setup creates, or run `.venv\Scripts\pythonw.exe AgentOffice.pyw`. |
 | *"AgentOffice could not start its background service"* | Read `logs/agentoffice-server.log`. Usually another program is using port 8000. Close it, or set `PORT` as a Windows environment variable: the desktop app reads `PORT` from the environment, not from `.env`. |
-| The island doesn't appear | The desktop app needs Microsoft Edge or Google Chrome. Use the browser UI meanwhile. |
+| The island doesn't appear | Needs Google Chrome or Microsoft Edge. On Mac, grant Accessibility if prompted, or open http://localhost:8000 in a browser. |
 | *"Ctrl+Shift+Space is taken by another app"* | Another app registered the shortcut first. Click the island to open it instead. |
 | `agent_no_offline_plan` | Sample mode's rule-based planner found no step it understands in the request. Rephrase with your column names (the message lists examples) or use default mode. |
 | `agent_not_configured` from the API | Default mode is missing settings (the message lists them). Pass `"options": {"sample_mode": true}` or set `SAMPLE_MODE=true`. |

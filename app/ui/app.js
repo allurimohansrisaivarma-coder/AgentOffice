@@ -245,7 +245,7 @@ function welcome() {
     b.addEventListener("click", () => { setAttachment(s); input.value = s.suggested_prompt || ""; autosize(); input.focus(); });
     box.appendChild(b);
   }
-  const q = el("button", "sample-card", `<b>Ask: where is the finance team losing time?</b><span>Runs the full analysis on the workforce data in Zetaris.</span>`);
+  const q = el("button", "sample-card", `<b>Ask: where is the finance team losing time?</b><span>Ranks routines from the connected Zetaris activity log (demo corpus in sample mode — not a customer hours claim).</span>`);
   q.type = "button";
   q.addEventListener("click", () => {
     setAttachment(null); teamSetMode("analysis");
@@ -524,7 +524,7 @@ function analysisCard(a, traceId) {
     <p class="task-title">${esc(r.summary)}</p>
     <div class="section-label">Findings (each backed by data rows)</div>
     <ul class="plan">${r.findings.slice(0, 6).map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
-    ${ranking ? `<div class="section-label">What to automate first</div><div class="table-wrap"><table><thead><tr><th>Routine</th><th>h/week saved</th><th>Risk</th></tr></thead><tbody>${ranking}</tbody></table></div>` : ""}
+    ${ranking ? `<div class="section-label">What to automate first <span class="muted">(measured h/week on connected activity log — Priority Critic ceiling)</span></div><div class="table-wrap"><table><thead><tr><th>Routine</th><th>measured h/week</th><th>Risk</th></tr></thead><tbody>${ranking}</tbody></table></div>` : ""}
     ${r.decision ? `<div class="memo"><b>Manager (${esc(r.decision.decision)}, confidence ${esc(r.confidence)}):</b> ${esc(r.decision.rationale)}</div>` : ""}
     <p class="muted">${esc(a.mode.model)} · ${esc(a.mode.data_source)} · ${a.usage.model_calls} model calls, ${a.usage.data_queries} queries · trace ${esc(traceId)}</p>
     <div class="slot"></div>`;

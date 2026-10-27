@@ -235,7 +235,6 @@ def test_qa_mutations_keep_arabic_lookup_results_unchanged():
     assert baseline["rows"][0]["team"] == "Ops"
 
 
-@pytest.mark.skipif(__import__("os").name != "nt", reason="the desktop island is Windows-only")
 def test_desktop_app_reads_the_page_state_from_the_window_title():
     import sys
     from pathlib import Path
@@ -245,6 +244,8 @@ def test_desktop_app_reads_the_page_state_from_the_window_title():
     assert island.parse_title("AgentOffice · chat · 36") == ("chat", 36)
     assert island.parse_title("AgentOffice · quit · 36") == ("quit", 36)
     assert island.parse_title("AgentOffice · whatever") == ("island", 0)
+    # Floating island is supported on Windows and macOS (browser UI elsewhere).
+    assert hasattr(island, "main") and callable(island.browser_path)
 
 
 def test_a_provider_error_in_an_optional_qa_call_does_not_fail_the_run(tmp_path, make_settings):

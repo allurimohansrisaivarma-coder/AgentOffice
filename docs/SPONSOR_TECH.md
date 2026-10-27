@@ -4,9 +4,9 @@ The text for the HackOS "sponsor technology" field. Everything here is true of t
 
 ## Short version (for a single form field)
 
-AgentOffice is an AI office team you tell what to do: attach a spreadsheet, describe the repetitive work, and the agents plan it, write the automation, test it on your data and ask you to approve before producing the filled file. It also analyses where a team's time goes and what to automate first.
+AgentOffice is an AI office team for real spreadsheet work — including UAE/Saudi Arabic–English sheets. Attach a file, describe the job; agents plan it, write the automation, QA it on your rows (including Arabic digit/name key variants), and ask you to approve one code hash before producing the filled file. Impact is the usable workbook and safe approval loop; analysis rankings use measured hands-on time on the connected activity log (synthetic demo tables are not a customer hours claim).
 
-**Zetaris** is the data layer for both. The company's (synthetic) workforce tables *and every uploaded spreadsheet* are Lightning REST tables in a local Zetaris instance; agents profile uploads, fetch lookup data and ground every finding with Zetaris SQL.
+**Zetaris** is the data layer for both. The company's workforce tables *and every uploaded spreadsheet* are Lightning REST tables in a local Zetaris instance; agents profile uploads, fetch lookup data and ground every finding with Zetaris SQL.
 
 **Meterless Nightshift** is the primary model provider for every agent that uses a model (route `meterless/deep` → **NVIDIA Nemotron**: `nvidia/nemotron-3-ultra-550b-a55b`, plus `nemotron-3.5-lightning-30b-a3b` for a few analysis calls; each trace records the model that answered). We implemented its provider contract: URL normalization, status from `GET /v1/models`, auto-detect, connect links and a 180-second timeout.
 
